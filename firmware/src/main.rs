@@ -10,8 +10,10 @@ use embassy_executor::Spawner;
 use embassy_futures::join::join;
 use embassy_rp::peripherals::USB;
 use embassy_rp::usb::Driver;
+use embassy_rp::watchdog::{ResetReason, Watchdog};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
+use embassy_time::{Duration, Timer};
 use embassy_usb::class::cdc_acm::{CdcAcmClass, Receiver, State as CdcState};
 use embassy_usb::driver::EndpointError;
 use embassy_usb::Builder;
@@ -37,9 +39,34 @@ static BRIGHTNESS_CHAN: BrightnessChannel = BrightnessChannel::new();
 /// the *formatted* length; allow a bit of slack for non-canonical input.
 const MAX_LINE_BYTES: usize = 64;
 
+/// Watchdog timeout. Just under the RP2040 ~8.39 s ceiling (errata E1
+/// limits the load value to 0xFFFFFF / 2 µs).
+const WATCHDOG_TIMEOUT: Duration = Duration::from_secs(8);
+/// Feed cadence. 4× margin against the timeout — comfortable headroom
+/// for blocking work that briefly stalls the executor (flash erases,
+/// long PIO operations).
+const WATCHDOG_FEED_INTERVAL: Duration = Duration::from_secs(2);
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
+
+    // ------------------------------------------------------------------
+    // Watchdog
+    // ------------------------------------------------------------------
+    // Set up first so a hang anywhere downstream (display init, USB
+    // bring-up, the runtime itself) eventually triggers a chip reset
+    // instead of a permanently-frozen panel. The feed task is spawned
+    // further down once the executor is up.
+    let mut watchdog = Watchdog::new(p.WATCHDOG);
+    match watchdog.reset_reason() {
+        Some(ResetReason::TimedOut) => defmt::warn!("boot: watchdog timeout reset"),
+        Some(ResetReason::Forced) => defmt::warn!("boot: forced reset"),
+        None => defmt::info!("boot: clean (cold or BOOTSEL)"),
+    }
+    // Don't reset while halted under probe-rs.
+    watchdog.pause_on_debug(true);
+    watchdog.start(WATCHDOG_TIMEOUT);
 
     defmt::info!("uniflag boot");
 
@@ -107,6 +134,7 @@ async fn main(spawner: Spawner) {
     spawner.spawn(
         buttons::run(p.PIN_21, p.PIN_26, p.PIN_27, &BRIGHTNESS_CHAN).expect("spawn buttons task"),
     );
+    spawner.spawn(watchdog_feed(watchdog).expect("spawn watchdog feed task"));
 
     // The remaining two futures borrow `'static` resources but aren't tasks
     // (they're awaited here in `main`'s top-level `join`). Doing it this way
@@ -181,4 +209,20 @@ fn handle_line(line: &[u8]) {
 #[embassy_executor::task]
 async fn render_task(display: Display) -> ! {
     render::run(display, &STATE_SIGNAL, &BRIGHTNESS_CHAN).await
+}
+
+// =============================================================================
+// Watchdog feed task
+// =============================================================================
+
+// Passive liveness check: if the executor or any task it cooperates with
+// wedges, this timer stops firing and the chip resets. Deliberately not
+// gated on a "liveness signal" from other tasks — at this code size, the
+// extra plumbing buys nothing.
+#[embassy_executor::task]
+async fn watchdog_feed(mut wd: Watchdog) -> ! {
+    loop {
+        Timer::after(WATCHDOG_FEED_INTERVAL).await;
+        wd.feed(WATCHDOG_TIMEOUT);
+    }
 }
