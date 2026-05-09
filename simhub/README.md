@@ -24,6 +24,8 @@ F=Y;B=1;P=0;S=racing
 | `B`   | `0` `1` `2`                                                      | Wave level (none / single-waved / double-waved) |
 | `P`   | `0` `1`                                                          | In-pit indicator                       |
 | `S`   | `pre-race` `racing` `paused` `post-race` `replay` `unknown`      | Session state                          |
+| `C`   | `N` `V` `S`                                                      | Caution: none / Virtual Safety Car / Safety Car |
+| `Z`   | (empty) `1` `2` `3` `12` `13` `23` `123`                         | Sector-yellow mask (ascending unique digits) |
 
 `B=0` is a static / displayed flag. `B=1` is single-waved (the marshal is
 actively signalling — local caution, faster car approaching, etc.); the
@@ -32,6 +34,12 @@ firmware renders this with a 2 Hz strobe (or breathing pulse for blue).
 treats it as a more urgent variant — typically a 4 Hz strobe. Sims that
 don't distinguish single from double should map any "waved" state to
 `B=1`.
+
+`C=` and `Z=` are orthogonal to `F=`. Caution renderings (VSC / SC)
+fill the panel and override the per-flag base for everything except a
+red flag, which always wins. The sector mask paints a bottom-edge
+indicator strip, suppressed only under red. `F=N;Z=2` is the canonical
+"yellow ahead in S2, clear at your location" warning.
 
 Unknown keys are silently ignored, so adding new fields later won't
 break older firmware. See `proto/src/lib.rs` for the canonical
@@ -115,6 +123,53 @@ Notes:
 - Session-state mapping is sim-dependent. The list above covers iRacing
   / ACC / common-case Codemasters games. Add cases for your sim if
   needed, or replace with `[DataCorePlugin.GameData.SessionState]`.
+- The basic formula above doesn't emit `C=` or `Z=`. The firmware
+  tolerates their absence (defaults: `C=N`, empty `Z=`), so existing
+  setups keep working. Add the extension below if you want VSC /
+  Safety Car / sector indicators.
+
+### Extended formula — caution + sector yellows
+
+Append the following to the basic formula to drive the `C=` (caution)
+and `Z=` (sector mask) fields. Pick the sim-specific block that
+matches your install; if you race more than one sim, copy the relevant
+block on a per-device-profile basis.
+
+**iRacing** — bit-test the `SessionFlags` mask (see `irsdk_Flags`).
+`Caution` is bit `0x4000`, `SafetyCarActive` exposes the physical SC.
+
+```ncalc
++ ';C=' + if(([DataCorePlugin.GameRawData.Telemetry.SessionFlags] & 0x4000) > 0, 'V',
+          if([DataCorePlugin.GameData.SafetyCarActive], 'S', 'N'))
++ ';Z='   // iRacing has no per-sector flag in stock telemetry
+```
+
+**ACC** — concatenate the three `globalYellow*` raw properties into a
+canonical sector mask. ACC has no first-class VSC / SC concept.
+
+```ncalc
++ ';C=N'
++ ';Z=' +
+  (if([DataCorePlugin.GameRawData.Graphics.globalYellow1], '1', '') +
+   if([DataCorePlugin.GameRawData.Graphics.globalYellow2], '2', '') +
+   if([DataCorePlugin.GameRawData.Graphics.globalYellow3], '3', ''))
+```
+
+**rF2 / Le Mans Ultimate** — `mGamePhase` enum surfaces pace-car /
+FCY phases. Verify the bit values against your install; the values
+below are the common ISI ModDev mapping.
+
+```ncalc
++ ';C=' + if([DataCorePlugin.GameRawData.Scoring.mGamePhase] = 6, 'V',
+          if([DataCorePlugin.GameRawData.Scoring.mGamePhase] = 5, 'S', 'N'))
++ ';Z='   // mSectorFlag is per-corner; needs host-side aggregation (TODO)
+```
+
+If the formula errors on save, the property names may differ on your
+build — check **Available properties → Show game specific properties
+('rawdata')** in SimHub and adjust. Bad property paths return null in
+NCalc, which silently breaks `+`-concatenation; wrap risky references
+in `isnull(x, fallback)`.
 
 4. **Apply**, then **Save**. The device should connect; its solid-flag
    LED corner of the panel changes colour as you toggle a flag in-game.

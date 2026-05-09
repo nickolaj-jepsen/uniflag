@@ -5,7 +5,7 @@
 
 use super::anim;
 use crate::display::{Display, HEIGHT, WIDTH};
-use proto::{Flag, Session, State, WaveLevel};
+use proto::{Caution, Flag, SectorMask, Session, State, WaveLevel};
 
 type Rgb = (u8, u8, u8);
 
@@ -20,6 +20,64 @@ const GREEN: Rgb = (0, 220, 0);
 const WHITE: Rgb = (255, 255, 255);
 const ORANGE: Rgb = (255, 90, 0);
 
+const SECTOR_DIM: Rgb = (40, 30, 0);
+
+const SECTOR_BAND_HEIGHT: i32 = 2;
+/// Three 10-px sector segments with 1-px black gaps at cols 10 and 21.
+/// Inclusive ranges: S1 cols 0..=9, S2 11..=20, S3 22..=31.
+const SECTOR_SEGMENTS: [(i32, i32); 3] = [(0, 9), (11, 20), (22, 31)];
+
+/// Caution-board glyphs: 7 columns × 11 rows. Each row encodes one
+/// glyph row in the low 7 bits, MSB = leftmost column (bit 6 = col 0).
+const GLYPH_W: i32 = 7;
+const GLYPH_H: i32 = 11;
+const CAUTION_BORDER: i32 = 2;
+
+#[rustfmt::skip]
+const GLYPH_S: [u8; 11] = [
+    0b0111110, // .#####.
+    0b1100011, // ##...##
+    0b1100000, // ##.....
+    0b1100000, // ##.....
+    0b0111110, // .#####.
+    0b0000011, // .....##
+    0b0000011, // .....##
+    0b0000011, // .....##
+    0b1100011, // ##...##
+    0b1100011, // ##...##
+    0b0111110, // .#####.
+];
+
+#[rustfmt::skip]
+const GLYPH_C: [u8; 11] = [
+    0b0111110, // .#####.
+    0b1100011, // ##...##
+    0b1100000, // ##.....
+    0b1100000, // ##.....
+    0b1100000, // ##.....
+    0b1100000, // ##.....
+    0b1100000, // ##.....
+    0b1100000, // ##.....
+    0b1100000, // ##.....
+    0b1100011, // ##...##
+    0b0111110, // .#####.
+];
+
+#[rustfmt::skip]
+const GLYPH_V: [u8; 11] = [
+    0b1100011, // ##...##
+    0b1100011, // ##...##
+    0b1100011, // ##...##
+    0b1100011, // ##...##
+    0b0110110, // .##.##.
+    0b0110110, // .##.##.
+    0b0110110, // .##.##.
+    0b0011100, // ..###..
+    0b0011100, // ..###..
+    0b0011100, // ..###..
+    0b0001000, // ...#...
+];
+
 pub fn paint(display: &mut Display, state: &State, frame: u32, flag_age: u32, connected: bool) {
     if !connected {
         // Sim/SimHub gone silent past the timeout: blank panel. No pit
@@ -27,21 +85,31 @@ pub fn paint(display: &mut Display, state: &State, frame: u32, flag_age: u32, co
         display.fill(BLACK.0, BLACK.1, BLACK.2);
         return;
     }
-    match state.flag {
-        Flag::Yellow => paint_yellow(display, state.wave, frame),
-        Flag::Red => paint_red(display, state.wave, frame, flag_age),
-        Flag::Blue => paint_blue(display, state.wave, frame),
-        Flag::Green => paint_green(display, state.wave, frame, flag_age),
-        Flag::White => paint_white(display, state.wave, frame),
-        Flag::Black => paint_black_flag(display, frame),
-        Flag::Orange => paint_orange(display, state.wave, frame),
-        Flag::Checkered => paint_checkered(display, frame),
-        Flag::None => match state.session {
+    // Precedence: Red > Caution (VSC/SC) > other flags. Then sector
+    // overlay (suppressed under red), then pit overlay (always on top).
+    match (state.flag, state.caution) {
+        (Flag::Red, _) => paint_red(display, state.wave, frame, flag_age),
+        (_, Caution::VirtualSafetyCar) => paint_vsc(display, frame),
+        (_, Caution::SafetyCar) => paint_safety_car(display, frame),
+        (Flag::Yellow, _) => paint_yellow(display, state.wave, frame),
+        (Flag::Blue, _) => paint_blue(display, state.wave, frame),
+        (Flag::Green, _) => paint_green(display, state.wave, frame, flag_age),
+        (Flag::White, _) => paint_white(display, state.wave, frame),
+        (Flag::Black, _) => paint_black_flag(display, frame),
+        (Flag::Orange, _) => paint_orange(display, state.wave, frame),
+        (Flag::Checkered, _) => paint_checkered(display, frame),
+        (Flag::None, _) => match state.session {
             // Race in progress (or paused mid-session) → minimal "alive"
             // marker. Anything else → the more visible "armed" indicator.
             Session::Racing | Session::Paused => paint_race_idle(display, frame),
             _ => paint_ready(display, frame),
         },
+    }
+    // Red flag suppresses the sector band — drivers must stop, extra
+    // signalling is noise. Caution states keep it (host might emit
+    // VSC + sector-2 yellow simultaneously).
+    if !state.sectors.is_empty() && state.flag != Flag::Red {
+        paint_sector_band(display, state.sectors, state.wave, frame);
     }
     if state.in_pit {
         paint_pit_stripe(display);
@@ -289,6 +357,99 @@ fn paint_pit_stripe(display: &mut Display) {
     for y in 0..HEIGHT as i32 {
         for dx in 0..PIT_STRIPE_WIDTH {
             display.set_pixel(WIDTH as i32 - 1 - dx, y, r, g, b);
+        }
+    }
+}
+
+fn paint_vsc(display: &mut Display, frame: u32) {
+    // White "VSC" on black, yellow border. 7+1+7+1+7 = 23 wide, centred
+    // horizontally (4-5 px padding each side, well inside the border).
+    paint_caution_board(display, frame, &[&GLYPH_V, &GLYPH_S, &GLYPH_C], 1);
+}
+
+fn paint_safety_car(display: &mut Display, frame: u32) {
+    // White "SC" on black, yellow border. Same digiflag style as VSC,
+    // wider gap between letters since only 2 chars need to fit.
+    paint_caution_board(display, frame, &[&GLYPH_S, &GLYPH_C], 4);
+}
+
+/// Real motorsport "digiflag" board: white letters on black, yellow
+/// border. The border breathes very slowly (~0.25 Hz, 80–100 % range)
+/// so the panel reads as live without distracting.
+fn paint_caution_board(display: &mut Display, frame: u32, glyphs: &[&[u8; 11]], gap: i32) {
+    const BORDER_PERIOD: u32 = 240; // 0.25 Hz at 60 fps
+    let envelope = anim::breathe(frame, BORDER_PERIOD);
+    let m = 200u8.saturating_add((envelope as u16 * 55 / 255) as u8);
+    let border = anim::scale_rgb(YELLOW, m);
+
+    display.fill(BLACK.0, BLACK.1, BLACK.2);
+
+    // Solid yellow rectangle border, `CAUTION_BORDER` px thick.
+    for y in 0..HEIGHT as i32 {
+        for x in 0..WIDTH as i32 {
+            let on_border = x < CAUTION_BORDER
+                || x >= WIDTH as i32 - CAUTION_BORDER
+                || y < CAUTION_BORDER
+                || y >= HEIGHT as i32 - CAUTION_BORDER;
+            if on_border {
+                display.set_pixel(x, y, border.0, border.1, border.2);
+            }
+        }
+    }
+
+    // Centred letter row.
+    let n = glyphs.len() as i32;
+    let total_w = n * GLYPH_W + (n - 1) * gap;
+    let x_left = (WIDTH as i32 - total_w) / 2;
+    let y_top = (HEIGHT as i32 - GLYPH_H) / 2;
+    for (i, glyph) in glyphs.iter().enumerate() {
+        let ox = x_left + i as i32 * (GLYPH_W + gap);
+        draw_glyph(display, glyph, ox, y_top, WHITE);
+    }
+}
+
+/// Stamp a 7×11 1-bpp glyph at `(ox, oy)` in `color`. Bit 6 of each row
+/// is the leftmost column, bit 0 is column 6.
+fn draw_glyph(display: &mut Display, glyph: &[u8; 11], ox: i32, oy: i32, color: Rgb) {
+    for (row, &bits) in glyph.iter().enumerate() {
+        for col in 0..GLYPH_W {
+            if (bits >> (6 - col)) & 1 != 0 {
+                display.set_pixel(ox + col, oy + row as i32, color.0, color.1, color.2);
+            }
+        }
+    }
+}
+
+fn paint_sector_band(display: &mut Display, mask: SectorMask, wave: WaveLevel, frame: u32) {
+    // Bottom-edge overlay: three 10-px segments with 1-px black gaps at
+    // cols 10 and 21 (gap pixels keep whatever the underlying flag drew).
+    // Active sectors pulse 2 Hz (4 Hz on B=2). Inactive sectors stay dim
+    // so the band is always visible when *any* sector is set — gives a
+    // clear "S1 ☐  S2 ▣  S3 ☐" read at a glance.
+    let strobe_hz = if matches!(wave, WaveLevel::Double) {
+        4
+    } else {
+        2
+    };
+    let on = anim::strobe_60(frame, strobe_hz);
+    let y_start = HEIGHT as i32 - SECTOR_BAND_HEIGHT;
+    for (idx, &(x_lo, x_hi)) in SECTOR_SEGMENTS.iter().enumerate() {
+        let sector = (idx + 1) as u8;
+        let active = mask.contains(sector);
+        for y in y_start..HEIGHT as i32 {
+            for x in x_lo..=x_hi {
+                let (r, g, b) = if active {
+                    if on {
+                        let m = anim::wave_mult(x, y, frame, 180, 255);
+                        anim::scale_rgb(YELLOW, m)
+                    } else {
+                        BLACK
+                    }
+                } else {
+                    SECTOR_DIM
+                };
+                display.set_pixel(x, y, r, g, b);
+            }
         }
     }
 }

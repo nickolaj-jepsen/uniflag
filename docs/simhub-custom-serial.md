@@ -74,7 +74,7 @@ Some constraints to keep the firmware simple:
 A single semicolon-separated record per update tick. Example:
 
 ```
-F=Y;B=0;G=N;P=0;S=racing\n
+F=Y;B=0;G=N;P=0;S=racing;C=N;Z=\n
 ```
 
 Field meanings:
@@ -86,6 +86,8 @@ Field meanings:
 | `G`   | `N`/`Y` | Green flag pulse (one-shot, e.g. on green start) |
 | `P`   | `0`/`1` | Pit-limiter or in-pit |
 | `S`   | `replay` / `racing` / `paused` / `pre-race` / `post-race` | Session state |
+| `C`   | `N` / `V` (VSC) / `S` (Safety Car) | Caution state, orthogonal to `F` — coexists with any flag |
+| `Z`   | (empty) / `1` / `2` / `3` / `12` / `13` / `23` / `123` | Sector-yellow mask, ascending unique digits |
 
 …or whatever final taxonomy we decide on. The point is: it's text, it's terminator-
 delimited, and the device can parse it with a tiny state machine.

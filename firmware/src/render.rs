@@ -9,7 +9,9 @@
 //! primitives (sin LUT, strobe envelope, scale_rgb, wave modulator) live
 //! in [`anim`].
 //!
-//! v2 rendering rules (per-flag, "as realistic as possible"):
+//! v3 rendering rules (per-flag, "as realistic as possible").
+//!
+//! Per-flag base layer (renders unless overridden by precedence below):
 //! - **Yellow**: solid + faint diagonal cloth-wave overlay; under wave
 //!   level 1 (single-waved) a 2 Hz strobe; under level 2 (double-waved) a
 //!   4 Hz strobe.
@@ -30,10 +32,30 @@
 //!   corner dots and one slow-pulsing dot in the bottom-right.
 //! - **None + PreRace/PostRace/Replay/Unknown**: "ready" indicator —
 //!   centred green ring breathing at 0.5 Hz.
-//! - **Disconnected** (no host updates for `CONNECT_TIMEOUT`): all LEDs
-//!   off, no overlays. Boot state until SimHub starts emitting.
-//! - **In-pit (`P=1`)**: rightmost two columns painted in pit-blue as an
-//!   overlay over any non-disconnected state.
+//!
+//! Precedence — what actually fills the panel when multiple states are
+//! active (highest wins):
+//! 1. **Disconnected** (no host updates for `CONNECT_TIMEOUT`): all LEDs
+//!    off, no overlays. Boot state until SimHub starts emitting.
+//! 2. **Red flag** wins over caution and any other flag — drivers must
+//!    react to red regardless of session-wide state.
+//! 3. **Caution (`C=V` or `C=S`)** wins over all flags except red.
+//!    Both render as a real-motorsport "digiflag" board: white letters
+//!    on black, surrounded by a 2-px yellow border that breathes very
+//!    slowly (0.25 Hz, ~80–100 % brightness) so the panel reads as live
+//!    without distracting.
+//!    - **VSC (`C=V`)**: white `VSC` letters (7×11 glyphs, 1-px gaps).
+//!    - **Safety Car (`C=S`)**: white `SC` letters (same glyphs, wider
+//!      gap since only two letters need to fit).
+//! 4. Otherwise the per-flag base layer above.
+//!
+//! Overlays drawn on top of the base layer:
+//! - **Sector band (`Z=...`)**: bottom 2 rows, three 10-px segments with
+//!   1-px black gaps. Active sectors pulse yellow at 2 Hz (4 Hz on
+//!   `B=2`); inactive sectors stay dim yellow so the band is always
+//!   visible when any sector is set. Suppressed under red flag.
+//! - **In-pit (`P=1`)**: rightmost two columns painted in pit-blue —
+//!   topmost overlay, drawn over caution and sector band alike.
 
 mod anim;
 mod effects;
@@ -116,8 +138,7 @@ pub async fn run(
             Either3::Second(_) => {
                 frame = frame.wrapping_add(1);
                 let age = frame.wrapping_sub(flag_changed_at);
-                let connected = last_state_at
-                    .is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
+                let connected = last_state_at.is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
                 effects::paint(&mut display, &state, frame, age, connected);
             }
             Either3::Third(action) => {
@@ -132,8 +153,7 @@ pub async fn run(
                 dirty = brightness != last_saved;
                 display.set_brightness(brightness);
                 let age = frame.wrapping_sub(flag_changed_at);
-                let connected = last_state_at
-                    .is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
+                let connected = last_state_at.is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
                 effects::paint(&mut display, &state, frame, age, connected);
             }
         }

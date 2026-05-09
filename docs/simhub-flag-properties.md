@@ -139,7 +139,35 @@ to genuine wave-level distinction:
   numeric severity (`PendingYellow`, `Yellow`, `LastLap`, `Resume`, …) — map the
   more urgent values to `B=2`.
 
-Sector-localised yellows and per-driver flags are still future work.
+## Caution states (VSC / Safety Car)
+
+The wire protocol's `C=` field carries session-wide caution, orthogonal to `F=`:
+`C=N` (none), `C=V` (Virtual Safety Car / FCY), `C=S` (physical Safety Car).
+Coverage by sim:
+
+| Sim       | VSC | SC | How to detect |
+|-----------|-----|----|---------------|
+| iRacing   | ✓   | ✓  | `SessionFlags` bitmask for `Caution` / `CautionWaving`; `SafetyCarActive` for SC |
+| F1 (Codemasters) | ✓ | ✓ | `m_safetyCarStatus` raw enum (0=none, 1=full SC, 2=VSC, 3=formation lap) |
+| ACC       | —   | —  | No first-class VSC / SC concept exposed; leave `C=N` |
+| rF2 / LMU | ✓   | ✓  | `mGamePhase` enum exposes pace-car / FCY phases |
+| Automobilista 2 | ✓ | ✓ | `mSafetyCarStatus` raw field |
+
+Hosts that can't distinguish VSC from SC should map any "FCY-like" state to `C=V`.
+
+## Sector-localised yellows
+
+The wire protocol's `Z=` field is a sector-yellow bitmask using ascending unique
+digits (`Z=`, `Z=1`, `Z=23`, `Z=123`). The firmware fixes the model at three
+sectors (S1/S2/S3); sims with finer granularity must aggregate host-side.
+
+| Sim       | Property | Mapping |
+|-----------|----------|---------|
+| ACC       | `GameRawData.Graphics.globalYellow1/2/3` | 1:1 — concatenate active sectors into `Z=` |
+| F1 (Codemasters) | `GameRawData.MarshalZones[i].ZoneFlag` | Aggregate the up-to-21 marshal zones into thirds by `ZoneStart` (0..⅓ → S1, ⅓..⅔ → S2, ⅔..1 → S3); set the bit for any third with an active yellow |
+| rF2 / LMU | `GameRawData.Scoring.mSectorFlag[0..2]` | 1:1 (rF2 calls them sectors directly) |
+| iRacing   | (none)   | iRacing's `SessionFlags` is global only — leave `Z=` empty |
+| Assetto Corsa (vanilla) | (none) | Vanilla AC doesn't expose per-sector flags — leave `Z=` empty |
 
 ## Sources
 

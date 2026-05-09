@@ -18,7 +18,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, ValueEnum};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::terminal;
-use proto::{Flag, Session, State, WaveLevel, MAX_LINE_LEN};
+use proto::{Caution, Flag, SectorMask, Session, State, WaveLevel, MAX_LINE_LEN};
 
 const DEFAULT_PORT: &str = "/dev/ttyACM0";
 const DEFAULT_BAUD: u32 = 115_200;
@@ -140,6 +140,9 @@ hotkeys:
                     5      session: replay
                     h      this help
                     q      quit
+
+  v      cycle caution (none / VSC / SC)
+  7/8/9  toggle sector 1 / 2 / 3
 ";
 
 fn run_interactive(sink: &mut Sink) -> Result<()> {
@@ -241,17 +244,33 @@ fn handle_key(k: KeyEvent) -> Action {
         KeyCode::Char('3') => Action::Mutate(|s| s.session = Session::Paused),
         KeyCode::Char('4') => Action::Mutate(|s| s.session = Session::PostRace),
         KeyCode::Char('5') => Action::Mutate(|s| s.session = Session::Replay),
+        KeyCode::Char('v') => Action::Mutate(|s| {
+            s.caution = match s.caution {
+                Caution::None => Caution::VirtualSafetyCar,
+                Caution::VirtualSafetyCar => Caution::SafetyCar,
+                Caution::SafetyCar => Caution::None,
+            }
+        }),
+        KeyCode::Char('7') => Action::Mutate(|s| s.sectors = s.sectors.toggle(1)),
+        KeyCode::Char('8') => Action::Mutate(|s| s.sectors = s.sectors.toggle(2)),
+        KeyCode::Char('9') => Action::Mutate(|s| s.sectors = s.sectors.toggle(3)),
         _ => Action::Ignore,
     }
 }
 
 fn print_state(s: &State) {
     eprintln!(
-        "  flag={:<10} wave={} pit={} session={}\r",
+        "  flag={:<10} wave={} pit={} session={:<10} caution={} sectors={}\r",
         format!("{:?}", s.flag),
         s.wave.code(),
         s.in_pit as u8,
         s.session.code(),
+        s.caution.code(),
+        if s.sectors.is_empty() {
+            "-"
+        } else {
+            s.sectors.code()
+        },
     );
 }
 
@@ -309,45 +328,71 @@ fn run_demo(sink: &mut Sink) -> Result<()> {
     eprintln!("uniflag-sim → demo (Ctrl-C to stop)");
     let mut idx = 0usize;
     loop {
-        let (flag, wave) = DEMO_CYCLE[idx];
-        let state = State {
-            flag,
-            wave,
-            in_pit: false,
-            session: Session::Racing,
-        };
+        let state = DEMO_CYCLE[idx];
         send_state(sink, &state)?;
-        eprintln!("  {:?} wave={}", flag, wave.code());
+        eprintln!(
+            "  {:?} wave={} caution={} sectors={}",
+            state.flag,
+            state.wave.code(),
+            state.caution.code(),
+            if state.sectors.is_empty() {
+                "-"
+            } else {
+                state.sectors.code()
+            },
+        );
         std::thread::sleep(DEMO_STEP);
         idx = (idx + 1) % DEMO_CYCLE.len();
     }
 }
 
+/// Build a racing-session state. `const fn` so the array below is a
+/// proper compile-time constant rather than a lazy init.
+const fn demo(flag: Flag, wave: WaveLevel, caution: Caution, sectors_bits: u8) -> State {
+    State {
+        flag,
+        wave,
+        in_pit: false,
+        session: Session::Racing,
+        caution,
+        sectors: SectorMask::from_bits(sectors_bits),
+    }
+}
+
 /// Walk every flag, and for flags whose effect changes with wave level,
 /// also cycle through the three wave variants. Black, chequered, and none
-/// look identical at every wave level so they only appear once.
-const DEMO_CYCLE: &[(Flag, WaveLevel)] = &[
-    (Flag::None, WaveLevel::None),
-    (Flag::Yellow, WaveLevel::None),
-    (Flag::Yellow, WaveLevel::Single),
-    (Flag::Yellow, WaveLevel::Double),
-    (Flag::Blue, WaveLevel::None),
-    (Flag::Blue, WaveLevel::Single),
-    (Flag::Blue, WaveLevel::Double),
-    (Flag::Black, WaveLevel::None),
-    (Flag::White, WaveLevel::None),
-    (Flag::White, WaveLevel::Single),
-    (Flag::White, WaveLevel::Double),
-    (Flag::Red, WaveLevel::None),
-    (Flag::Red, WaveLevel::Single),
-    (Flag::Red, WaveLevel::Double),
-    (Flag::Green, WaveLevel::None),
-    (Flag::Green, WaveLevel::Single),
-    (Flag::Green, WaveLevel::Double),
-    (Flag::Checkered, WaveLevel::None),
-    (Flag::Orange, WaveLevel::None),
-    (Flag::Orange, WaveLevel::Single),
-    (Flag::Orange, WaveLevel::Double),
+/// look identical at every wave level so they only appear once. After the
+/// flag walk, exercise caution states and the sector-yellow band.
+const DEMO_CYCLE: &[State] = &[
+    demo(Flag::None, WaveLevel::None, Caution::None, 0),
+    demo(Flag::Yellow, WaveLevel::None, Caution::None, 0),
+    demo(Flag::Yellow, WaveLevel::Single, Caution::None, 0),
+    demo(Flag::Yellow, WaveLevel::Double, Caution::None, 0),
+    demo(Flag::Blue, WaveLevel::None, Caution::None, 0),
+    demo(Flag::Blue, WaveLevel::Single, Caution::None, 0),
+    demo(Flag::Blue, WaveLevel::Double, Caution::None, 0),
+    demo(Flag::Black, WaveLevel::None, Caution::None, 0),
+    demo(Flag::White, WaveLevel::None, Caution::None, 0),
+    demo(Flag::White, WaveLevel::Single, Caution::None, 0),
+    demo(Flag::White, WaveLevel::Double, Caution::None, 0),
+    demo(Flag::Red, WaveLevel::None, Caution::None, 0),
+    demo(Flag::Red, WaveLevel::Single, Caution::None, 0),
+    demo(Flag::Red, WaveLevel::Double, Caution::None, 0),
+    demo(Flag::Green, WaveLevel::None, Caution::None, 0),
+    demo(Flag::Green, WaveLevel::Single, Caution::None, 0),
+    demo(Flag::Green, WaveLevel::Double, Caution::None, 0),
+    demo(Flag::Checkered, WaveLevel::None, Caution::None, 0),
+    demo(Flag::Orange, WaveLevel::None, Caution::None, 0),
+    demo(Flag::Orange, WaveLevel::Single, Caution::None, 0),
+    demo(Flag::Orange, WaveLevel::Double, Caution::None, 0),
+    // Caution states (full-panel renderings).
+    demo(Flag::None, WaveLevel::None, Caution::VirtualSafetyCar, 0),
+    demo(Flag::None, WaveLevel::None, Caution::SafetyCar, 0),
+    // Sector yellows without a global flag — the canonical "yellow ahead"
+    // warning. Single-sector → growing → all-three.
+    demo(Flag::None, WaveLevel::None, Caution::None, 0b001),
+    demo(Flag::None, WaveLevel::None, Caution::None, 0b011),
+    demo(Flag::None, WaveLevel::None, Caution::None, 0b111),
 ];
 
 #[cfg(test)]

@@ -5,7 +5,7 @@
 //! `\n` (the parser also accepts `\r\n` and trailing whitespace). The whole
 //! API is `no_std` and allocation-free.
 //!
-//! Example: `F=Y;B=2;P=0;S=racing\n`
+//! Example: `F=Y;B=2;P=0;S=racing;C=N;Z=\n`
 //!
 //! | Field | Values | Meaning |
 //! |-------|--------|---------|
@@ -13,11 +13,18 @@
 //! | `B`   | `0` `1` `2` | wave level (none / single-waved / double-waved) |
 //! | `P`   | `0` `1` | in-pit indicator |
 //! | `S`   | `pre-race` `racing` `paused` `post-race` `replay` `unknown` | session state |
+//! | `C`   | `N` `V` `S` | caution (none / virtual safety car / safety car) |
+//! | `Z`   | (empty) `1` `2` `3` `12` `13` `23` `123` | sector-yellow mask, ascending unique digits |
 //!
 //! `B=0` is a static (displayed) flag. `B=1` is single-waved — a marshal is
 //! actively signalling. `B=2` is double-waved, indicating a more serious
 //! incident; renderer treats it as a stronger version of `B=1`. Sims that
 //! don't distinguish single from double map any "waved" state to `B=1`.
+//!
+//! `C=` and `Z=` are orthogonal to `F=`. VSC / Safety Car are session-wide
+//! and can coexist with any flag (`F=Y;C=V` is valid). A non-empty `Z=`
+//! lights a per-sector indicator overlay; `F=N;Z=2` is the canonical
+//! "yellow ahead in S2, clear at your location" warning.
 //!
 //! Unknown keys are silently ignored, so adding new fields is
 //! backwards-compatible. Unknown values for a known key return
@@ -27,7 +34,7 @@
 
 /// Maximum length of a formatted line, including the trailing `\n`. Caller
 /// must pass a buffer of at least this size to [`State::format`].
-pub const MAX_LINE_LEN: usize = 32;
+pub const MAX_LINE_LEN: usize = 48;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum Flag {
@@ -69,12 +76,38 @@ pub enum WaveLevel {
     Double,
 }
 
+/// Session-wide caution state, orthogonal to the active flag.
+///
+/// `VirtualSafetyCar` is the FIA full-course delta-pace caution (no
+/// physical pace car); `SafetyCar` is a deployed safety car with cars
+/// queued behind it. Both can be active alongside a flag (typically
+/// yellow). Hosts that can't distinguish them should map any "FCY-like"
+/// state to `VirtualSafetyCar`.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum Caution {
+    #[default]
+    None,
+    VirtualSafetyCar,
+    SafetyCar,
+}
+
+/// Active sector-yellow mask. Three sectors (S1/S2/S3) packed in the low
+/// three bits: bit 0 = S1, bit 1 = S2, bit 2 = S3. Default is empty.
+///
+/// On the wire the mask is encoded as canonical ascending unique digits
+/// (`Z=`, `Z=1`, `Z=23`, `Z=123`, etc.). Sims with finer marshal-zone
+/// resolution (F1) should aggregate to thirds host-side.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct SectorMask(u8);
+
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct State {
     pub flag: Flag,
     pub wave: WaveLevel,
     pub in_pit: bool,
     pub session: Session,
+    pub caution: Caution,
+    pub sectors: SectorMask,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -123,6 +156,81 @@ impl WaveLevel {
     }
 }
 
+impl Caution {
+    pub fn code(self) -> &'static str {
+        match self {
+            Caution::None => "N",
+            Caution::VirtualSafetyCar => "V",
+            Caution::SafetyCar => "S",
+        }
+    }
+}
+
+impl SectorMask {
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    pub const fn from_bits(bits: u8) -> Self {
+        Self(bits & 0b111)
+    }
+
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// `sector` is 1-indexed (1, 2, or 3). Out-of-range values are
+    /// silently ignored.
+    pub const fn contains(self, sector: u8) -> bool {
+        match sector {
+            1 => self.0 & 0b001 != 0,
+            2 => self.0 & 0b010 != 0,
+            3 => self.0 & 0b100 != 0,
+            _ => false,
+        }
+    }
+
+    /// Set the bit for `sector` (1..=3). Out-of-range values are no-ops.
+    pub const fn with(self, sector: u8) -> Self {
+        match sector {
+            1 => Self(self.0 | 0b001),
+            2 => Self(self.0 | 0b010),
+            3 => Self(self.0 | 0b100),
+            _ => self,
+        }
+    }
+
+    /// Toggle the bit for `sector` (1..=3). Out-of-range values are no-ops.
+    pub const fn toggle(self, sector: u8) -> Self {
+        match sector {
+            1 => Self(self.0 ^ 0b001),
+            2 => Self(self.0 ^ 0b010),
+            3 => Self(self.0 ^ 0b100),
+            _ => self,
+        }
+    }
+
+    /// Canonical wire encoding — empty for no sectors, otherwise
+    /// ascending unique digits. Returned slice is at most 3 bytes.
+    pub fn code(self) -> &'static str {
+        match self.0 & 0b111 {
+            0b000 => "",
+            0b001 => "1",
+            0b010 => "2",
+            0b011 => "12",
+            0b100 => "3",
+            0b101 => "13",
+            0b110 => "23",
+            0b111 => "123",
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl State {
     /// Parse a single line. Trailing `\r`, `\n`, space, and tab are
     /// stripped. Missing fields default to [`State::default`]. Unknown
@@ -153,6 +261,8 @@ impl State {
                 b"B" => state.wave = parse_wave(val)?,
                 b"P" => state.in_pit = parse_bool(val)?,
                 b"S" => state.session = parse_session(val)?,
+                b"C" => state.caution = parse_caution(val)?,
+                b"Z" => state.sectors = parse_sectors(val)?,
                 _ => { /* forward-compat: ignore unknown keys */ }
             }
         }
@@ -176,6 +286,10 @@ impl State {
         w.put(if self.in_pit { b"1" } else { b"0" });
         w.put(b";S=");
         w.put(self.session.code().as_bytes());
+        w.put(b";C=");
+        w.put(self.caution.code().as_bytes());
+        w.put(b";Z=");
+        w.put(self.sectors.code().as_bytes());
         w.put(b"\n");
         w.len
     }
@@ -238,6 +352,37 @@ fn parse_session(v: &[u8]) -> Result<Session, ParseError> {
     }
 }
 
+fn parse_caution(v: &[u8]) -> Result<Caution, ParseError> {
+    match v {
+        b"N" => Ok(Caution::None),
+        b"V" => Ok(Caution::VirtualSafetyCar),
+        b"S" => Ok(Caution::SafetyCar),
+        _ => Err(ParseError::BadValue),
+    }
+}
+
+/// Parse a sector-mask digit run. Empty input is the empty mask. Each
+/// byte must be `'1'`, `'2'`, or `'3'`; digits must be strictly
+/// ascending (so `Z=12` is OK but `Z=21` and `Z=11` are rejected).
+fn parse_sectors(v: &[u8]) -> Result<SectorMask, ParseError> {
+    let mut mask = SectorMask::empty();
+    let mut last: u8 = 0;
+    for &b in v {
+        let sector = match b {
+            b'1' => 1,
+            b'2' => 2,
+            b'3' => 3,
+            _ => return Err(ParseError::BadValue),
+        };
+        if b <= last {
+            return Err(ParseError::BadValue);
+        }
+        last = b;
+        mask = mask.with(sector);
+    }
+    Ok(mask)
+}
+
 struct SliceWriter<'a> {
     buf: &'a mut [u8],
     len: usize,
@@ -275,6 +420,10 @@ mod tests {
         Session::Unknown,
     ];
     const ALL_WAVES: [WaveLevel; 3] = [WaveLevel::None, WaveLevel::Single, WaveLevel::Double];
+    const ALL_CAUTIONS: [Caution; 3] =
+        [Caution::None, Caution::VirtualSafetyCar, Caution::SafetyCar];
+    /// All eight possible sector masks (every subset of {1,2,3}).
+    const ALL_SECTOR_MASKS: [u8; 8] = [0, 1, 2, 3, 4, 5, 6, 7];
 
     #[test]
     fn parse_canonical_line() {
@@ -286,8 +435,93 @@ mod tests {
                 wave: WaveLevel::Single,
                 in_pit: false,
                 session: Session::Racing,
+                ..State::default()
             }
         );
+    }
+
+    #[test]
+    fn parse_canonical_line_with_caution_and_sectors() {
+        let s = State::parse(b"F=Y;B=1;P=0;S=racing;C=V;Z=12").unwrap();
+        assert_eq!(s.flag, Flag::Yellow);
+        assert_eq!(s.caution, Caution::VirtualSafetyCar);
+        assert_eq!(s.sectors, SectorMask::from_bits(0b011));
+        assert!(s.sectors.contains(1));
+        assert!(s.sectors.contains(2));
+        assert!(!s.sectors.contains(3));
+    }
+
+    #[test]
+    fn parse_caution_codes() {
+        assert_eq!(State::parse(b"C=N").unwrap().caution, Caution::None);
+        assert_eq!(
+            State::parse(b"C=V").unwrap().caution,
+            Caution::VirtualSafetyCar
+        );
+        assert_eq!(State::parse(b"C=S").unwrap().caution, Caution::SafetyCar);
+    }
+
+    #[test]
+    fn parse_sectors_canonical_forms() {
+        let cases: &[(&[u8], u8)] = &[
+            (b"Z=", 0b000),
+            (b"Z=1", 0b001),
+            (b"Z=2", 0b010),
+            (b"Z=3", 0b100),
+            (b"Z=12", 0b011),
+            (b"Z=13", 0b101),
+            (b"Z=23", 0b110),
+            (b"Z=123", 0b111),
+        ];
+        for &(input, expected) in cases {
+            let s = State::parse(input).unwrap();
+            assert_eq!(
+                s.sectors,
+                SectorMask::from_bits(expected),
+                "input {:?}",
+                core::str::from_utf8(input).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn parse_sectors_empty_is_default() {
+        let s = State::parse(b"Z=").unwrap();
+        assert!(s.sectors.is_empty());
+        assert_eq!(s.sectors, SectorMask::default());
+    }
+
+    #[test]
+    fn parse_sectors_rejects_unsorted() {
+        assert_eq!(State::parse(b"Z=21"), Err(ParseError::BadValue));
+        assert_eq!(State::parse(b"Z=32"), Err(ParseError::BadValue));
+        assert_eq!(State::parse(b"Z=132"), Err(ParseError::BadValue));
+    }
+
+    #[test]
+    fn parse_sectors_rejects_duplicate() {
+        assert_eq!(State::parse(b"Z=11"), Err(ParseError::BadValue));
+        assert_eq!(State::parse(b"Z=22"), Err(ParseError::BadValue));
+        assert_eq!(State::parse(b"Z=122"), Err(ParseError::BadValue));
+    }
+
+    #[test]
+    fn parse_sectors_rejects_out_of_range() {
+        assert_eq!(State::parse(b"Z=4"), Err(ParseError::BadValue));
+        assert_eq!(State::parse(b"Z=0"), Err(ParseError::BadValue));
+    }
+
+    #[test]
+    fn parse_sectors_rejects_non_digit() {
+        assert_eq!(State::parse(b"Z=a"), Err(ParseError::BadValue));
+        assert_eq!(State::parse(b"Z=1a"), Err(ParseError::BadValue));
+    }
+
+    #[test]
+    fn parse_caution_rejects_bad_value() {
+        assert_eq!(State::parse(b"C=X"), Err(ParseError::BadValue));
+        assert_eq!(State::parse(b"C=v"), Err(ParseError::BadValue));
+        assert_eq!(State::parse(b"C="), Err(ParseError::BadValue));
     }
 
     #[test]
@@ -352,15 +586,17 @@ mod tests {
     #[test]
     fn format_within_max_len() {
         let mut buf = [0u8; MAX_LINE_LEN];
-        // Pick the longest possible state — chequered + post-race.
+        // Worst case: longest session label + non-empty caution + full sector mask.
         let s = State {
             flag: Flag::Checkered,
             wave: WaveLevel::Double,
             in_pit: true,
             session: Session::PostRace,
+            caution: Caution::SafetyCar,
+            sectors: SectorMask::from_bits(0b111),
         };
         let n = s.format(&mut buf);
-        assert!(n <= MAX_LINE_LEN);
+        assert!(n <= MAX_LINE_LEN, "formatted len = {}", n);
     }
 
     #[test]
@@ -379,6 +615,7 @@ mod tests {
                 wave: WaveLevel::Single,
                 in_pit: true,
                 session: Session::Racing,
+                ..State::default()
             };
             let mut buf = [0u8; MAX_LINE_LEN];
             let n = s.format(&mut buf);
@@ -394,6 +631,7 @@ mod tests {
                 wave: WaveLevel::None,
                 in_pit: false,
                 session,
+                ..State::default()
             };
             let mut buf = [0u8; MAX_LINE_LEN];
             let n = s.format(&mut buf);
@@ -409,10 +647,48 @@ mod tests {
                 wave,
                 in_pit: false,
                 session: Session::Racing,
+                ..State::default()
             };
             let mut buf = [0u8; MAX_LINE_LEN];
             let n = s.format(&mut buf);
             assert_eq!(State::parse(&buf[..n]).unwrap(), s, "wave {:?}", wave);
+        }
+    }
+
+    #[test]
+    fn round_trip_every_caution() {
+        for &caution in &ALL_CAUTIONS {
+            let s = State {
+                flag: Flag::Yellow,
+                wave: WaveLevel::None,
+                in_pit: false,
+                session: Session::Racing,
+                caution,
+                ..State::default()
+            };
+            let mut buf = [0u8; MAX_LINE_LEN];
+            let n = s.format(&mut buf);
+            assert_eq!(State::parse(&buf[..n]).unwrap(), s, "caution {:?}", caution);
+        }
+    }
+
+    #[test]
+    fn round_trip_every_sector_mask() {
+        for &bits in &ALL_SECTOR_MASKS {
+            let mask = SectorMask::from_bits(bits);
+            let s = State {
+                flag: Flag::None,
+                wave: WaveLevel::None,
+                in_pit: false,
+                session: Session::Racing,
+                sectors: mask,
+                ..State::default()
+            };
+            let mut buf = [0u8; MAX_LINE_LEN];
+            let n = s.format(&mut buf);
+            let parsed = State::parse(&buf[..n]).unwrap();
+            assert_eq!(parsed, s, "mask bits {:#05b}", bits);
+            assert_eq!(parsed.sectors.bits(), bits, "mask bits {:#05b}", bits);
         }
     }
 
@@ -426,5 +702,20 @@ mod tests {
         for w in codes.windows(2) {
             assert_ne!(w[0], w[1]);
         }
+    }
+
+    #[test]
+    fn sector_mask_helpers() {
+        let m = SectorMask::empty();
+        assert!(m.is_empty());
+        let m = m.with(2);
+        assert!(!m.is_empty());
+        assert!(m.contains(2));
+        assert!(!m.contains(1));
+        let m = m.toggle(2);
+        assert!(m.is_empty());
+        // Out-of-range is a no-op.
+        let m = SectorMask::empty().with(4);
+        assert!(m.is_empty());
     }
 }
