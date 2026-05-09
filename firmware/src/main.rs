@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+mod buttons;
 mod display;
 mod render;
 
@@ -18,6 +19,7 @@ use heapless::Vec as HVec;
 use panic_probe as _;
 use static_cell::StaticCell;
 
+use buttons::BrightnessChannel;
 use display::{Display, DisplayPins, PioIrqs};
 
 embassy_rp::bind_interrupts!(struct UsbIrqs {
@@ -27,6 +29,9 @@ embassy_rp::bind_interrupts!(struct UsbIrqs {
 /// Latest decoded state from the host. Updated whenever the CDC RX path
 /// successfully parses a line; observed by the render task.
 static STATE_SIGNAL: Signal<CriticalSectionRawMutex, proto::State> = Signal::new();
+
+/// Brightness-button events from the buttons task to the render task.
+static BRIGHTNESS_CHAN: BrightnessChannel = BrightnessChannel::new();
 
 /// Maximum line length we'll accept from the host. proto::MAX_LINE_LEN is
 /// the *formatted* length; allow a bit of slack for non-canonical input.
@@ -99,6 +104,9 @@ async fn main(spawner: Spawner) {
     // Spawn workers
     // ------------------------------------------------------------------
     spawner.spawn(render_task(display).expect("spawn render task"));
+    spawner.spawn(
+        buttons::run(p.PIN_21, p.PIN_26, p.PIN_27, &BRIGHTNESS_CHAN).expect("spawn buttons task"),
+    );
 
     // The remaining two futures borrow `'static` resources but aren't tasks
     // (they're awaited here in `main`'s top-level `join`). Doing it this way
@@ -172,5 +180,5 @@ fn handle_line(line: &[u8]) {
 
 #[embassy_executor::task]
 async fn render_task(display: Display) -> ! {
-    render::run(display, &STATE_SIGNAL).await
+    render::run(display, &STATE_SIGNAL, &BRIGHTNESS_CHAN).await
 }

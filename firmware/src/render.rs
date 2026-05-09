@@ -15,16 +15,26 @@
 //! - in-pit (`P=1`): paint the rightmost column in pit-blue regardless
 //!   of flag.
 
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{select3, Either3};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Timer};
 
+use crate::buttons::{BrightnessAction, BrightnessChannel};
 use crate::display::{Display, HEIGHT, WIDTH};
 use proto::{Flag, State};
 
 const BLINK_TICK_MS: u64 = 250;
 const PIT_STRIPE_WIDTH: i32 = 2;
+/// Default brightness on boot. The Cosmic Unicorn at 100% is uncomfortably
+/// bright in a typical sim-rig setup; this is around 30% perceived after
+/// gamma.
+const DEFAULT_BRIGHTNESS: u8 = 80;
+/// Step size per button press. ~5% of full range.
+const BRIGHTNESS_STEP: u8 = 12;
+/// What the SleepToggle button drops brightness to (and restores on the
+/// next press if not adjusted otherwise).
+const SLEEP_BRIGHTNESS: u8 = 6;
 
 type Rgb = (u8, u8, u8);
 
@@ -36,29 +46,67 @@ const PIT_BLUE: Rgb = (0, 80, 255);
 pub async fn run(
     mut display: Display,
     state_signal: &'static Signal<CriticalSectionRawMutex, State>,
+    brightness_chan: &'static BrightnessChannel,
 ) -> ! {
-    // Paint a boot splash so the user sees something the moment the panel
-    // comes up — even before the host connects.
-    paint(&mut display, &State::default(), false);
-
     let mut state = State::default();
+    let mut brightness = DEFAULT_BRIGHTNESS;
+    let mut last_awake_brightness = DEFAULT_BRIGHTNESS;
     let mut blink_phase = false;
     let blink_tick = Duration::from_millis(BLINK_TICK_MS);
 
+    display.set_brightness(brightness);
+    paint(&mut display, &state, false);
+
     loop {
-        match select(state_signal.wait(), Timer::after(blink_tick)).await {
-            Either::First(new) => {
+        match select3(
+            state_signal.wait(),
+            Timer::after(blink_tick),
+            brightness_chan.receive(),
+        )
+        .await
+        {
+            Either3::First(new) => {
                 state = new;
                 blink_phase = false;
                 paint(&mut display, &state, blink_phase);
             }
-            Either::Second(_) => {
+            Either3::Second(_) => {
                 if state.blink {
                     blink_phase = !blink_phase;
                     paint(&mut display, &state, blink_phase);
                 }
                 // if not blinking, the panel content is already correct —
                 // just keep waiting.
+            }
+            Either3::Third(action) => {
+                brightness = apply_brightness(action, brightness, &mut last_awake_brightness);
+                display.set_brightness(brightness);
+                paint(&mut display, &state, blink_phase);
+            }
+        }
+    }
+}
+
+fn apply_brightness(action: BrightnessAction, current: u8, last_awake: &mut u8) -> u8 {
+    match action {
+        BrightnessAction::Up => {
+            let next = current.saturating_add(BRIGHTNESS_STEP);
+            *last_awake = next;
+            next
+        }
+        BrightnessAction::Down => {
+            let next = current.saturating_sub(BRIGHTNESS_STEP);
+            *last_awake = next;
+            next
+        }
+        BrightnessAction::SleepToggle => {
+            if current <= SLEEP_BRIGHTNESS {
+                // Wake.
+                (*last_awake).max(BRIGHTNESS_STEP)
+            } else {
+                // Sleep — remember the current brightness for wake.
+                *last_awake = current;
+                SLEEP_BRIGHTNESS
             }
         }
     }
