@@ -1,0 +1,36 @@
+---
+source: render/tests/effects.rs
+expression: "snap(State { flag: Flag::Checkered, ..State::default() }, 0, 100,)"
+---
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+    WWWW    WWWW    WWWW    WWWW
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW    
+WWWW    WWWW    WWWW    WWWW

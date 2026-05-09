@@ -5,9 +5,10 @@
 //! plus a frame counter, so flag effects (strobes, sweeps, scrolling
 //! chequered, breathing splash) are always live.
 //!
-//! Per-flag rendering details live in the [`effects`] submodule. Animation
-//! primitives (sin LUT, strobe envelope, scale_rgb, wave modulator) live
-//! in [`anim`].
+//! Per-flag rendering details and animation primitives live in the
+//! `uniflag-render` crate (`effects`, `anim`); this module just owns the
+//! embassy task that wires signals/timers/persistence to those paint
+//! functions.
 //!
 //! v3 rendering rules (per-flag, "as realistic as possible").
 //!
@@ -55,8 +56,6 @@
 //!   1-px black gaps. Active sectors pulse yellow at 2 Hz (4 Hz on
 //!   `B=2`); inactive sectors stay dim yellow so the band is always
 //!   visible when any sector is set. Suppressed under red flag.
-
-mod effects;
 
 use embassy_futures::select::{select3, Either3};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -113,7 +112,7 @@ pub async fn run(
     let frame_tick = Duration::from_millis(FRAME_TICK_MS);
 
     display.set_brightness(brightness);
-    effects::paint(&mut display, &state, frame, 0, false);
+    uniflag_render::effects::paint(&mut display, &state, frame, 0, false);
     display.present().await;
 
     loop {
@@ -131,13 +130,13 @@ pub async fn run(
                 state = new;
                 last_state_at = Some(Instant::now());
                 let age = frame.wrapping_sub(flag_changed_at);
-                effects::paint(&mut display, &state, frame, age, true);
+                uniflag_render::effects::paint(&mut display, &state, frame, age, true);
             }
             Either3::Second(_) => {
                 frame = frame.wrapping_add(1);
                 let age = frame.wrapping_sub(flag_changed_at);
                 let connected = last_state_at.is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
-                effects::paint(&mut display, &state, frame, age, connected);
+                uniflag_render::effects::paint(&mut display, &state, frame, age, connected);
             }
             Either3::Third(action) => {
                 let new_brightness =
@@ -152,7 +151,7 @@ pub async fn run(
                 display.set_brightness(brightness);
                 let age = frame.wrapping_sub(flag_changed_at);
                 let connected = last_state_at.is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
-                effects::paint(&mut display, &state, frame, age, connected);
+                uniflag_render::effects::paint(&mut display, &state, frame, age, connected);
             }
         }
         display.present().await;

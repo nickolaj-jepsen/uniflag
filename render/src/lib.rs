@@ -5,15 +5,22 @@
 //!
 //! - [`anim`] — integer-only animation primitives (sine LUT, strobe envelope,
 //!   breathing modulator, cloth-wave overlay, RGB scaling).
+//! - [`surface`] — the [`Surface`](surface::Surface) trait that paint
+//!   functions write to.
+//! - [`effects`] — per-flag paint functions (`paint`, `paint_yellow`,
+//!   `paint_red`, …) generic over any [`Surface`].
 //!
-//! Future modules (a `Surface` trait, the `effects` paint functions, and the
-//! `BrightnessController` state machine) will land here too so that the
-//! firmware can stay a thin hardware adapter and host tests can cover the
-//! actual rendering and brightness logic.
+//! Host integration tests in `render/tests/` provide their own
+//! `MockSurface` (see `tests/common/mod.rs`) — keeping it test-side avoids
+//! pulling `alloc` into firmware.
 
 #![no_std]
 
 pub mod anim;
+pub mod effects;
+pub mod surface;
+
+pub use surface::{Rgb, Surface};
 
 /// Panel width in pixels. Both the Cosmic Unicorn hardware and the host
 /// `MockSurface` agree on this.

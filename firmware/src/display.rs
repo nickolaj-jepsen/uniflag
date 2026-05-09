@@ -370,7 +370,19 @@ impl Display {
     pub fn clear(&mut self) {
         self.fill(0, 0, 0);
     }
+}
 
+impl uniflag_render::Surface for Display {
+    fn set_pixel(&mut self, x: i32, y: i32, (r, g, b): uniflag_render::Rgb) {
+        Display::set_pixel(self, x, y, r, g, b);
+    }
+
+    fn fill(&mut self, (r, g, b): uniflag_render::Rgb) {
+        Display::fill(self, r, g, b);
+    }
+}
+
+impl Display {
     /// Publish the just-painted `back` buffer to DMA, swap labels, and
     /// wait until the DMA chain has actually picked up the new pointer.
     ///

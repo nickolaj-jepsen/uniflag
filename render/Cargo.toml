@@ -8,5 +8,8 @@ description = "uniflag rendering primitives — flag effects, brightness state m
 [dependencies]
 proto = { path = "../proto" }
 
+[dev-dependencies]
+insta = "1"
+
 [lints]
 workspace = true
