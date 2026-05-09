@@ -56,7 +56,6 @@
 //!   `B=2`); inactive sectors stay dim yellow so the band is always
 //!   visible when any sector is set. Suppressed under red flag.
 
-mod anim;
 mod effects;
 
 use embassy_futures::select::{select3, Either3};

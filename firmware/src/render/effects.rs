@@ -3,9 +3,9 @@
 //! `flag_age` (frames since the active flag last changed — used for onset
 //! transitions like the red-flag white flash).
 
-use super::anim;
 use crate::display::{Display, HEIGHT, WIDTH};
 use proto::{Caution, Flag, SectorMask, Session, State, WaveLevel};
+use uniflag_render::anim;
 
 type Rgb = (u8, u8, u8);
 

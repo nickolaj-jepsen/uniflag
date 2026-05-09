@@ -1844,6 +1844,14 @@ dependencies = [
  "portable-atomic",
  "proto",
  "static_cell",
+ "uniflag-render",
+]
+
+[[package]]
+name = "uniflag-render"
+version = "0.1.0"
+dependencies = [
+ "proto",
 ]
 
 [[package]]

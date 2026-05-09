@@ -28,12 +28,12 @@ fmt-check:
 
 # Mirror CI: clippy on host crates, then on firmware (different target).
 clippy:
-    cargo clippy -p proto -p uniflag-sim --all-targets -- -D warnings
+    cargo clippy -p proto -p uniflag-render -p uniflag-sim --all-targets -- -D warnings
     cargo clippy --all-targets --manifest-path firmware/Cargo.toml -- -D warnings
 
 # Tests on host crates only (firmware is no_std, `test = false`).
 test:
-    cargo test -p proto -p uniflag-sim --all-targets
+    cargo test -p proto -p uniflag-render -p uniflag-sim --all-targets
 
 # Build the firmware ELF (release).
 build:
