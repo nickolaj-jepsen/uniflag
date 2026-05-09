@@ -10,9 +10,11 @@ on the SimHub side that emits the wire format the firmware expects.
 
 ## Wire format
 
-The firmware accepts one line per update, terminated by `\n`
-(SimHub appends this automatically). Fields are semicolon-separated
-`key=value` pairs:
+The firmware accepts one line per update, terminated by `\n`. **SimHub
+does not append the terminator automatically**, despite what its wiki
+implies — the formula must end with `'\r\n'` (or `'\n'`). Without it
+the panel stays dark, since the firmware never sees a complete line to
+parse. Fields are semicolon-separated `key=value` pairs:
 
 ```
 F=Y;B=1;P=0;S=racing
@@ -45,29 +47,33 @@ Unknown keys are silently ignored, so adding new fields later won't
 break older firmware. See `proto/src/lib.rs` for the canonical
 definition and unit tests.
 
-## Option A — import the shipped profile (TODO: not yet authored)
+## Option A — import the shipped profile (recommended)
 
-Once we have a working profile exported to `simhub/uniflag.json`, the
-import flow will be:
+A pre-authored profile lives at [`uniflag.shsds`](uniflag.shsds). It
+ships the canonical formula (with the required `'\r\n'` terminator),
+DTR/RTS enabled, 10 Hz update rate, and a placeholder COM port that
+you'll re-pick in the UI. To install:
 
 1. Open SimHub.
 2. **Settings → General → Properties cache → Open data folder**.
 3. Navigate to `PluginsData\CustomSerialDevices\`.
-4. Drop `uniflag.json` into that folder.
+4. Drop `uniflag.shsds` into that folder.
 5. Restart SimHub.
 6. **Available add-ons → Additional plugins → Custom serial devices**:
-   tick the new entry, pick the COM port the device enumerates as,
-   and apply.
+   tick the imported entry, pick the COM port the device enumerates
+   as (the shipped value is `COM5` from the authoring host — change
+   it to whatever your board enumerates as), and apply.
 
-> **Note**: SimHub stores Custom Serial Device profiles as JSON, but
-> the format is **not officially documented** and changes between
-> SimHub versions. We treat the file as an opaque export — author it
-> through the GUI on a Windows install, then commit the result. Don't
-> hand-edit it.
+> **Note**: SimHub stores Custom Serial Device profiles as `.shsds`
+> JSON. The format is **not officially documented** and changes
+> between SimHub versions, so we treat the file as an opaque export
+> — author it through the GUI on a Windows install, then commit the
+> result. Don't hand-edit it.
 
-## Option B — author it manually (current path)
+## Option B — author it manually
 
-Until the JSON is exported, set the profile up by hand. Steps:
+If the import doesn't work on your SimHub version, set the profile up
+by hand. Steps:
 
 1. **Available add-ons → Additional plugins → Custom serial devices →
    Enable**, then in the same screen, add a new device.
@@ -103,10 +109,15 @@ if([DataCorePlugin.GameData.Flag_Orange],   'O',
           if([DataCorePlugin.GameData.SessionTypeName] = 'Practice', 'pre-race',
           if([DataCorePlugin.GameData.SessionTypeName] = 'Qualifying', 'pre-race',
           'unknown'))))
++ '\r\n'
 ```
 
 Notes:
 
+- The trailing `'\r\n'` is **required**. SimHub doesn't add a line
+  terminator automatically; without it the firmware never gets a
+  complete line and the panel stays dark. If you extend the formula
+  with the caution / sector blocks below, move the `'\r\n'` to the end.
 - `Flag_Yellow` triggering both the `F=Y` field *and* `B=1` is
   intentional: the unified property doesn't distinguish static from
   waved, so we treat any yellow as single-waved. If your sim *does*
@@ -133,7 +144,9 @@ Notes:
 Append the following to the basic formula to drive the `C=` (caution)
 and `Z=` (sector mask) fields. Pick the sim-specific block that
 matches your install; if you race more than one sim, copy the relevant
-block on a per-device-profile basis.
+block on a per-device-profile basis. Move the `+ '\r\n'` from the basic
+formula to the end of the extended one so the line terminator stays
+last.
 
 **iRacing** — bit-test the `SessionFlags` mask (see `irsdk_Flags`).
 `Caution` is bit `0x4000`, `SafetyCarActive` exposes the physical SC.
@@ -174,18 +187,25 @@ in `isnull(x, fallback)`.
 4. **Apply**, then **Save**. The device should connect; its solid-flag
    LED corner of the panel changes colour as you toggle a flag in-game.
 
-## Once it works
+## Re-exporting after edits
 
-Export and commit:
+If you tweak the formula in SimHub's UI and want the change committed:
 
 1. **Settings → General → Properties cache → Open data folder →
    `PluginsData\CustomSerialDevices\`**.
-2. Find the JSON file matching the device name (`uniflag.json`).
-3. Copy it into `simhub/uniflag.json` and commit.
-4. Update Option A above to remove the TODO note.
+2. Find the `.shsds` file matching the device name.
+3. Copy it over `simhub/uniflag.shsds` and commit.
 
 ## Troubleshooting
 
+- **Panel stays dark with SimHub connected, but lights up under
+  `uniflag-sim`**: the formula is missing its line terminator. SimHub
+  does not append `\n` automatically — the formula must end with
+  `+ '\r\n'`. The "Connected" indicator in SimHub's UI just means the
+  COM port is open; it doesn't imply the device is parsing what's
+  arriving. Without a terminator the firmware buffers bytes
+  indefinitely and never invokes the parser, so the panel never
+  leaves its disconnected state.
 - **Panel boot-splash visible but doesn't react to flags**: open
   SimHub's **Logs** screen and check for the device line. Common cause:
   the formula is being evaluated before a sim is connected, so all

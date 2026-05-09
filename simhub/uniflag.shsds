@@ -1,0 +1,39 @@
+{
+  "AutomaticReconnect": true,
+  "SerialPortName": "COM5",
+  "StartupDelayMs": 0,
+  "IsConnecting": false,
+  "IsEnabled": true,
+  "LogIncomingData": true,
+  "IsConnected": true,
+  "BaudRate": 115200,
+  "DtrEnable": true,
+  "RtsEnable": true,
+  "EditorExpanded": true,
+  "Name": "Custom Serial device",
+  "Description": "Uniflag",
+  "LastErrorDate": "2026-05-09T23:15:45.9843578+02:00",
+  "LastErrorMessage": null,
+  "IsFreezed": false,
+  "SettingsBuilder": {
+    "Settings": [],
+    "IsEditMode": false
+  },
+  "OnConnectMessage": {
+    "Expression": ""
+  },
+  "OnDisconnectMessage": {
+    "JSExt": 0,
+    "Interpreter": 1,
+    "Expression": ""
+  },
+  "UpdateMessages": [
+    {
+      "Message": {
+        "Expression": "'F=' +\r\nif([DataCorePlugin.GameData.Flag_Yellow],   'Y',\r\nif([DataCorePlugin.GameData.Flag_Blue],     'B',\r\nif([DataCorePlugin.GameData.Flag_Black],    'K',\r\nif([DataCorePlugin.GameData.Flag_White],    'W',\r\nif([DataCorePlugin.GameData.Flag_Checkered],'C',\r\nif([DataCorePlugin.GameData.Flag_Green],    'G',\r\nif([DataCorePlugin.GameData.Flag_Orange],   'O',\r\n                                            'N')))))))\r\n+ ';B=' + if([DataCorePlugin.GameData.Flag_Yellow], '1', '0')\r\n+ ';P=' + if([DataCorePlugin.GameData.IsInPitLane], '1', '0')\r\n+ ';S=' + if(isnull([DataCorePlugin.GameData.SessionTypeName]), 'unknown',\r\n          if([DataCorePlugin.GameData.SessionTypeName] = 'Race', 'racing',\r\n          if([DataCorePlugin.GameData.SessionTypeName] = 'Practice', 'pre-race',\r\n          if([DataCorePlugin.GameData.SessionTypeName] = 'Qualifying', 'pre-race',\r\n          'unknown'))))\r\n+ '\\r\\n'\r\n"
+      },
+      "IsEnabled": true,
+      "MaximumFrequency": 10
+    }
+  ]
+}

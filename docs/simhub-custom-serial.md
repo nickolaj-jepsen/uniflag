@@ -38,22 +38,25 @@ You can have many update messages; each has its own enable, cadence, and formula
 
 ### Wire format
 
-> "The plugin does not send any predefined message start or terminator characters.
-> You need to add them to your messages."
->
-> "The message is sent as a string and ends with a new line character (`\n`,
-> added by SimHub automatically)."
+The plugin does **not** add any framing — including no automatic line
+terminator. The wiki has historically claimed `\n` is auto-appended, but
+that's wrong (or no longer true) in the SimHub 9.x line we tested
+against: the bytes on the wire are exactly what the formula evaluates to.
+The formula must include the terminator explicitly, e.g. `+ '\r\n'`.
 
 So:
 
 - Encoding: ASCII (everything is built via string concatenation from NCalc)
-- Frame terminator: `\n` is auto-appended; nothing else added by SimHub
+- Frame terminator: **none added by SimHub** — append `'\r\n'` (or `'\n'`)
+  yourself in the formula
 - "Empty message" (formula evaluates to `""`) → not sent
 - "Changes only" → message only sent when its formula's value actually changed
 
 ### Receiving side guarantees
 
-- We get whole strings ending in `\n`.
+- We get the literal output of the formula — nothing more, nothing less.
+  The firmware splits on `\n`, so the formula must end with `'\r\n'` (or
+  `'\n'`) for any line to be processed.
 - Up to 10 Hz max in the free build → at most 100 ms per update on free, faster on paid.
 - The plugin only **sends**; it can show what the device sent back (echo), but it
   cannot use device responses as inputs. If we want bidirectional, we'd need either
@@ -119,7 +122,13 @@ if([DataCorePlugin.GameData.Flag_Green],    'G',
 + ';B=' + if([DataCorePlugin.GameData.Flag_Yellow], '1', '0')
 + ';P=' + if([DataCorePlugin.GameData.IsInPitLane],  '1', '0')
 + ';S=' + isnull([DataCorePlugin.GameData.SessionTypeName], 'unknown')
++ '\r\n'
 ```
+
+The trailing `'\r\n'` is **required** — SimHub does not add a line
+terminator automatically. Without it the firmware accumulates bytes
+indefinitely without ever passing a line to the parser, and the panel
+stays in its disconnected (dark) state.
 
 (Property names verified per [`simhub-flag-properties.md`](./simhub-flag-properties.md).)
 
@@ -145,10 +154,11 @@ The end-user setup steps and the canonical NCalc formula live at
 truth for what to type into SimHub's GUI; this doc just describes the
 protocol the firmware accepts.
 
-Eventually we'll commit the exported JSON profile under
-`simhub/uniflag.json` — but the SimHub Custom Serial Device JSON format
-is undocumented and version-fragile, so the profile must be authored on
-a Windows install and exported, not hand-written.
+The pre-authored profile lives at [`simhub/uniflag.shsds`](../simhub/uniflag.shsds).
+SimHub stores Custom Serial Device profiles as `.shsds` JSON; the format
+is undocumented and version-fragile, so the file is treated as an opaque
+export — authored through the GUI on a Windows install, then committed
+verbatim. Don't hand-edit it.
 
 ## Sources
 
