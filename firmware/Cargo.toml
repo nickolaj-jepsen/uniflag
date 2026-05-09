@@ -1,0 +1,52 @@
+[package]
+name = "uniflag-firmware"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "uniflag firmware for the original Pimoroni Cosmic Unicorn (RP2040, Embassy)."
+
+[[bin]]
+name = "uniflag"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+proto = { path = "../proto" }
+
+# Embassy — versions match embassy-rs/embassy stable as of May 2026.
+embassy-rp        = { version = "0.10.0", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp2040"] }
+embassy-executor  = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
+embassy-time      = { version = "0.5.1",  features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-sync      = { version = "0.8.0",  features = ["defmt"] }
+embassy-usb       = { version = "0.6.0",  features = ["defmt"] }
+embassy-futures   = { version = "0.1.2" }
+
+# PIO assembly via proc-macro. Must match the pio version embassy-rp uses
+# (0.3) so the Program type matches Common::load_program's signature.
+pio        = "0.3"
+pio-proc   = "0.3"
+
+# Drawing layer
+embedded-graphics = "0.8.1"
+
+# Logging + panic
+defmt = "1.0.1"
+defmt-rtt = "1.0.0"
+panic-probe = { version = "1.0.0", features = ["print-defmt"] }
+
+# Cortex-M runtime
+cortex-m    = { version = "0.7.6", features = ["inline-asm"] }
+cortex-m-rt = "0.7.5"
+critical-section = "1.1"
+static_cell = "2.1.1"
+
+# RP2040 (Cortex-M0+) has no native atomic CAS. portable-atomic emulates it
+# via the critical-section impl provided by embassy-rp's `critical-section-impl`
+# feature. Required so static_cell, embassy-sync, etc. compile for thumbv6m.
+portable-atomic = { version = "1.5", features = ["critical-section"] }
+
+heapless = "0.8"
+
+[lints]
+workspace = true
