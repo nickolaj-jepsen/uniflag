@@ -8,13 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Workspace layout
 
-- `proto/` — wire-protocol types (`no_std`, allocation-free), shared by firmware and sim.
-- `firmware/` — embedded firmware (`thumbv6m-none-eabi`, embassy-rs). Excluded from workspace `default-members` so a bare `cargo check` from the root doesn't try to cross-compile.
+- `proto/` — wire-protocol types (`no_std`, allocation-free), shared by firmware, render, and sim.
+- `render/` — `uniflag-render`, host-testable rendering primitives (`anim`, `effects`, `surface::Surface`, `BrightnessController`). `no_std`, depends only on `proto`. Snapshot tests in `render/tests/` use `insta` against an in-memory `MockSurface` (defined in `tests/common/mod.rs`).
+- `firmware/` — embedded firmware (`thumbv6m-none-eabi`, embassy-rs). Implements `Surface` for the hardware `Display` and runs the embassy task in `runtime.rs` that ties signals/timers/persistence to `uniflag_render::effects::paint`. Excluded from workspace `default-members` so a bare `cargo check` from the root doesn't try to cross-compile.
 - `sim/` — `uniflag-sim`, host-side simulator that pretends to be SimHub (interactive/scripted/demo).
 - `simhub/` — end-user SimHub profile + setup notes.
 - `docs/` — external references (Cosmic Unicorn hardware/PIO, SimHub plugin/property catalogue).
 
-The host crates (`proto`, `uniflag-sim`) are workspace `default-members`. To touch the firmware crate from the root, use `--manifest-path firmware/Cargo.toml` or `cd firmware && cargo ...`.
+The host crates (`proto`, `uniflag-render`, `uniflag-sim`) are workspace `default-members`. To touch the firmware crate from the root, use `--manifest-path firmware/Cargo.toml` or `cd firmware && cargo ...`.
 
 ## Common commands
 
@@ -24,7 +25,7 @@ All wrapped by `just` (run `just` to list). The justfile works on both Linux and
 |---------|-----------|
 | `just fmt` / `just fmt-check` | `cargo fmt --all` (the latter is the CI gate). |
 | `just clippy` | clippy on host crates **and** firmware separately (different target). `-D warnings`. |
-| `just test` | `cargo test -p proto -p uniflag-sim`. Firmware has `test = false` (it's `no_std`). |
+| `just test` | `cargo test -p proto -p uniflag-render -p uniflag-sim`. Firmware has `test = false` (it's `no_std`). |
 | `just build` | release build of the firmware ELF. |
 | `just img` | build, then convert ELF → UF2 at `target/uniflag.uf2`. |
 | `just flash` | full pipeline: build → UF2 → wait for `RPI-RP2` mount (hold BOOTSEL) → copy → wait for serial. |
@@ -59,16 +60,16 @@ ASCII, semicolon-separated `key=value` fields, terminated with `\n` (parser also
 
 Embassy executor with three concurrent jobs spawned from `main`:
 
-1. **`render_task`** (`render.rs` + `render/{anim,effects}.rs`) — owns the `Display` and the persisted brightness. 60 fps animation loop; recomputes the whole panel from current `proto::State` + frame counter every tick. Per-flag base layers + overlays + precedence rules are documented at the top of `render.rs` (red beats caution beats per-flag base; sector band overlays unless red; "disconnected" is the boot/idle blank state when no host updates arrive within `CONNECT_TIMEOUT`).
-2. **`buttons::run`** (`buttons.rs`) — polls the three brightness buttons (GPIO 21/26/27, active-low) and pushes `BrightnessAction` events into a channel.
+1. **`runtime_task`** (`runtime.rs`) — owns the `Display` and the persisted brightness. 60 fps animation loop; calls `uniflag_render::effects::paint` to recompute the whole panel from current `proto::State` + frame counter every tick. Per-flag base layers + overlays + precedence rules are documented at the top of `runtime.rs` (red beats caution beats per-flag base; sector band overlays unless red; "disconnected" is the boot/idle blank state when no host updates arrive within `CONNECT_TIMEOUT`). Brightness/sleep/persist policy is delegated to `uniflag_render::BrightnessController`.
+2. **`buttons::run`** (`buttons.rs`) — polls the three brightness buttons (GPIO 21/26/27, active-low) and pushes `uniflag_render::brightness::Action` events into a channel.
 3. **`watchdog_feed`** — feeds the RP2040 watchdog every 2 s (8 s timeout, just under the RP2040 errata-E1 ceiling). The panic handler also relies on this for recovery — on panic it spins, the feed task stops, and the chip resets within `WATCHDOG_TIMEOUT`.
 
 Two more futures are awaited in `main` directly (rather than spawned as tasks) to dodge `'static` lifetime gymnastics on `Receiver` / `UsbDevice`: `run_usb` and `cdc_rx_loop`.
 
 State plumbing is one-way:
 - `cdc_rx_loop` parses incoming lines and `signal()`s `STATE_SIGNAL` (a `Signal<CriticalSectionRawMutex, proto::State>`).
-- The render task `wait()`s on `STATE_SIGNAL` and on the brightness channel; both racing against a frame-tick timer.
-- Brightness is debounced (`SAVE_DEBOUNCE = 2 s`) before being persisted.
+- The runtime task `wait()`s on `STATE_SIGNAL` and on the brightness channel; both racing against a frame-tick timer.
+- Brightness is debounced (`BrightnessController::SAVE_DEBOUNCE_MS = 2000`) before being persisted.
 
 **Display driver** (`display.rs`) — the Cosmic Unicorn is **not** HUB75. A custom column shift-register topology with 4-to-16 row decoder, driven by a single PIO state machine with a self-chaining DMA pair. Two SRAM bitstreams (front/back) double-buffer; `present()` atomically retargets the DMA chain at the just-painted buffer and waits for the swap. Per-pixel BCM (binary code modulation) splits 14-bit gamma-corrected intensity across 14 BCD frames; full bitstream is 16128 B. See `docs/cosmic-unicorn-hardware.md` and `docs/cosmic-unicorn-pio.md` for the wire-level details.
 

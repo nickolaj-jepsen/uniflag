@@ -357,29 +357,13 @@ impl Display {
             gamma_b >>= 1;
         }
     }
-
-    /// Fill the panel with a single colour.
-    pub fn fill(&mut self, r: u8, g: u8, b: u8) {
-        for y in 0..HEIGHT as i32 {
-            for x in 0..WIDTH as i32 {
-                self.set_pixel(x, y, r, g, b);
-            }
-        }
-    }
-
-    pub fn clear(&mut self) {
-        self.fill(0, 0, 0);
-    }
 }
 
 impl uniflag_render::Surface for Display {
     fn set_pixel(&mut self, x: i32, y: i32, (r, g, b): uniflag_render::Rgb) {
         Display::set_pixel(self, x, y, r, g, b);
     }
-
-    fn fill(&mut self, (r, g, b): uniflag_render::Rgb) {
-        Display::fill(self, r, g, b);
-    }
+    // `fill` / `fill_with` use the trait defaults (loop over set_pixel).
 }
 
 impl Display {
