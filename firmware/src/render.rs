@@ -94,6 +94,7 @@ pub async fn run(
 
     display.set_brightness(brightness);
     effects::paint(&mut display, &state, frame, 0, false);
+    display.present().await;
 
     loop {
         match select3(
@@ -136,6 +137,7 @@ pub async fn run(
                 effects::paint(&mut display, &state, frame, age, connected);
             }
         }
+        display.present().await;
 
         if dirty && dirty_since.elapsed() >= SAVE_DEBOUNCE {
             storage::save_brightness(&mut flash, brightness);

@@ -13,6 +13,14 @@
 //!   forever — once started, the panel refreshes itself with zero CPU
 //!   overhead. The CPU only touches the bitstream to update pixels.
 //!
+//! Two bitstreams are kept in SRAM: the `front` is the one DMA is currently
+//! reading, and the `back` is what `set_pixel` / `fill` write into. The
+//! renderer paints a complete frame into `back`, then calls `present()`,
+//! which atomically retargets the DMA chain at the just-painted buffer and
+//! waits for the swap to take effect before returning. Without this, a
+//! mid-paint refresh sees a partially-updated bitstream and individual LEDs
+//! flicker — most visibly on full-panel changes like brightness adjustments.
+//!
 //! Bitstream layout, per scan row (16 rows) × BCD frame (14 frames):
 //!
 //! | Offset  | Bytes | Meaning                                       |
@@ -63,6 +71,11 @@ const ROW_BYTES: usize = BCD_FRAME_COUNT * BCD_FRAME_BYTES;
 const BITSTREAM_LENGTH: usize = ROW_COUNT * ROW_BYTES;
 const PIXEL_COUNT_PER_SCAN: u8 = 64;
 
+// DMA channel assignments. Must match the `Peri` indices we receive in
+// `Display::new`. Both the chain setup and `present()` reach for them.
+const CH_DATA: usize = 0;
+const CH_CTRL: usize = 1;
+
 // =============================================================================
 // Storage: bitstream + DMA-readable pointer (both static)
 // =============================================================================
@@ -86,9 +99,13 @@ impl core::ops::DerefMut for Bitstream {
     }
 }
 
-// The bitstream lives in BSS; DMA reads it directly. ConstStaticCell ensures
-// it can be `take()`n exactly once.
-static BITSTREAM: ConstStaticCell<Bitstream> =
+// The bitstreams live in BSS; DMA reads them directly. ConstStaticCell
+// ensures each can be `take()`n exactly once. Two buffers for double
+// buffering: at any moment one is being scanned out by DMA (the *front*),
+// the other is the *back* that the CPU paints into.
+static BITSTREAM_A: ConstStaticCell<Bitstream> =
+    ConstStaticCell::new(Bitstream([0u8; BITSTREAM_LENGTH]));
+static BITSTREAM_B: ConstStaticCell<Bitstream> =
     ConstStaticCell::new(Bitstream([0u8; BITSTREAM_LENGTH]));
 
 // Stable storage for the bitstream's address. The control DMA channel reads
@@ -125,7 +142,12 @@ pub struct DisplayPins {
 // =============================================================================
 
 pub struct Display {
-    bitstream: &'static mut Bitstream,
+    /// Buffer the CPU paints into. After a frame is finished, `present()`
+    /// swaps `back` and `front` and republishes `BITSTREAM_PTR`.
+    back: &'static mut Bitstream,
+    /// Buffer DMA is currently reading from. Held only so the static
+    /// lifetime is consumed; we don't read it through this reference.
+    front: &'static mut Bitstream,
     /// 0..=256. Applied as `(channel * brightness) >> 8` before gamma.
     /// 256 == passthrough at full intensity.
     brightness: u16,
@@ -143,16 +165,24 @@ impl Display {
         irqs: PioIrqs,
         pins: DisplayPins,
     ) -> Self {
-        // 1. Initialise the bitstream's framing bytes (pixel count, row select,
-        //    BCD ticks). Pixel data starts at zero (panel dark).
-        let bitstream = BITSTREAM.take();
-        init_bitstream_framing(bitstream);
+        // 1. Initialise both bitstreams' framing bytes (pixel count, row
+        //    select, BCD ticks). Pixel data starts at zero in both — panel
+        //    dark until the renderer's first paint+present.
+        let front = BITSTREAM_A.take();
+        let back = BITSTREAM_B.take();
+        init_bitstream_framing(front);
+        init_bitstream_framing(back);
 
-        // 2. Publish the bitstream's address so the control DMA channel can
-        //    find it. The wrapper struct guarantees this is 4-aligned.
-        let addr = bitstream.0.as_ptr() as u32;
-        debug_assert_eq!(addr & 0b11, 0, "bitstream must be 4-byte aligned");
-        BITSTREAM_PTR.store(addr, Ordering::Relaxed);
+        // 2. Publish the front buffer's address so the control DMA channel
+        //    can find it. The wrapper struct guarantees this is 4-aligned.
+        let front_addr = front.0.as_ptr() as u32;
+        debug_assert_eq!(front_addr & 0b11, 0, "bitstream must be 4-byte aligned");
+        debug_assert_eq!(
+            back.0.as_ptr() as u32 & 0b11,
+            0,
+            "bitstream must be 4-byte aligned",
+        );
+        BITSTREAM_PTR.store(front_addr, Ordering::Relaxed);
 
         // 3. Bring up the column-driver chips by bit-banging their config
         //    register. Without this, the chips don't drive the LEDs at full
@@ -267,10 +297,11 @@ impl Display {
         sm0.set_enable(true);
         start_dma_chain();
 
-        defmt::info!("display: PIO and DMA up; refreshing");
+        defmt::info!("display: PIO and DMA up; refreshing (double-buffered)");
 
         Display {
-            bitstream,
+            back,
+            front,
             brightness: 256,
             _sm: sm0,
             _common: common,
@@ -322,7 +353,7 @@ impl Display {
             let r_bit = (gamma_r & 1) as u8;
             let g_bit = (gamma_g & 1) as u8;
             let b_bit = (gamma_b & 1) as u8;
-            self.bitstream[off] = b_bit | (g_bit << 1) | (r_bit << 2);
+            self.back[off] = b_bit | (g_bit << 1) | (r_bit << 2);
             gamma_r >>= 1;
             gamma_g >>= 1;
             gamma_b >>= 1;
@@ -340,6 +371,34 @@ impl Display {
 
     pub fn clear(&mut self) {
         self.fill(0, 0, 0);
+    }
+
+    /// Publish the just-painted `back` buffer to DMA, swap labels, and
+    /// wait until the DMA chain has actually picked up the new pointer.
+    ///
+    /// The control channel only re-reads `BITSTREAM_PTR` at the end of
+    /// each ~3.3 ms refresh cycle (300 fps), so for up to one cycle after
+    /// the pointer write, the data channel is still scanning out the
+    /// buffer that's about to become our new `back`. Returning before
+    /// the swap takes effect would let the next paint race that
+    /// in-progress refresh — exactly the tearing this function exists to
+    /// prevent. We poll the data channel's `read_addr` until it falls
+    /// inside the new front's range, yielding to the executor between
+    /// checks so other tasks (USB rx, buttons) keep running.
+    pub async fn present(&mut self) {
+        core::mem::swap(&mut self.back, &mut self.front);
+        let new_front_addr = self.front.0.as_ptr() as u32;
+        BITSTREAM_PTR.store(new_front_addr, Ordering::Relaxed);
+
+        let new_front_end = new_front_addr + BITSTREAM_LENGTH as u32;
+        let dma = pac::DMA;
+        loop {
+            let ra = dma.ch(CH_DATA).read_addr().read();
+            if (new_front_addr..new_front_end).contains(&ra) {
+                return;
+            }
+            embassy_futures::yield_now().await;
+        }
     }
 }
 
@@ -444,9 +503,6 @@ fn configure_column_drivers(
 fn setup_dma_chain(pio_tx_fifo_addr: u32) {
     use pac::dma::regs::CtrlTrig;
     use pac::dma::vals::{DataSize, TreqSel};
-
-    const CH_DATA: usize = 0;
-    const CH_CTRL: usize = 1;
 
     let dma = pac::DMA;
 
