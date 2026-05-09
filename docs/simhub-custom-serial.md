@@ -1,0 +1,153 @@
+# SimHub — custom serial integration
+
+SimHub has two integration paths for "I have a USB device, push data to it":
+
+1. **"Custom serial devices"** plugin — host PC speaks our protocol, fully defined by us.
+   The plugin sends ASCII strings built from NCalc/JavaScript formulas referencing
+   SimHub properties.
+2. **"Custom Arduino" path** — host PC speaks a fixed framing protocol, the device runs
+   the SimHub Arduino firmware skeleton with `SHCustomProtocol.h` overridden.
+
+For uniflag we want **(1) custom serial device**: simpler protocol, no need to embed
+SimHub's Arduino firmware framing, easier to author from a Rust embassy USB-CDC stack.
+
+## Plugin: "Custom serial devices"
+
+Wiki: <https://github.com/SHWotever/SimHub/wiki/Custom-serial-devices>
+
+### Configuration UI fields
+
+- **Serial port** — the USB CDC device.
+- **Baud rate** — anything sensible. USB CDC is virtual so the rate is symbolic;
+  pick e.g. `115200`.
+- **DTR / RTS** — flow-control lines, leave defaulted unless we deliberately use them.
+- **Log incoming data** — debug toggle, keep on while bringing it up.
+- **Auto-reconnect on error** — yes.
+
+### Messages
+
+Three categories of message, each a formula:
+
+| Hook            | When it's sent | Notes |
+|-----------------|----------------|-------|
+| **Hello**       | immediately after the port opens | Send any one-time init / "draw splash" command. |
+| **Goodbye**     | immediately before the port closes | Won't fire on hard disconnect. |
+| **Update**      | on a configurable cadence (or "changes only") | Repeats. Up to 10 Hz on the free build, higher with paid. |
+
+You can have many update messages; each has its own enable, cadence, and formula.
+
+### Wire format
+
+> "The plugin does not send any predefined message start or terminator characters.
+> You need to add them to your messages."
+>
+> "The message is sent as a string and ends with a new line character (`\n`,
+> added by SimHub automatically)."
+
+So:
+
+- Encoding: ASCII (everything is built via string concatenation from NCalc)
+- Frame terminator: `\n` is auto-appended; nothing else added by SimHub
+- "Empty message" (formula evaluates to `""`) → not sent
+- "Changes only" → message only sent when its formula's value actually changed
+
+### Receiving side guarantees
+
+- We get whole strings ending in `\n`.
+- Up to 10 Hz max in the free build → at most 100 ms per update on free, faster on paid.
+- The plugin only **sends**; it can show what the device sent back (echo), but it
+  cannot use device responses as inputs. If we want bidirectional, we'd need either
+  a SimHub plugin or to use SimHub's Custom Arduino path instead.
+
+## Designing the wire protocol
+
+Some constraints to keep the firmware simple:
+
+- Length-delimited or terminator-delimited frames are both fine; the natural choice is
+  the auto-`\n` already at the end.
+- ASCII-only is convenient with NCalc but inefficient for binary blobs (e.g. raw RGB
+  images). For a flag display we don't need a framebuffer over the wire — just a flag
+  state — so ASCII is plenty.
+
+### Suggested format
+
+A single semicolon-separated record per update tick. Example:
+
+```
+F=Y;B=0;G=N;P=0;S=racing\n
+```
+
+Field meanings:
+
+| Field | Values | Meaning |
+|-------|--------|---------|
+| `F`   | `N` (none) / `Y` / `B` / `K` (black) / `W` / `C` (checkered) / `G` (green) / `O` (orange) / `P` (penalty) | Active flag |
+| `B`   | `0`/`1` | Should the display blink (e.g. local yellow) |
+| `G`   | `N`/`Y` | Green flag pulse (one-shot, e.g. on green start) |
+| `P`   | `0`/`1` | Pit-limiter or in-pit |
+| `S`   | `replay` / `racing` / `paused` / `pre-race` / `post-race` | Session state |
+
+…or whatever final taxonomy we decide on. The point is: it's text, it's terminator-
+delimited, and the device can parse it with a tiny state machine.
+
+### Authoring the formula in SimHub
+
+SimHub uses **NCalc**. Property references are wrapped in `[]`. Strings concatenate
+with `+`. The relevant primitives:
+
+- `if(cond, then, else)` — ternary, returns one branch's value
+- `isnull(x)` / `isnull(x, fallback)`
+- `format(value, '0.0')` — number formatting
+- `padleft(s, n, '0')` — pad string left
+- `replace(s, 'a', 'b')` — string replace
+- `blink(period_ms)` / `blink(period_ms_on, period_ms_off)` — boolean alternator
+- `changed(x)`, `isincreasing(x)`, `isdecreasing(x)` — state-change helpers
+
+A first-cut formula for the field-set above:
+
+```
+'F=' +
+if([DataCorePlugin.GameData.Flag_Yellow],   'Y',
+if([DataCorePlugin.GameData.Flag_Blue],     'B',
+if([DataCorePlugin.GameData.Flag_Black],    'K',
+if([DataCorePlugin.GameData.Flag_White],    'W',
+if([DataCorePlugin.GameData.Flag_Checkered],'C',
+if([DataCorePlugin.GameData.Flag_Green],    'G',
+                                            'N'))))))
++ ';B=' + if([DataCorePlugin.GameData.Flag_Yellow], '1', '0')
++ ';P=' + if([DataCorePlugin.GameData.IsInPitLane],  '1', '0')
++ ';S=' + isnull([DataCorePlugin.GameData.SessionTypeName], 'unknown')
+```
+
+(Property names verified per [`simhub-flag-properties.md`](./simhub-flag-properties.md).)
+
+## Plugin: "Custom Arduino" — for reference, not what we're using
+
+Wiki: <https://github.com/SHWotever/SimHub/wiki/Custom-Arduino-Hardware-Support>
+
+If we instead used the Arduino firmware path:
+
+- We'd vendor the SimHub Arduino skeleton and override `SHCustomProtocol.h`.
+- The host sends frames using its built-in framing (`FlowSerial...`) with helpers like
+  `FlowSerialReadStringUntil(';')` / `FlowSerialReadStringUntil('\n')`.
+- Three callbacks: `setup()`, `read()`, `loop()` (and `idle()`, time-critical).
+- The host expects bidirectional handshake; the firmware identifies itself.
+
+This is more rigid and assumes Arduino — wrong fit for a Rust + embassy build. We
+mention it only because some SimHub forum posts assume this path.
+
+## SimHub-side artefacts to produce
+
+We'll save the **custom serial device profile** in the project once we settle the
+protocol. SimHub stores these as JSON under
+`Documents\SimHub\PluginsData\CustomSerialDevices\` — we can copy that file into
+`uniflag/simhub/uniflag.json` for share/version control, and a small README explaining
+the import steps.
+
+## Sources
+
+- [Custom serial devices wiki](https://github.com/SHWotever/SimHub/wiki/Custom-serial-devices)
+- [Custom Arduino Hardware Support wiki](https://github.com/SHWotever/SimHub/wiki/Custom-Arduino-Hardware-Support)
+- [NCalc scripting wiki](https://github.com/SHWotever/SimHub/wiki/NCalc-scripting)
+- [SimHub manual](https://manual.simhubdash.com)
+- Worked Arduino example: [SHCustomProtocol forum thread](https://www.simhubdash.com/community-2/simhub-support/shcustomprotocol/)

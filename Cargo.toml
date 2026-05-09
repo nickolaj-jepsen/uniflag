@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = ["proto", "firmware", "sim"]
+
+# Default to building only the host-side crates so workspace-wide cargo
+# commands don't try to cross-compile firmware to thumbv6m without a target
+# arg. Use `cd firmware && cargo ...` (or `cargo ... -p uniflag-firmware
+# --target thumbv6m-none-eabi`) for the firmware crate.
+default-members = ["proto", "sim"]
+
+[workspace.package]
+edition = "2021"
+license = "GPL-2.0-or-later"
+authors = ["Nickolaj Jepsen <nickolaj1177@gmail.com>"]
+repository = "https://github.com/nickolaj1177/uniflag"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+
+[profile.release]
+debug = true            # keep symbols for probe-rs / defmt
+lto = "fat"
+codegen-units = 1
+opt-level = "z"
+
+[profile.dev]
+debug = true
+opt-level = 1           # async generators inflate badly at opt-level=0
