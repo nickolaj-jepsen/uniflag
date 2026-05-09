@@ -4,6 +4,7 @@
 mod buttons;
 mod display;
 mod render;
+mod storage;
 
 use defmt_rtt as _;
 use embassy_executor::Spawner;
@@ -23,6 +24,7 @@ use static_cell::StaticCell;
 
 use buttons::BrightnessChannel;
 use display::{Display, DisplayPins, PioIrqs};
+use storage::FlashStorage;
 
 embassy_rp::bind_interrupts!(struct UsbIrqs {
     USBCTRL_IRQ => embassy_rp::usb::InterruptHandler<USB>;
@@ -67,6 +69,13 @@ async fn main(spawner: Spawner) {
     // Don't reset while halted under probe-rs.
     watchdog.pause_on_debug(true);
     watchdog.start(WATCHDOG_TIMEOUT);
+
+    // ------------------------------------------------------------------
+    // Persistent storage
+    // ------------------------------------------------------------------
+    // Owned by the render task — it's the only consumer (load on boot,
+    // save on debounced brightness change).
+    let flash: FlashStorage = FlashStorage::new_blocking(p.FLASH);
 
     defmt::info!("uniflag boot");
 
@@ -130,7 +139,7 @@ async fn main(spawner: Spawner) {
     // ------------------------------------------------------------------
     // Spawn workers
     // ------------------------------------------------------------------
-    spawner.spawn(render_task(display).expect("spawn render task"));
+    spawner.spawn(render_task(display, flash).expect("spawn render task"));
     spawner.spawn(
         buttons::run(p.PIN_21, p.PIN_26, p.PIN_27, &BRIGHTNESS_CHAN).expect("spawn buttons task"),
     );
@@ -207,8 +216,8 @@ fn handle_line(line: &[u8]) {
 // =============================================================================
 
 #[embassy_executor::task]
-async fn render_task(display: Display) -> ! {
-    render::run(display, &STATE_SIGNAL, &BRIGHTNESS_CHAN).await
+async fn render_task(display: Display, flash: FlashStorage) -> ! {
+    render::run(display, flash, &STATE_SIGNAL, &BRIGHTNESS_CHAN).await
 }
 
 // =============================================================================

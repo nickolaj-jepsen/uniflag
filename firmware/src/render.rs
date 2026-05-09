@@ -34,34 +34,45 @@ mod effects;
 use embassy_futures::select::{select3, Either3};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Instant, Timer};
 
 use crate::buttons::{BrightnessAction, BrightnessChannel};
 use crate::display::Display;
+use crate::storage::{self, FlashStorage};
 use proto::State;
 
 /// Animation tick. ~60 fps; full-panel per-pixel paint costs ≈ 330 µs so
 /// this is well under 2 % CPU.
 const FRAME_TICK_MS: u64 = 16;
 
-/// Default brightness on boot. The Cosmic Unicorn at 100% is uncomfortably
-/// bright in a typical sim-rig setup; this is around 30% perceived after
-/// gamma.
+/// Default brightness on boot when nothing is persisted yet. The Cosmic
+/// Unicorn at 100% is uncomfortably bright in a typical sim-rig setup;
+/// this is around 30% perceived after gamma.
 const DEFAULT_BRIGHTNESS: u8 = 80;
 /// Step size per button press. ~5% of full range.
 const BRIGHTNESS_STEP: u8 = 12;
 /// What the SleepToggle button drops brightness to (and restores on the
 /// next press if not adjusted otherwise).
 const SLEEP_BRIGHTNESS: u8 = 6;
+/// Auto-save quiescence window. After the last brightness change, wait
+/// this long before writing to flash. Coalesces rapid clicks into a
+/// single ~25 ms erase/write.
+const SAVE_DEBOUNCE: Duration = Duration::from_millis(2000);
 
 pub async fn run(
     mut display: Display,
+    mut flash: FlashStorage,
     state_signal: &'static Signal<CriticalSectionRawMutex, State>,
     brightness_chan: &'static BrightnessChannel,
 ) -> ! {
+    let initial_brightness = storage::load_brightness(&mut flash).unwrap_or(DEFAULT_BRIGHTNESS);
+
     let mut state = State::default();
-    let mut brightness = DEFAULT_BRIGHTNESS;
-    let mut last_awake_brightness = DEFAULT_BRIGHTNESS;
+    let mut brightness = initial_brightness;
+    let mut last_awake_brightness = initial_brightness;
+    let mut last_saved = initial_brightness;
+    let mut dirty = false;
+    let mut dirty_since = Instant::now();
     let mut frame: u32 = 0;
     let mut flag_changed_at: u32 = 0;
     let frame_tick = Duration::from_millis(FRAME_TICK_MS);
@@ -91,11 +102,25 @@ pub async fn run(
                 effects::paint(&mut display, &state, frame, age);
             }
             Either3::Third(action) => {
-                brightness = apply_brightness(action, brightness, &mut last_awake_brightness);
+                let new_brightness =
+                    apply_brightness(action, brightness, &mut last_awake_brightness);
+                if new_brightness != brightness {
+                    // The user is still actively adjusting — restart the
+                    // debounce window so we only commit once they settle.
+                    dirty_since = Instant::now();
+                }
+                brightness = new_brightness;
+                dirty = brightness != last_saved;
                 display.set_brightness(brightness);
                 let age = frame.wrapping_sub(flag_changed_at);
                 effects::paint(&mut display, &state, frame, age);
             }
+        }
+
+        if dirty && dirty_since.elapsed() >= SAVE_DEBOUNCE {
+            storage::save_brightness(&mut flash, brightness);
+            last_saved = brightness;
+            dirty = false;
         }
     }
 }
