@@ -88,6 +88,20 @@ The buffer is sized so the whole stream fits in RAM and is fed to the PIO by a
 - The data channel transfers 32-bit words at `BITSTREAM_LENGTH / 4` count straight into
   the PIO TX FIFO. Result: zero CPU overhead while the panel runs.
 
+> **Important — alignment.** The bitstream array MUST be 4-byte aligned. RP2040
+> DMA does word-sized transfers and silently masks the low address bits if the
+> source is misaligned, which produces visibly wandering scan-rows with random
+> colours. Upstream uses `alignas(4) uint8_t bitstream[…]`. The Rust port wraps
+> in `#[repr(align(4))]` — see [`bring-up-notes.md`](./bring-up-notes.md#alignment-bug)
+> for the debug story.
+
+### Pixel byte format (verified)
+
+Each pixel is a single byte, `xxxxx_bgr` — bit 0 = blue, bit 1 = green,
+bit 2 = red, bits 3..7 unused. The PIO state machine shifts right (LSB
+first), so the wire-order out to the column shift register is B → G → R
+per pixel. Confirmed against upstream's `set_pixel` source.
+
 ### Binary Code Modulation (BCM)
 
 For each pixel + colour, the gamma-corrected 14-bit intensity is split across the 14 BCD
@@ -139,10 +153,23 @@ Button constants: `SWITCH_A`, `SWITCH_B`, `SWITCH_C`, `SWITCH_D`,
 - **Sleep / power management:** the upstream library has explicit "off" handling; we
   probably keep the panel running and let the host put the device to sleep.
 
-## What we do need to reproduce in Rust
+## What we needed to reproduce in Rust
 
-1. Pin init (set the four ROW_BIT pins HIGH at boot to avoid a flash of garbage).
-2. The PIO program (`cosmic_unicorn.pio`) — see [`cosmic-unicorn-pio.md`](./cosmic-unicorn-pio.md).
-3. The bitstream framebuffer layout (above).
-4. The DMA chain.
-5. `set_pixel(x, y, r, g, b)` and `set_brightness(...)` using the gamma-14-bit LUT.
+All of these landed in [`firmware/src/display.rs`](../firmware/src/display.rs):
+
+1. ✅ Pin init — ROW_BITs and BLANK held HIGH via the SM's `set_pins` *before*
+   `set_pin_dirs(Out)`, so the pins go straight to their idle level when
+   they become outputs.
+2. ✅ The PIO program (`cosmic_unicorn.pio`), translated to a `pio::pio_asm!{}`
+   block — see [`cosmic-unicorn-pio.md`](./cosmic-unicorn-pio.md).
+3. ✅ The bitstream framebuffer layout, **wrapped in a `#[repr(align(4))]`
+   struct**.
+4. ✅ The DMA chain (PAC-level — embassy-rp 0.10 has no high-level helper
+   for self-chaining channels). Plain `read_addr` write + `chain_to` —
+   see [`bring-up-notes.md`](./bring-up-notes.md#dma-chain-pattern).
+5. ✅ `set_pixel(x, y, r, g, b)`, `fill`, `set_brightness` using the
+   gamma-14-bit LUT (256 u16s, ported verbatim from upstream).
+6. ✅ The column-driver bit-bang config sequence
+   (`reg1 = 0b1111_1111_1100_1110` to 12 chips with mid-write LATCH on
+   chip 12). Done with temporary `Output`s on `pin.reborrow()`, dropped
+   before PIO claims the same `Peri`s.

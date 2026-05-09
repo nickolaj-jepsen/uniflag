@@ -1,238 +1,185 @@
-# Firmware approach — Rust + embassy on RP2040
+# Firmware architecture — as built
 
-Target board: original Cosmic Unicorn (Pico W on board, RP2040). Firmware in Rust,
-async runtime: [embassy-rs](https://github.com/embassy-rs/embassy).
+This file describes the firmware as it actually exists in `firmware/` after
+the v1 bring-up. The original planning sketch lived here too; the bits
+that didn't survive contact with hardware have been pruned. For the
+debugging story (alignment bug, DMA chain race), see
+[`bring-up-notes.md`](./bring-up-notes.md).
 
-## What's in the ecosystem already
+Target: original Pimoroni Cosmic Unicorn (RP2040 / Pico W aboard).
+Toolchain: `thumbv6m-none-eabi`, stable Rust, `nix develop` for the
+devShell.
 
-### `embassy-rp` — the HAL
-
-Use this as our HAL. It gives us:
-
-- An async executor (`embassy-executor`)
-- USB device support (`embassy-rp::usb`) → CDC-ACM via `embassy-usb` for the SimHub link
-- PIO bindings (`embassy-rp::pio`)
-- DMA helpers (`embassy-rp::dma`)
-- GPIO, ADC (for the light sensor), I²C, SPI, etc.
-
-Docs: <https://docs.embassy.dev/embassy-rp/>
-
-### `pio` + `pio-proc` — assemble PIO programs at compile time
-
-The `pio_asm!` macro lets us paste the Cosmic Unicorn `.pio` source nearly verbatim
-into a Rust source file and get back a typed `Program`. This is what we'll use to
-compile the bitstream PIO program.
-
-### `embedded-graphics`
-
-For drawing flag glyphs / text / icons. We'd implement the
-`embedded_graphics::draw_target::DrawTarget` trait on a wrapper around our framebuffer
-so we can use the standard `Image`, `Text`, `Rectangle` etc. primitives. This is also
-what the existing `hub75-pio-rs` driver does.
-
-### `kjagiello/hub75-pio-rs` — closest existing driver, **does not apply**
-
-This crate is for *standard* HUB75 panels (R1/G1/B1/R2/G2/B2 + ADDR + CLK + LAT + OE).
-The Cosmic Unicorn's panel uses a column shift-register topology with serial RGB data
-and a 4→16 row decoder; the protocol is incompatible. We can borrow ideas (PIO + DMA
-chain pattern, `embedded-graphics` integration, gamma table approach) but not the
-crate itself.
-
-### Existing Cosmic Unicorn Rust ports
-
-None found at time of writing. We're building this.
-
-### Other useful crates
-
-- `embassy-usb`, `embassy-usb-driver` — USB stack on top of `embassy-rp::usb`
-- `embassy-time` — `Timer::after`, `Duration`, `Instant`
-- `defmt` + `defmt-rtt` — logging via the SWD probe (or skip if we want console-free)
-- `panic-probe` — panic handler that flushes defmt before halting
-- `tinybmp` — load BMP icons for flags from `&'static [u8]`
-- `heapless::String`, `heapless::Vec` — fixed-size collections, no allocator needed
-
-## Recommended firmware architecture
-
-```
-┌──────────────────────────────────────────────────────────┐
-│ embassy executor (single core for v1, dual core later)  │
-│                                                          │
-│  ┌────────────┐  ┌──────────────┐  ┌──────────────────┐ │
-│  │ usb_task   │  │ parser_task  │  │ render_task     │ │
-│  │ (CDC RX)   │─►│ (frame→state)│─►│ (state→frame-   │ │
-│  │            │  │              │  │  buffer pixels) │ │
-│  └────────────┘  └──────────────┘  └──────────────────┘ │
-│                                                          │
-│  display module: PIO + DMA chain, runs without CPU       │
-│                                                          │
-│  buttons_task: debounce + brightness/test triggers       │
-└──────────────────────────────────────────────────────────┘
-```
-
-Channels between tasks: `embassy_sync::channel::Channel` or
-`embassy_sync::pubsub` (single producer, multi consumer for state changes).
-
-### Crate layout
+## Crate layout
 
 ```
 firmware/
-├── Cargo.toml
-├── memory.x                    ← linker script for RP2040 flash/RAM split
-├── build.rs                    ← copies memory.x into the target
-├── .cargo/config.toml          ← runner = probe-rs / elf2uf2
+├── Cargo.toml              ← name = "uniflag-firmware", bin = "uniflag"
+├── memory.x                ← 2 MB flash (Pico W's W25Q16JV) + 264 KB SRAM
+├── build.rs                ← copies memory.x and pulls in defmt's linker fragment
+├── .cargo/config.toml      ← target = thumbv6m-none-eabi, runner = probe-rs
 └── src/
-    ├── main.rs                 ← spawns tasks, owns peripherals
-    ├── display/
-    │   ├── mod.rs              ← public Display struct (set_pixel, set_brightness)
-    │   ├── pio.rs              ← pio_asm!{} program + PIO/DMA setup
-    │   ├── framebuffer.rs      ← bitstream layout, gamma LUT
-    │   └── gamma.rs            ← GAMMA_14BIT table, ported from upstream
-    ├── protocol.rs             ← SimHub line parser → State struct
-    ├── flags.rs                ← FlagKind enum, render_flag(state, &mut display)
-    └── ui.rs                   ← splash, idle, error screens
+    ├── main.rs             ← init, USB CDC + parser, task spawn
+    ├── display.rs          ← Cosmic Unicorn driver (PIO + DMA + framebuffer + gamma)
+    ├── render.rs           ← flag → pixels (incl. brightness state)
+    └── buttons.rs          ← polled debounce → BrightnessAction events
 ```
 
-### `Cargo.toml` skeleton (illustrative)
+`firmware/` is a member of the workspace at the repo root. The workspace
+default-members exclude it (`["proto", "sim"]`) so `cargo check` from the
+root doesn't try to cross-compile.
+
+## Pinned crate versions (May 2026)
+
+These versions interlock; bumping one usually means bumping all of them.
 
 ```toml
-[package]
-name = "uniflag-firmware"
-version = "0.1.0"
-edition = "2021"
+embassy-rp        = { version = "0.10.0", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp2040"] }
+embassy-executor  = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
+embassy-time      = "0.5.1"
+embassy-sync      = "0.8.0"
+embassy-usb       = "0.6.0"
+embassy-futures   = "0.1.2"
 
-[dependencies]
-embassy-executor = { version = "0.6", features = ["arch-cortex-m", "executor-thread", "task-arena-size-8192"] }
-embassy-rp       = { version = "0.2", features = ["rp2040", "time-driver", "critical-section-impl", "unstable-pac"] }
-embassy-time     = { version = "0.3" }
-embassy-sync     = { version = "0.6" }
-embassy-usb      = { version = "0.3" }
-embassy-futures  = { version = "0.1" }
+# Match embassy-rp's internal pio dep (0.3). The 0.2 macro yields the
+# wrong Program type and fails to compile against embassy-rp.
+pio       = "0.3"
+pio-proc   = "0.3"
 
-cortex-m         = "0.7"
-cortex-m-rt      = "0.7"
-panic-probe      = { version = "0.3", features = ["print-defmt"] }
-defmt            = "0.3"
-defmt-rtt        = "0.4"
+defmt        = "1.0.1"
+defmt-rtt    = "1.0.0"
+panic-probe  = { version = "1.0.0", features = ["print-defmt"] }
 
-pio              = "0.2"
-pio-proc         = "0.2"
-fixed            = "1"
+cortex-m         = { version = "0.7.6", features = ["inline-asm"] }
+cortex-m-rt      = "0.7.5"
+critical-section = "1.1"
+static_cell      = "2.1.1"
 heapless         = "0.8"
-embedded-graphics = "0.8"
+
+# RP2040 (Cortex-M0+) has no atomic CAS; portable-atomic with the
+# critical-section feature provides the polyfill needed by static_cell,
+# embassy-sync etc.
+portable-atomic = { version = "1.5", features = ["critical-section"] }
 ```
 
-### Pin acquisition (sketch)
+## Task topology
 
-```rust
-let p = embassy_rp::init(Default::default());
-
-// Hold row decoder pins HIGH so the panel doesn't flash row 0 garbage at boot.
-let _row0 = Output::new(p.PIN_17, Level::High);
-let _row1 = Output::new(p.PIN_18, Level::High);
-let _row2 = Output::new(p.PIN_19, Level::High);
-let _row3 = Output::new(p.PIN_20, Level::High);
-
-// Hand the panel pins off to the PIO display driver.
-let display = Display::new(
-    p.PIO0,                 // pio block
-    p.DMA_CH0, p.DMA_CH1,   // data + control DMA channels
-    DisplayPins {
-        column_clock: p.PIN_13,
-        column_data:  p.PIN_14,
-        column_latch: p.PIN_15,
-        column_blank: p.PIN_16,
-        row_bit_0:    p.PIN_17,
-        row_bit_1:    p.PIN_18,
-        row_bit_2:    p.PIN_19,
-        row_bit_3:    p.PIN_20,
-    },
-);
-
-// User buttons (active low, internal pull-up).
-let btn_a = Input::new(p.PIN_0, Pull::Up);
-// … etc
+```
+                ┌──────────────────────────┐
+                │  embassy executor (1 core)│
+                └──────────────────────────┘
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+   render_task      buttons::run    main(): join(usb.run, cdc_rx_loop)
+   (owns Display)   (poll GPIOs)    (owns UsbDevice + Receiver)
+        ▲                │                │
+        │ STATE_SIGNAL   │ BRIGHTNESS_    │
+        │                ▼ CHAN           ▼
+        └────── ◄───────┴── parses ──── proto::State::parse
+                                         (sync, no_std)
 ```
 
-### USB CDC + parser (sketch)
+Tasks communicate through statics:
 
-```rust
-#[embassy_executor::task]
-async fn usb_task(usb: Usb<'static, USB>) -> ! {
-    let mut state = embassy_usb::Builder::new(/* ... */).build();
-    let mut cdc = CdcAcmClass::new(/* ... */);
-    join(state.run(), cdc_loop(cdc, /* line_tx */)).await;
-}
+- `STATE_SIGNAL: Signal<CriticalSectionRawMutex, proto::State>`
+  CDC RX → render. Latest-wins; if states arrive faster than the
+  renderer can paint, intermediate ones are coalesced.
+- `BRIGHTNESS_CHAN: Channel<CriticalSectionRawMutex, BrightnessAction, 4>`
+  buttons → render. Used as a queue (a press should never be lost) so
+  this is a `Channel`, not a `Signal`.
 
-#[embassy_executor::task]
-async fn parser_task(rx: Channel<'static, ThreadModeRawMutex, [u8; 64], 4>) -> ! {
-    loop {
-        let line = rx.receive().await;
-        if let Ok(state) = parse_line(&line) {
-            STATE.signal(state);   // embassy_sync::signal::Signal
-        }
-    }
-}
+The display PIO + DMA chain runs continuously in hardware; it doesn't
+participate in the task graph. CPU only touches the bitstream when
+`render::paint` is called.
 
-#[embassy_executor::task]
-async fn render_task(mut display: Display<'static>) -> ! {
-    let mut current = State::default();
-    loop {
-        match select(STATE.wait(), Timer::after(Duration::from_millis(50))).await {
-            Either::First(new) => current = new,
-            Either::Second(_)   => {}    // 20 Hz tick to drive blink animations
-        }
-        render(&current, &mut display);
-    }
-}
-```
+## Why USB lives in `main` and not in a `#[task]`
 
-## Step-by-step build plan
+`UsbDevice<'static, _>` and `Receiver<'static, _>` carry types that are
+fiddly to spell out for `#[embassy_executor::task]`'s static lifetime
+checks. Joining them inline at the top of `main` with
+`embassy_futures::join::join` is materially equivalent (both end up
+running on the executor) and a lot less ceremony. See
+[`firmware/src/main.rs`](../firmware/src/main.rs#L88).
 
-1. **Bootstrap.** Cargo new, add embassy deps, get a "blink the on-board LED" example
-   running. Confirm probe-rs/elf2uf2 flashing works on the actual hardware.
-2. **GPIO smoke test.** Drive a single column of LEDs by hand (no PIO, just bit-bang
-   with timer waits) — proves the column shift register chain is wired the way the
-   docs say.
-3. **PIO program.** Translate `cosmic_unicorn.pio` to a `pio_asm!{}` block. Allocate
-   one PIO block and one state machine. Run it with a hand-built static bitstream
-   (single solid colour) and verify the panel lights up correctly.
-4. **DMA chain.** Add the self-chaining DMA pair to drive the PIO without CPU.
-   Confirm it free-runs.
-5. **Framebuffer + gamma.** Port `GAMMA_14BIT` and `set_pixel(x, y, r, g, b)`. Write a
-   spinning gradient demo.
-6. **embedded-graphics.** Implement `DrawTarget` on the display. Render text and a
-   simple flag image.
-7. **USB CDC.** Add `embassy-usb` with a CDC-ACM class. Echo lines to confirm SimHub
-   sees the device.
-8. **Parser.** Define the line format ([`simhub-custom-serial.md`](./simhub-custom-serial.md))
-   and parse it into a `State`.
-9. **Flag renderer.** Map state → screen content (block colour, icon, blink).
-10. **Buttons.** Brightness up/down, test patterns, mute / sleep behaviour.
-11. **Splash + idle screens** for "no SimHub connection" and "game in menu".
-12. **Polish.** Persist brightness across resets (use the last sector of flash, see
-    `embassy-rp`'s `flash` module).
+## Display driver — what's special
 
-## Open questions / defer-til-later
+See [`firmware/src/display.rs`](../firmware/src/display.rs) for the
+implementation; the highlights worth noting in docs:
 
-- **PIO clock divider.** The upstream `.cpp` sets it; copy that value. Anything else
-  will give the wrong refresh rate or shift-register timing.
-- **Which PIO instance.** Audio uses one SM on its own PIO. Display uses one SM. We
-  can share a PIO block if pin counts allow, but keeping the display on `PIO0` and
-  reserving `PIO1` for future audio is cleaner.
-- **Wi-Fi / Pico W.** The Pico W's Wi-Fi chip (`cyw43`) lives on SPI behind the on-board
-  CYW43 driver. We don't need it for v1; SimHub is over USB. Mention it for completeness;
-  could be useful later for OTA / a "phone shows what flag is shown" companion.
-- **Dual core.** Embassy supports running tasks on both cores. Probably overkill for v1
-  — render is cheap, USB is async. Worth it only if we add audio and want hard-real-time
-  rendering on one core.
-- **Flash size / framebuffer.** Bitstream size: per scan row × 14 BCD frames × 16 rows ×
-  ~72 bytes ≈ **16 KB**. RP2040 has 264 KB SRAM, plenty of headroom. Double buffering
-  doubles it to ~32 KB; still fine.
-- **No-std `alloc`?** Avoid. Use `heapless` and statics.
+1. **The bitstream is a `#[repr(align(4))]` struct, not a bare `[u8; N]`.**
+   RP2040 DMA performs word-sized reads and silently masks low address
+   bits — a misaligned source produces wandering scan-row artefacts (see
+   [`bring-up-notes.md`](./bring-up-notes.md#alignment-bug)). Upstream
+   Pimoroni hits this with `alignas(4)`; Rust needs the wrapper struct.
 
-## Sources
+2. **DMA chain is configured via PAC**, not via `embassy_rp::dma`. The
+   high-level `Channel` API is one-shot oriented; we need two channels
+   that re-arm each other indefinitely. The pattern (matching upstream
+   Pimoroni and `kjagiello/hub75-pio-rs/src/dma.rs`):
 
-- [embassy-rs](https://github.com/embassy-rs/embassy) and [`embassy-rp` docs](https://docs.embassy.dev/embassy-rp/)
-- [`pio` crate](https://docs.rs/pio/) and [`pio-proc`](https://docs.rs/pio-proc/)
-- [`kjagiello/hub75-pio-rs`](https://github.com/kjagiello/hub75-pio-rs) — reference architecture, not directly usable
-- Pimoroni Pico SDK [`cosmic_unicorn`](https://github.com/pimoroni/pimoroni-pico/tree/main/libraries/cosmic_unicorn)
+   - `data` channel: read_addr=0 (set by ctrl), write_addr=PIO TX FIFO,
+     trans_count=BITSTREAM_LENGTH/4, treq=`PIO0_TX0`, chain_to=ctrl,
+     incr_read=true.
+   - `ctrl` channel: read_addr=&BITSTREAM_PTR, write_addr=&data.read_addr
+     (the **plain** alias, not `al3_read_addr_trig`), trans_count=1,
+     treq=`PERMANENT`, chain_to=data.
+
+   Trigger via `pac::DMA.multi_chan_trigger().write(|w| w.set_multi_chan_trigger(1 << CH_CTRL))`.
+   Trans_count is auto-reloaded from a hidden shadow on each chain.
+
+3. **PIO clock divider stays at the embassy-rp default (1.0 = full system
+   clock, 125 MHz on RP2040)**. Same as upstream. Anything else gives
+   either flicker (too slow) or shift-register data corruption (too
+   fast).
+
+4. **`out pins, 8` with `out_count=4`** — the upper 4 bits are
+   discarded silently. The bitstream stores the row-select byte as 8
+   bits of which only the low nibble matters.
+
+5. **Pin handoff order** at init: bit-bang the column-driver config
+   register on temporary `Output`s (via `pin.reborrow()` so the original
+   `Peri` survives), drop them, hand the same `Peri`s to PIO via
+   `Common::make_pio_pin`. There's a brief float window between drop
+   and PIO claim, but PIO's `set_pins(Level::High, …)` is called before
+   `set_pin_dirs(…)` so pins go straight to their initial level when
+   they become outputs.
+
+6. **`set_pin_dirs` and `set_pins`** in embassy-rp 0.10 wrap the PINCTRL
+   register modification in a `with_paused` block that saves and
+   restores PINCTRL — calling them after `set_config` is safe and
+   doesn't clobber sideset/out/set bases.
+
+## What's deferred
+
+| Capability                        | Status | Notes |
+|-----------------------------------|--------|-------|
+| Solid-fill flags                  | done | every flag value renders cleanly |
+| Chequered tile                    | done | 4×4, black/white |
+| Pit-lane stripe                   | done | 2-px right edge in pit-blue |
+| Blink animation (waved-yellow)    | done | 250 ms toggle |
+| Brightness buttons                | done | up / down / sleep-toggle, no persistence |
+| `embassy-rp::flash` brightness persistence | deferred | needs long-press detection; one erase per click would block USB CDC for ~25 ms each time |
+| `embedded-graphics` `DrawTarget`  | deferred | not needed for v1 — no text/icons in the flag display |
+| Audio (I²S / synth)               | out of scope | pin assignments documented in hardware.md |
+| Wi-Fi (cyw43)                     | out of scope | SimHub is over USB |
+| Light sensor / auto-brightness    | deferred | hardware wired and documented |
+| OTA / web UI                      | no | |
+| CI                                | deferred | structure supports it |
+
+## What I'd change if I had to bring this up again
+
+1. Wrap the bitstream in `#[repr(align(4))]` from the very first commit,
+   not after it goes wrong. (Easy lesson; cost me a debug round.)
+2. Pin `pio` and `pio-proc` to whatever embassy-rp depends on at the
+   start; the 0.2 → 0.3 cargo error message points at it but doesn't
+   say "you need to match embassy-rp's pio version".
+3. Skip the GPIO bit-bang smoke test — going straight to PIO worked
+   fine once the alignment was fixed. The bit-bang would only have
+   helped if the wiring were the bug, which it wasn't.
+4. Don't bother with `embedded-graphics` for a flag display. The
+   per-pixel `DrawTarget` callback would funnel into our BCM-stamping
+   `set_pixel` 1024 times per frame, which is wasteful when all you
+   want is a fullscreen colour fill (call `Display::fill` instead).
+   `embedded-graphics` becomes worth it only if we add overlays
+   (text, icons, scrolling) later.

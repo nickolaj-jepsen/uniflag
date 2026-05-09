@@ -136,13 +136,17 @@ If we instead used the Arduino firmware path:
 This is more rigid and assumes Arduino — wrong fit for a Rust + embassy build. We
 mention it only because some SimHub forum posts assume this path.
 
-## SimHub-side artefacts to produce
+## SimHub-side artefacts
 
-We'll save the **custom serial device profile** in the project once we settle the
-protocol. SimHub stores these as JSON under
-`Documents\SimHub\PluginsData\CustomSerialDevices\` — we can copy that file into
-`uniflag/simhub/uniflag.json` for share/version control, and a small README explaining
-the import steps.
+The end-user setup steps and the canonical NCalc formula live at
+[`simhub/README.md`](../simhub/README.md). That file is the source of
+truth for what to type into SimHub's GUI; this doc just describes the
+protocol the firmware accepts.
+
+Eventually we'll commit the exported JSON profile under
+`simhub/uniflag.json` — but the SimHub Custom Serial Device JSON format
+is undocumented and version-fragile, so the profile must be authored on
+a Windows install and exported, not hand-written.
 
 ## Sources
 

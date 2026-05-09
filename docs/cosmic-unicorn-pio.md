@@ -90,19 +90,55 @@ bcd_delay:
 
 ## Reproducing in Rust
 
-The Rust ecosystem has two main paths for PIO programs:
+We use **`pio::pio_asm!{}`** (not `pio_proc::pio_asm!` — the proc-macro is
+re-exported from `pio` via a `macro_rules!` wrapper, and that's what
+embassy-rp's `Common::load_program` accepts). The full PIO assembly above
+goes into a `pio_asm!{}` block in [`firmware/src/display.rs`](../firmware/src/display.rs)
+nearly verbatim. The `pio` and `pio-proc` versions **must match embassy-rp's
+internal pio dep** — embassy-rp 0.10 depends on `pio = "0.3"`, so we pin
+`pio = "0.3"` and `pio-proc = "0.3"`. Mismatched versions yield a
+`Program<32>` from the wrong crate and don't unify with
+`Common::load_program(&Program<SIZE>)`.
 
-1. **`pio` + `pio-proc::pio_asm!`** (rp-rs / embassy-rp): write the PIO assembly inline
-   in a Rust macro and let the proc-macro assemble it at compile time. This is the most
-   direct port — you copy the program above (with the `.side_set` / `.wrap_target`
-   directives) almost verbatim into a `pio_asm!{ ... }` block.
-2. **`pio` crate's `Assembler` builder API**: emit instructions programmatically. More
-   verbose, used when you need to build PIO programs at runtime.
+State-machine config that pairs with the PIO program (verified working
+against hardware — May 2026):
 
-Embassy uses the `embassy-rp` HAL which wraps `rp2040-hal`'s PIO abstractions. For
-this project go with **option 1** — `pio_asm!` keeps the assembly readable next to
-the comments above. See [`rust-embassy-approach.md`](./rust-embassy-approach.md) for
-the full firmware sketch.
+| Register / field        | Value                                |
+|-------------------------|---------------------------------------|
+| `clock_divider`         | 1.0 (default — full system clock, 125 MHz on RP2040) |
+| `shift_out.direction`   | Right                                 |
+| `shift_out.auto_fill`   | `true` (autopull)                     |
+| `shift_out.threshold`   | 32                                    |
+| `fifo_join`             | `FifoJoin::TxOnly` (8-deep TX FIFO)   |
+| `set_pins` base / count | DATA (GPIO 14) / 3                    |
+| `out_pins` base / count | ROW_BIT_0 (GPIO 17) / 4               |
+| `sideset` base / count  | COLUMN_CLOCK (GPIO 13) / 1, optional  |
+
+`out_count = 4` is intentional even though `out pins, 8` shifts 8 bits —
+the upper 4 bits are silently discarded since they fall outside the
+configured pin range. The bitstream stores the row select as a full byte
+to keep dword alignment.
+
+Without `FifoJoin::TxOnly` the TX FIFO is only 4 deep, which is
+borderline for the bitstream's read pattern — at the BCD-frame boundary
+the SM has to consume four words in quick succession (padding +
+tick-count + first pixel data of next frame), and with a 4-deep FIFO
+there's no slack for DMA latency.
+
+## Quirks worth remembering
+
+- The PIO instruction labels in upstream's `.pio` file (`endb`, `endg`,
+  `endr`) and the inline comments (`red bit`, `green bit`, `blue bit`)
+  contradict each other. The labels match the per-pixel byte's
+  bit-positions (B at bit 0, G at bit 1, R at bit 2 — see
+  [`cosmic-unicorn-hardware.md`](./cosmic-unicorn-hardware.md#pixel-byte-format-verified));
+  the comments are misleading. Don't reorder the instructions based on
+  the comments.
+- `out null, 5` between the third colour bit and the next pixel
+  discards the unused 5 bits of the pixel byte AND advances the clock
+  via its sideset. Replacing it with a plain `nop` (as the first two
+  colour bits do) would shift the bit-stream by 5 per pixel — visible
+  as a corrupted, slowly-rolling pattern.
 
 ## Cycle budget / timing notes
 
