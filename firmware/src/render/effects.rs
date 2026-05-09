@@ -117,24 +117,43 @@ pub fn paint(display: &mut Display, state: &State, frame: u32, flag_age: u32, co
 }
 
 fn paint_yellow(display: &mut Display, wave: WaveLevel, frame: u32) {
-    let strobe_hz = match wave {
-        WaveLevel::None => 0,
-        WaveLevel::Single => 2,
-        WaveLevel::Double => 4,
-    };
-    if strobe_hz != 0 {
-        // Waved: clean on/off strobe, no cloth-wave overlay (the strobe is
-        // the motion).
-        let (r, g, b) = if anim::strobe_60(frame, strobe_hz) {
-            YELLOW
-        } else {
-            BLACK
-        };
-        display.fill(r, g, b);
-        return;
+    match wave {
+        WaveLevel::None => {
+            // Static: pronounced cloth-wave overlay (≈59 %..100 % brightness).
+            paint_with_wave(display, YELLOW, frame, 150, 255);
+        }
+        WaveLevel::Single => {
+            // Whole-panel strobe at 2 Hz.
+            let (r, g, b) = if anim::strobe_60(frame, 2) {
+                YELLOW
+            } else {
+                BLACK
+            };
+            display.fill(r, g, b);
+        }
+        WaveLevel::Double => {
+            // Mimics the real digiflag rendering of double-waved yellow:
+            // the panel is split along the anti-diagonal into two triangles
+            // that flash out of phase. The eye gets motion across the
+            // diagonal axis instead of a uniform flash, which reads as more
+            // urgent than the single-waved strobe.
+            //
+            // 4 Hz alternation, 50 % duty per triangle: at any moment exactly
+            // one half is lit. The dividing line itself blinks with the
+            // upper-left half so the diagonal reads as a clean edge.
+            const PERIOD: u32 = 15; // 4 Hz at 60 fps
+            let upper_on = (frame % PERIOD) < PERIOD / 2;
+            let anti = WIDTH as i32 - 1;
+            for y in 0..HEIGHT as i32 {
+                for x in 0..WIDTH as i32 {
+                    let upper = (x + y) <= anti;
+                    let on = if upper { upper_on } else { !upper_on };
+                    let (r, g, b) = if on { YELLOW } else { BLACK };
+                    display.set_pixel(x, y, r, g, b);
+                }
+            }
+        }
     }
-    // Static: pronounced cloth-wave overlay (≈59 %..100 % brightness).
-    paint_with_wave(display, YELLOW, frame, 150, 255);
 }
 
 fn paint_red(display: &mut Display, wave: WaveLevel, frame: u32, flag_age: u32) {
