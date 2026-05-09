@@ -5,7 +5,7 @@
 
 use super::anim;
 use crate::display::{Display, HEIGHT, WIDTH};
-use proto::{Flag, State, WaveLevel};
+use proto::{Flag, Session, State, WaveLevel};
 
 type Rgb = (u8, u8, u8);
 
@@ -20,17 +20,28 @@ const GREEN: Rgb = (0, 220, 0);
 const WHITE: Rgb = (255, 255, 255);
 const ORANGE: Rgb = (255, 90, 0);
 
-pub fn paint(display: &mut Display, state: &State, frame: u32, flag_age: u32) {
+pub fn paint(display: &mut Display, state: &State, frame: u32, flag_age: u32, connected: bool) {
+    if !connected {
+        // Sim/SimHub gone silent past the timeout: blank panel. No pit
+        // overlay either — a dark panel must look truly off.
+        display.fill(BLACK.0, BLACK.1, BLACK.2);
+        return;
+    }
     match state.flag {
         Flag::Yellow => paint_yellow(display, state.wave, frame),
         Flag::Red => paint_red(display, state.wave, frame, flag_age),
         Flag::Blue => paint_blue(display, state.wave, frame),
         Flag::Green => paint_green(display, state.wave, frame, flag_age),
         Flag::White => paint_white(display, state.wave, frame),
-        Flag::Black => display.fill(BLACK.0, BLACK.1, BLACK.2),
+        Flag::Black => paint_black_flag(display, frame),
         Flag::Orange => paint_orange(display, state.wave, frame),
         Flag::Checkered => paint_checkered(display, frame),
-        Flag::None => paint_none(display, frame),
+        Flag::None => match state.session {
+            // Race in progress (or paused mid-session) → minimal "alive"
+            // marker. Anything else → the more visible "armed" indicator.
+            Session::Racing | Session::Paused => paint_race_idle(display, frame),
+            _ => paint_ready(display, frame),
+        },
     }
     if state.in_pit {
         paint_pit_stripe(display);
@@ -206,20 +217,70 @@ fn paint_checkered(display: &mut Display, frame: u32) {
     }
 }
 
-fn paint_none(display: &mut Display, frame: u32) {
-    // Idle splash: dim border that breathes at 0.5 Hz. Indicates "alive,
-    // connected, nothing happening on track."
-    const PERIOD: u32 = 120;
-    let envelope = anim::breathe(frame, PERIOD);
-    let m = 6 + (envelope as u16 * 12 / 255) as u8;
+fn paint_race_idle(display: &mut Display, frame: u32) {
+    // Race in progress, no flag waving. Three corners hold a static dim
+    // dot; the bottom-right corner breathes very slowly. The pulse is the
+    // "I am alive" signal — peripheral, easy to ignore, but enough that
+    // you can tell the panel hasn't frozen.
     display.fill(BLACK.0, BLACK.1, BLACK.2);
-    for x in 0..WIDTH as i32 {
-        display.set_pixel(x, 0, m, m, m);
-        display.set_pixel(x, HEIGHT as i32 - 1, m, m, m);
-    }
+    const STATIC_M: u8 = 8;
+    const PERIOD: u32 = 240; // 0.25 Hz at 60 fps
+    let envelope = anim::breathe(frame, PERIOD);
+    let pulse_m = 4 + (envelope as u16 * 10 / 255) as u8;
+    let max_x = WIDTH as i32 - 1;
+    let max_y = HEIGHT as i32 - 1;
+    display.set_pixel(0, 0, STATIC_M, STATIC_M, STATIC_M);
+    display.set_pixel(max_x, 0, STATIC_M, STATIC_M, STATIC_M);
+    display.set_pixel(0, max_y, STATIC_M, STATIC_M, STATIC_M);
+    display.set_pixel(max_x, max_y, pulse_m, pulse_m, pulse_m);
+}
+
+fn paint_ready(display: &mut Display, frame: u32) {
+    // Pre-race / menus / replay: armed-and-waiting indicator. Hollow green
+    // ring centred on the panel, breathing at 0.5 Hz. Reads as "ready for
+    // green" — same colour family as the green-flag rendering.
+    const PERIOD: u32 = 120; // 0.5 Hz at 60 fps
+    let envelope = anim::breathe(frame, PERIOD);
+    // Map 0..=255 envelope to brightness 40..=200.
+    let m = 40 + (envelope as u16 * 160 / 255) as u8;
+    display.fill(BLACK.0, BLACK.1, BLACK.2);
+    // Centre is between pixels (15.5, 15.5) on a 32×32 grid. Work in
+    // half-pixel units (dx2 = 2x - 31) so the ring stays integer-only and
+    // perfectly centred. r² in real pixels: 16..=36 → in half-pixel units²
+    // (×4): 64..=144.
     for y in 0..HEIGHT as i32 {
-        display.set_pixel(0, y, m, m, m);
-        display.set_pixel(WIDTH as i32 - 1, y, m, m, m);
+        let dy2 = 2 * y - (HEIGHT as i32 - 1);
+        for x in 0..WIDTH as i32 {
+            let dx2 = 2 * x - (WIDTH as i32 - 1);
+            let d_sq = dx2 * dx2 + dy2 * dy2;
+            if (64..=144).contains(&d_sq) {
+                display.set_pixel(x, y, 0, m, 0);
+            }
+        }
+    }
+}
+
+fn paint_black_flag(display: &mut Display, frame: u32) {
+    // The black flag (penalty / report-to-pits) needs to read as a
+    // deliberate signal, not a powered-off panel. Solid black with a thick
+    // white "X" pulsing across both diagonals — a clear penalty mark that
+    // doesn't overlap visually with any other flag.
+    display.fill(BLACK.0, BLACK.1, BLACK.2);
+    const PERIOD: u32 = 100; // 0.6 Hz at 60 fps
+    let envelope = anim::breathe(frame, PERIOD);
+    let m = (envelope as u16 * 130 / 255) as u8;
+    // Square-panel assumption (32×32) — both the main diagonal x==y and
+    // the anti-diagonal x+y==31 pass through the corners. `<= 1` makes
+    // each diagonal 3 pixels wide per row (~2 px perpendicular).
+    let anti = WIDTH as i32 - 1;
+    for y in 0..HEIGHT as i32 {
+        for x in 0..WIDTH as i32 {
+            let on_main = (x - y).abs() <= 1;
+            let on_anti = (x + y - anti).abs() <= 1;
+            if on_main || on_anti {
+                display.set_pixel(x, y, m, m, m);
+            }
+        }
     }
 }
 
