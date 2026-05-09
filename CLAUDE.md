@@ -29,13 +29,12 @@ All wrapped by `just` (run `just` to list). The justfile works on both Linux and
 | `just img` | build, then convert ELF → UF2 at `target/uniflag.uf2`. |
 | `just flash` | full pipeline: build → UF2 → wait for `RPI-RP2` mount (hold BOOTSEL) → copy → wait for serial. |
 | `just sim` | run `uniflag-sim` interactively against the device's serial port. |
-| `just run-probe` | flash via `probe-rs` and stream `defmt` over RTT. |
 
 Run a single host test: `cargo test -p proto -- parse_canonical_line` (or `-p uniflag-sim`).
 
 CI mirrors `just fmt-check`, `just clippy` (both legs), and `just test` — keep them green.
 
-Toolchain: stable rustc with `thumbv6m-none-eabi` (pinned in `rust-toolchain.toml`). `nix develop` provides rustup, `probe-rs`, and `elf2uf2-rs`; without Nix install those manually.
+Toolchain: stable rustc with `thumbv6m-none-eabi` (pinned in `rust-toolchain.toml`). `nix develop` provides rustup and `elf2uf2-rs`; without Nix install those manually.
 
 ## Architecture
 
@@ -62,7 +61,7 @@ Embassy executor with three concurrent jobs spawned from `main`:
 
 1. **`render_task`** (`render.rs` + `render/{anim,effects}.rs`) — owns the `Display` and the persisted brightness. 60 fps animation loop; recomputes the whole panel from current `proto::State` + frame counter every tick. Per-flag base layers + overlays + precedence rules are documented at the top of `render.rs` (red beats caution beats per-flag base; sector band overlays unless red; "disconnected" is the boot/idle blank state when no host updates arrive within `CONNECT_TIMEOUT`).
 2. **`buttons::run`** (`buttons.rs`) — polls the three brightness buttons (GPIO 21/26/27, active-low) and pushes `BrightnessAction` events into a channel.
-3. **`watchdog_feed`** — feeds the RP2040 watchdog every 2 s (8 s timeout, just under the RP2040 errata-E1 ceiling). `pause_on_debug(true)` so probe-rs sessions don't get reset.
+3. **`watchdog_feed`** — feeds the RP2040 watchdog every 2 s (8 s timeout, just under the RP2040 errata-E1 ceiling). The panic handler also relies on this for recovery — on panic it spins, the feed task stops, and the chip resets within `WATCHDOG_TIMEOUT`.
 
 Two more futures are awaited in `main` directly (rather than spawned as tasks) to dodge `'static` lifetime gymnastics on `Receiver` / `UsbDevice`: `run_usb` and `cdc_rx_loop`.
 
@@ -84,6 +83,7 @@ Three modes: interactive (hotkey-driven, default), scripted (`--script PATH`, re
 - `clippy.toml` warns on `unwrap_used` workspace-wide (allowed in tests). Don't reintroduce naked `.unwrap()` in non-test code.
 - Firmware is `no_std`, no `alloc`. `heapless` for buffers; `static_cell` / `StaticCell` for `'static` allocations needed by USB descriptors. RP2040 has no atomic CAS — `portable-atomic` with the `critical-section` feature emulates it via embassy-rp's `critical-section-impl`. Don't pull in dependencies that assume native atomics.
 - The `pio` / `pio-proc` versions must match the version `embassy-rp` re-exports (currently 0.3) — bumping one without the other breaks `Common::load_program`.
-- Release profile keeps `debug = true` for `probe-rs` / `defmt`; dev profile uses `opt-level = 1` because async generators inflate badly at `0`. Don't change these without a reason.
+- No on-device logging or debugger support: firmware doesn't pull in `defmt` / `defmt-rtt` / `panic-probe`, and there's no `probe-rs` runner. Errors are silently swallowed; panic spins until the watchdog resets. Don't reintroduce these without a reason — the maintainer doesn't own a debugger.
+- Dev profile uses `opt-level = 1` because async generators inflate badly at `0`. Don't change without a reason.
 - The `simhub/uniflag.shsds` profile is an opaque GUI export — author it through SimHub on Windows and copy the file in, don't hand-edit. The `.shsds` JSON format is undocumented and changes between SimHub versions.
 - SimHub does **not** auto-append a line terminator; any NCalc formula must end with `'\r\n'` or the firmware never sees a complete line. This is the single most common SimHub-side failure — keep the warning prominent in `simhub/README.md`.

@@ -98,7 +98,6 @@
             rustup
 
             # Embedded tooling
-            probe-rs-tools
             elf2uf2-rs
 
             # Host build deps for serialport-rs

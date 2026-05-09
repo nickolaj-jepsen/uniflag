@@ -297,8 +297,6 @@ impl Display {
         sm0.set_enable(true);
         start_dma_chain();
 
-        defmt::info!("display: PIO and DMA up; refreshing (double-buffered)");
-
         Display {
             back,
             front,

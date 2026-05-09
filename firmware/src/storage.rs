@@ -42,19 +42,19 @@ pub fn load_brightness(flash: &mut FlashStorage) -> Option<u8> {
 }
 
 /// Erase the persistence sector and write the brightness record.
-/// Stalls XIP for ~25 ms. Errors are logged but never panicked on —
-/// brightness persistence is best-effort.
+/// Stalls XIP for ~25 ms. Errors are silently ignored — brightness
+/// persistence is best-effort.
 pub fn save_brightness(flash: &mut FlashStorage, brightness: u8) {
     let mut buf = [0u8; RECORD_LEN];
     buf[0..4].copy_from_slice(&MAGIC);
     buf[4] = brightness;
     buf[5] = !brightness;
 
-    if let Err(e) = flash.blocking_erase(STORAGE_OFFSET, STORAGE_OFFSET + ERASE_SIZE as u32) {
-        defmt::warn!("storage: erase failed: {:?}", e);
+    if flash
+        .blocking_erase(STORAGE_OFFSET, STORAGE_OFFSET + ERASE_SIZE as u32)
+        .is_err()
+    {
         return;
     }
-    if let Err(e) = flash.blocking_write(STORAGE_OFFSET, &buf) {
-        defmt::warn!("storage: write failed: {:?}", e);
-    }
+    let _ = flash.blocking_write(STORAGE_OFFSET, &buf);
 }

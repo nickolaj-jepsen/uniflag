@@ -20,11 +20,11 @@ RP2040 / Pico W). Driven by [SimHub] over USB CDC.
 ## Toolchain
 
 ```bash
-nix develop      # devShell with rustup, probe-rs, elf2uf2-rs
+nix develop      # devShell with rustup, elf2uf2-rs
 ```
 
 Without Nix: install rustup, add the `thumbv6m-none-eabi` target, and
-install `elf2uf2-rs` and `probe-rs` from cargo.
+install `elf2uf2-rs` from cargo.
 
 ## Common tasks
 
@@ -41,7 +41,6 @@ with no arguments to list them.
 | `just img`       | build, then convert ELF → UF2 at `target/uniflag.uf2`                     |
 | `just flash`     | full pipeline: build → UF2 → wait for `RPI-RP2` mount → copy → fix serial |
 | `just sim`       | run `uniflag-sim` interactively against the device's serial port          |
-| `just run-probe` | flash via `probe-rs` and stream `defmt` over RTT (sanity check)           |
 
 The host crates (`proto`, `uniflag-sim`) are the workspace
 default-members; the firmware is excluded so a bare `cargo check` from

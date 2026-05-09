@@ -6,12 +6,11 @@ mod display;
 mod render;
 mod storage;
 
-use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_futures::join::join;
 use embassy_rp::peripherals::USB;
 use embassy_rp::usb::Driver;
-use embassy_rp::watchdog::{ResetReason, Watchdog};
+use embassy_rp::watchdog::Watchdog;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Timer};
@@ -19,8 +18,15 @@ use embassy_usb::class::cdc_acm::{CdcAcmClass, Receiver, State as CdcState};
 use embassy_usb::driver::EndpointError;
 use embassy_usb::Builder;
 use heapless::Vec as HVec;
-use panic_probe as _;
 use static_cell::StaticCell;
+
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+    // No reporting channel; the watchdog resets us within WATCHDOG_TIMEOUT.
+    loop {
+        cortex_m::asm::wfi();
+    }
+}
 
 use buttons::BrightnessChannel;
 use display::{Display, DisplayPins, PioIrqs};
@@ -61,13 +67,6 @@ async fn main(spawner: Spawner) {
     // instead of a permanently-frozen panel. The feed task is spawned
     // further down once the executor is up.
     let mut watchdog = Watchdog::new(p.WATCHDOG);
-    match watchdog.reset_reason() {
-        Some(ResetReason::TimedOut) => defmt::warn!("boot: watchdog timeout reset"),
-        Some(ResetReason::Forced) => defmt::warn!("boot: forced reset"),
-        None => defmt::info!("boot: clean (cold or BOOTSEL)"),
-    }
-    // Don't reset while halted under probe-rs.
-    watchdog.pause_on_debug(true);
     watchdog.start(WATCHDOG_TIMEOUT);
 
     // ------------------------------------------------------------------
@@ -76,8 +75,6 @@ async fn main(spawner: Spawner) {
     // Owned by the render task — it's the only consumer (load on boot,
     // save on debounced brightness change).
     let flash: FlashStorage = FlashStorage::new_blocking(p.FLASH);
-
-    defmt::info!("uniflag boot");
 
     // ------------------------------------------------------------------
     // Display
@@ -169,7 +166,6 @@ async fn cdc_rx_loop(mut rx: Receiver<'static, Driver<'static, USB>>) -> ! {
 
     loop {
         rx.wait_connection().await;
-        defmt::info!("usb: host connected");
 
         loop {
             match rx.read_packet(&mut buf).await {
@@ -182,16 +178,12 @@ async fn cdc_rx_loop(mut rx: Receiver<'static, Driver<'static, USB>>) -> ! {
                             // ignore — `proto::State::parse` also tolerates these
                         } else if accum.push(byte).is_err() {
                             // line too long; drop it and resync at next \n
-                            defmt::warn!("usb: line buffer overflow, dropping");
                             accum.clear();
                         }
                     }
                 }
-                Err(EndpointError::BufferOverflow) => {
-                    defmt::warn!("usb: endpoint overflow");
-                }
+                Err(EndpointError::BufferOverflow) => {}
                 Err(EndpointError::Disabled) => {
-                    defmt::info!("usb: endpoint disabled (host disconnect?)");
                     accum.clear();
                     break;
                 }
@@ -201,13 +193,8 @@ async fn cdc_rx_loop(mut rx: Receiver<'static, Driver<'static, USB>>) -> ! {
 }
 
 fn handle_line(line: &[u8]) {
-    match proto::State::parse(line) {
-        Ok(state) => {
-            STATE_SIGNAL.signal(state);
-        }
-        Err(e) => {
-            defmt::warn!("usb: parse error: {:?}", defmt::Debug2Format(&e));
-        }
+    if let Ok(state) = proto::State::parse(line) {
+        STATE_SIGNAL.signal(state);
     }
 }
 

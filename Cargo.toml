@@ -18,7 +18,6 @@ repository = "https://github.com/nickolaj1177/uniflag"
 unwrap_used = "warn"
 
 [profile.release]
-debug = true            # keep symbols for probe-rs / defmt
 lto = "fat"
 codegen-units = 1
 opt-level = "z"

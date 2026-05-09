@@ -87,7 +87,3 @@ chmod-serial:
 # Run the host-side simulator interactively against the device.
 sim *ARGS: chmod-serial
     cargo run --release -p uniflag-sim -- --port {{serial}} {{ARGS}}
-
-# Quick PIO/firmware sanity check via probe-rs (defmt over RTT).
-run-probe:
-    cargo run --release --manifest-path firmware/Cargo.toml
