@@ -41,8 +41,9 @@ Caveats:
 
 ## Per-sim raw-data fallbacks
 
-When the unified property isn't enough — most often because we want the **localised**
-yellow flag (sector 1/2/3) and not just "any yellow" — use the raw-data path.
+When the unified property isn't enough — most often when a **localised**
+yellow (sector 1/2/3) is needed and not just "any yellow" — fall back
+to raw data.
 
 ### ACC (Assetto Corsa Competizione)
 
@@ -120,51 +121,41 @@ Not flags, but useful for the display anyway:
 | `DataCorePlugin.GameData.GameRunning` / `GameInMenu`       | Whether to drive the panel at all |
 | `DataCorePlugin.GameData.CurrentLap`                       | "Last lap" detection in conjunction with `TotalLaps` |
 
-## Putting it together
+## Wave-level distinction (single vs double waved)
 
-For uniflag's first iteration, the formula in `simhub-custom-serial.md` uses only the
-unified `GameData.Flag_*` set and emits `B=1` for any active yellow (the firmware
-treats `B=1` as single-waved, `B=2` as double-waved, `B=0` as static). To upgrade
-to genuine wave-level distinction:
+The unified `Flag_Yellow` / `Flag_Blue` properties are booleans — they
+don't distinguish a static / displayed flag from a single- or
+double-waved flag. To recover that, fall back to raw data:
 
-- **iRacing**: bit-test `[DataCorePlugin.GameRawData.Telemetry.SessionFlags]` for the
-  `YellowWaving` / `CautionWaving` bits to emit `B=2`; static `Yellow` / `Caution`
-  bits give `B=1`. (See `irsdk_Flags` in the iRacing SDK for the bit positions.)
-- **ACC**: `[DataCorePlugin.GameRawData.Graphics.flag] = 2` indicates a yellow event;
-  there is no single/double-waved distinction in the SDK so leave at `B=1`.
-- **rF2 / LMU**: `[DataCorePlugin.GameRawData.Scoring.mYellowFlagState]` exposes a
-  numeric severity (`PendingYellow`, `Yellow`, `LastLap`, `Resume`, …) — map the
-  more urgent values to `B=2`.
+- **iRacing**: bit-test `[DataCorePlugin.GameRawData.Telemetry.SessionFlags]`.
+  `YellowWaving` / `CautionWaving` bits indicate "waved"; static
+  `Yellow` / `Caution` bits indicate displayed only. (See `irsdk_Flags`
+  in the iRacing SDK for the bit positions.)
+- **ACC**: `[DataCorePlugin.GameRawData.Graphics.flag] = 2` indicates a
+  yellow event; the SDK has no single/double-waved distinction.
+- **rF2 / LMU**: `[DataCorePlugin.GameRawData.Scoring.mYellowFlagState]`
+  exposes a numeric severity (`PendingYellow`, `Yellow`, `LastLap`,
+  `Resume`, …).
 
-## Caution states (VSC / Safety Car)
+## Caution states (VSC / Safety Car) by sim
 
-The wire protocol's `C=` field carries session-wide caution, orthogonal to `F=`:
-`C=N` (none), `C=V` (Virtual Safety Car / FCY), `C=S` (physical Safety Car).
-Coverage by sim:
+| Sim              | VSC | SC | How to detect                                                               |
+|------------------|-----|----|-----------------------------------------------------------------------------|
+| iRacing          | ✓   | ✓  | `SessionFlags` bitmask for `Caution` / `CautionWaving`; `SafetyCarActive` for SC |
+| F1 (Codemasters) | ✓   | ✓  | `m_safetyCarStatus` raw enum (0=none, 1=full SC, 2=VSC, 3=formation lap)    |
+| ACC              | —   | —  | No first-class VSC / SC concept exposed.                                    |
+| rF2 / LMU        | ✓   | ✓  | `mGamePhase` enum exposes pace-car / FCY phases.                            |
+| Automobilista 2  | ✓   | ✓  | `mSafetyCarStatus` raw field.                                               |
 
-| Sim       | VSC | SC | How to detect |
-|-----------|-----|----|---------------|
-| iRacing   | ✓   | ✓  | `SessionFlags` bitmask for `Caution` / `CautionWaving`; `SafetyCarActive` for SC |
-| F1 (Codemasters) | ✓ | ✓ | `m_safetyCarStatus` raw enum (0=none, 1=full SC, 2=VSC, 3=formation lap) |
-| ACC       | —   | —  | No first-class VSC / SC concept exposed; leave `C=N` |
-| rF2 / LMU | ✓   | ✓  | `mGamePhase` enum exposes pace-car / FCY phases |
-| Automobilista 2 | ✓ | ✓ | `mSafetyCarStatus` raw field |
+## Sector-localised yellows by sim
 
-Hosts that can't distinguish VSC from SC should map any "FCY-like" state to `C=V`.
-
-## Sector-localised yellows
-
-The wire protocol's `Z=` field is a sector-yellow bitmask using ascending unique
-digits (`Z=`, `Z=1`, `Z=23`, `Z=123`). The firmware fixes the model at three
-sectors (S1/S2/S3); sims with finer granularity must aggregate host-side.
-
-| Sim       | Property | Mapping |
-|-----------|----------|---------|
-| ACC       | `GameRawData.Graphics.globalYellow1/2/3` | 1:1 — concatenate active sectors into `Z=` |
-| F1 (Codemasters) | `GameRawData.MarshalZones[i].ZoneFlag` | Aggregate the up-to-21 marshal zones into thirds by `ZoneStart` (0..⅓ → S1, ⅓..⅔ → S2, ⅔..1 → S3); set the bit for any third with an active yellow |
-| rF2 / LMU | `GameRawData.Scoring.mSectorFlag[0..2]` | 1:1 (rF2 calls them sectors directly) |
-| iRacing   | (none)   | iRacing's `SessionFlags` is global only — leave `Z=` empty |
-| Assetto Corsa (vanilla) | (none) | Vanilla AC doesn't expose per-sector flags — leave `Z=` empty |
+| Sim                     | Property                                | Notes                                                               |
+|-------------------------|-----------------------------------------|---------------------------------------------------------------------|
+| ACC                     | `GameRawData.Graphics.globalYellow1/2/3`| One boolean per sector.                                             |
+| F1 (Codemasters)        | `GameRawData.MarshalZones[i].ZoneFlag`  | Up to 21 marshal zones with `ZoneStart` ∈ [0, 1]; aggregate to thirds host-side. |
+| rF2 / LMU               | `GameRawData.Scoring.mSectorFlag[0..2]` | One value per sector.                                               |
+| iRacing                 | (none)                                  | `SessionFlags` is global only.                                      |
+| Assetto Corsa (vanilla) | (none)                                  | No per-sector flags exposed.                                        |
 
 ## Sources
 

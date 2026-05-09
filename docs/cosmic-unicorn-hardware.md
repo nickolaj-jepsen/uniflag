@@ -91,9 +91,8 @@ The buffer is sized so the whole stream fits in RAM and is fed to the PIO by a
 > **Important — alignment.** The bitstream array MUST be 4-byte aligned. RP2040
 > DMA does word-sized transfers and silently masks the low address bits if the
 > source is misaligned, which produces visibly wandering scan-rows with random
-> colours. Upstream uses `alignas(4) uint8_t bitstream[…]`. The Rust port wraps
-> in `#[repr(align(4))]` — see [`bring-up-notes.md`](./bring-up-notes.md#alignment-bug)
-> for the debug story.
+> colours. Upstream uses `alignas(4) uint8_t bitstream[…]`. In Rust, `[u8; N]`
+> has alignment 1 — wrap it in a `#[repr(align(4))]` struct (or use `[u32; N/4]`).
 
 ### Pixel byte format (verified)
 
@@ -145,31 +144,30 @@ Button constants: `SWITCH_A`, `SWITCH_B`, `SWITCH_C`, `SWITCH_D`,
 `SWITCH_SLEEP`, `SWITCH_VOLUME_UP`, `SWITCH_VOLUME_DOWN`,
 `SWITCH_BRIGHTNESS_UP`, `SWITCH_BRIGHTNESS_DOWN`.
 
-## What we don't (yet) need from the upstream library
+## Init sequence the upstream library performs
 
-- **Audio:** the I²S/PIO audio path, synth channels, sample playback. Not relevant for a
-  flag display.
-- **PicoGraphics:** the C++ drawing helper. We'll use `embedded-graphics` on the Rust side.
-- **Sleep / power management:** the upstream library has explicit "off" handling; we
-  probably keep the panel running and let the host put the device to sleep.
+For 1:1 behavioural parity with Pimoroni's driver, an integration needs:
 
-## What we needed to reproduce in Rust
+1. Hold `ROW_BIT_0..3` HIGH on every GPIO before enabling the SM (avoids
+   a flash of "row 0" garbage during init).
+2. Bit-bang the column-driver config register
+   (`reg1 = 0b1111_1111_1100_1110`) into 12 chips, with a mid-write
+   LATCH pulse on chip 12. The same pins then get handed to PIO.
+3. Build the bitstream once — fill all the `pixel-count`, `row-select`,
+   padding, and per-frame BCD tick fields. Pixel data starts as zeros;
+   only those 64-byte regions change at runtime.
+4. Initialise the PIO program at a free offset, set sideset/out/set pin
+   counts, set the autopull threshold to 32, and start the SM.
+5. Configure the self-chaining DMA pair (data + control) and trigger it.
 
-All of these landed in [`firmware/src/display.rs`](../firmware/src/display.rs):
+## Capabilities not exercised by uniflag
 
-1. ✅ Pin init — ROW_BITs and BLANK held HIGH via the SM's `set_pins` *before*
-   `set_pin_dirs(Out)`, so the pins go straight to their idle level when
-   they become outputs.
-2. ✅ The PIO program (`cosmic_unicorn.pio`), translated to a `pio::pio_asm!{}`
-   block — see [`cosmic-unicorn-pio.md`](./cosmic-unicorn-pio.md).
-3. ✅ The bitstream framebuffer layout, **wrapped in a `#[repr(align(4))]`
-   struct**.
-4. ✅ The DMA chain (PAC-level — embassy-rp 0.10 has no high-level helper
-   for self-chaining channels). Plain `read_addr` write + `chain_to` —
-   see [`bring-up-notes.md`](./bring-up-notes.md#dma-chain-pattern).
-5. ✅ `set_pixel(x, y, r, g, b)`, `fill`, `set_brightness` using the
-   gamma-14-bit LUT (256 u16s, ported verbatim from upstream).
-6. ✅ The column-driver bit-bang config sequence
-   (`reg1 = 0b1111_1111_1100_1110` to 12 chips with mid-write LATCH on
-   chip 12). Done with temporary `Output`s on `pin.reborrow()`, dropped
-   before PIO claims the same `Peri`s.
+The upstream library covers more than a flag display needs. Out of
+scope here, but documented for anyone repurposing the panel:
+
+- **Audio** — I²S / PIO audio path, synth channels, sample playback
+  (pin assignments are in the GPIO map above).
+- **PicoGraphics** — the C++ drawing helper has no Rust equivalent;
+  `embedded-graphics` is the obvious substitute if you need overlays.
+- **Sleep / power management** — upstream has explicit "off" handling;
+  uniflag keeps the panel running and lets the host put it to sleep.

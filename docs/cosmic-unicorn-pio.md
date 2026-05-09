@@ -88,42 +88,49 @@ bcd_delay:
 - The `[N]` brackets after instructions are PIO delay slots — extra clock cycles inserted
   to give the shift registers enough setup/hold time.
 
-## Reproducing in Rust
+## Required state-machine configuration
 
-We use **`pio::pio_asm!{}`** (not `pio_proc::pio_asm!` — the proc-macro is
-re-exported from `pio` via a `macro_rules!` wrapper, and that's what
-embassy-rp's `Common::load_program` accepts). The full PIO assembly above
-goes into a `pio_asm!{}` block in [`firmware/src/display.rs`](../firmware/src/display.rs)
-nearly verbatim. The `pio` and `pio-proc` versions **must match embassy-rp's
-internal pio dep** — embassy-rp 0.10 depends on `pio = "0.3"`, so we pin
-`pio = "0.3"` and `pio-proc = "0.3"`. Mismatched versions yield a
-`Program<32>` from the wrong crate and don't unify with
-`Common::load_program(&Program<SIZE>)`.
+The PIO program above only works with this configuration (matching
+upstream Pimoroni's setup):
 
-State-machine config that pairs with the PIO program (verified working
-against hardware — May 2026):
-
-| Register / field        | Value                                |
-|-------------------------|---------------------------------------|
-| `clock_divider`         | 1.0 (default — full system clock, 125 MHz on RP2040) |
-| `shift_out.direction`   | Right                                 |
-| `shift_out.auto_fill`   | `true` (autopull)                     |
-| `shift_out.threshold`   | 32                                    |
-| `fifo_join`             | `FifoJoin::TxOnly` (8-deep TX FIFO)   |
-| `set_pins` base / count | DATA (GPIO 14) / 3                    |
-| `out_pins` base / count | ROW_BIT_0 (GPIO 17) / 4               |
-| `sideset` base / count  | COLUMN_CLOCK (GPIO 13) / 1, optional  |
+| Register / field        | Value                                                 |
+|-------------------------|-------------------------------------------------------|
+| `clock_divider`         | 1.0 (full system clock, 125 MHz on RP2040)            |
+| `shift_out.direction`   | Right                                                 |
+| `shift_out.auto_fill`   | `true` (autopull)                                     |
+| `shift_out.threshold`   | 32                                                    |
+| `fifo_join`             | TX-only (8-deep TX FIFO)                              |
+| `set_pins` base / count | DATA (GPIO 14) / 3                                    |
+| `out_pins` base / count | ROW_BIT_0 (GPIO 17) / 4                               |
+| `sideset` base / count  | COLUMN_CLOCK (GPIO 13) / 1, optional                  |
 
 `out_count = 4` is intentional even though `out pins, 8` shifts 8 bits —
 the upper 4 bits are silently discarded since they fall outside the
 configured pin range. The bitstream stores the row select as a full byte
 to keep dword alignment.
 
-Without `FifoJoin::TxOnly` the TX FIFO is only 4 deep, which is
+Without TX-only FIFO join the TX FIFO is only 4 deep, which is
 borderline for the bitstream's read pattern — at the BCD-frame boundary
 the SM has to consume four words in quick succession (padding +
 tick-count + first pixel data of next frame), and with a 4-deep FIFO
 there's no slack for DMA latency.
+
+## Embassy-rp integration constraints
+
+If you're driving this from Rust with embassy-rp:
+
+- The `pio` crate version **must match embassy-rp's internal pio dep**.
+  Mismatched versions yield a `Program<SIZE>` from the wrong crate that
+  does not unify with `Common::load_program(&Program<SIZE>)`.
+- Use **`pio::pio_asm!{}`** — `pio_proc::pio_asm!` is re-exported from
+  `pio` via a `macro_rules!` wrapper, and the wrapped form is what
+  embassy-rp's `Common::load_program` accepts.
+- Embassy-rp (as of 0.10) has no high-level helper for self-chaining
+  DMA channels. Drop to `embassy_rp::pac::DMA` and write `CtrlTrig`
+  values directly (~30 lines). Pattern: `ctrl.write_addr` =
+  `&data.read_addr` (the **plain** alias, not `al3_read_addr_trig`),
+  `ctrl.chain_to = DATA`, `data.chain_to = CTRL`. The atomic-trigger
+  alias works for one-shots but doesn't compose with `chain_to`.
 
 ## Quirks worth remembering
 
@@ -152,18 +159,3 @@ there's no slack for DMA latency.
 - The state machine intentionally over-pulls and discards bits (the `out null, 5` and
   `out null, 16` instructions) to keep byte alignment in the bitstream simple. Don't
   shorten the framebuffer to "save bytes" — the layout is load-bearing.
-
-## What the upstream C++ side does at init
-
-For 1:1 behavioural parity:
-
-1. Set `ROW_BIT_0..3` HIGH on every GPIO before enabling the SM (avoids a flash of
-   "row 0" garbage during init).
-2. Build the bitstream once — fill all the `pixel-count`, `row-select`, padding, and
-   per-frame BCD tick fields. Pixel data starts as zeros; only those 64-byte regions
-   change at runtime.
-3. Initialise the PIO program at a free offset, set sideset/out/set pin counts, set
-   the autopull threshold to 32, and start the SM.
-4. Configure two DMA channels: a **data** channel pulling 32-bit words from the
-   bitstream into the PIO TX FIFO, and a **control** channel that re-arms the data
-   channel's read pointer. Start them.
