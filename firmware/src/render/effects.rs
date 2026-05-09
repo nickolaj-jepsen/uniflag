@@ -10,8 +10,6 @@ use proto::{Caution, Flag, SectorMask, Session, State, WaveLevel};
 type Rgb = (u8, u8, u8);
 
 const BLACK: Rgb = (0, 0, 0);
-const PIT_BLUE: Rgb = (0, 80, 255);
-const PIT_STRIPE_WIDTH: i32 = 2;
 
 const YELLOW: Rgb = (255, 220, 0);
 const BLUE: Rgb = (0, 64, 255);
@@ -80,13 +78,12 @@ const GLYPH_V: [u8; 11] = [
 
 pub fn paint(display: &mut Display, state: &State, frame: u32, flag_age: u32, connected: bool) {
     if !connected {
-        // Sim/SimHub gone silent past the timeout: blank panel. No pit
-        // overlay either — a dark panel must look truly off.
+        // Sim/SimHub gone silent past the timeout: blank panel.
         display.fill(BLACK.0, BLACK.1, BLACK.2);
         return;
     }
     // Precedence: Red > Caution (VSC/SC) > other flags. Then sector
-    // overlay (suppressed under red), then pit overlay (always on top).
+    // overlay (suppressed under red).
     match (state.flag, state.caution) {
         (Flag::Red, _) => paint_red(display, state.wave, frame, flag_age),
         (_, Caution::VirtualSafetyCar) => paint_vsc(display, frame),
@@ -111,9 +108,6 @@ pub fn paint(display: &mut Display, state: &State, frame: u32, flag_age: u32, co
     // VSC + sector-2 yellow simultaneously).
     if !state.sectors.is_empty() && state.flag != Flag::Red {
         paint_sector_band(display, state.sectors, state.wave, frame);
-    }
-    if state.in_pit {
-        paint_pit_stripe(display);
     }
 }
 
@@ -375,15 +369,6 @@ fn paint_black_flag(display: &mut Display, frame: u32) {
             if on_main || on_anti {
                 display.set_pixel(x, y, m, m, m);
             }
-        }
-    }
-}
-
-fn paint_pit_stripe(display: &mut Display) {
-    let (r, g, b) = PIT_BLUE;
-    for y in 0..HEIGHT as i32 {
-        for dx in 0..PIT_STRIPE_WIDTH {
-            display.set_pixel(WIDTH as i32 - 1 - dx, y, r, g, b);
         }
     }
 }

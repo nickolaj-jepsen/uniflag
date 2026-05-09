@@ -132,12 +132,11 @@ hotkeys:
   y  yellow         ,      wave: none      (static)
   b  blue           .      wave: single    (single-waved)
   k  black          /      wave: double    (double-waved)
-  w  white          p      toggle pit
-  r  red            1      session: pre-race
-  g  green          2      session: racing
-  c  chequered      3      session: paused
-  o  orange         4      session: post-race
-                    5      session: replay
+  w  white          1      session: pre-race
+  r  red            2      session: racing
+  g  green          3      session: paused
+  c  chequered      4      session: post-race
+  o  orange         5      session: replay
                     h      this help
                     q      quit
 
@@ -238,7 +237,6 @@ fn handle_key(k: KeyEvent) -> Action {
         KeyCode::Char(',') => Action::Mutate(|s| s.wave = WaveLevel::None),
         KeyCode::Char('.') => Action::Mutate(|s| s.wave = WaveLevel::Single),
         KeyCode::Char('/') => Action::Mutate(|s| s.wave = WaveLevel::Double),
-        KeyCode::Char('p') => Action::Mutate(|s| s.in_pit = !s.in_pit),
         KeyCode::Char('1') => Action::Mutate(|s| s.session = Session::PreRace),
         KeyCode::Char('2') => Action::Mutate(|s| s.session = Session::Racing),
         KeyCode::Char('3') => Action::Mutate(|s| s.session = Session::Paused),
@@ -260,10 +258,9 @@ fn handle_key(k: KeyEvent) -> Action {
 
 fn print_state(s: &State) {
     eprintln!(
-        "  flag={:<10} wave={} pit={} session={:<10} caution={} sectors={}\r",
+        "  flag={:<10} wave={} session={:<10} caution={} sectors={}\r",
         format!("{:?}", s.flag),
         s.wave.code(),
-        s.in_pit as u8,
         s.session.code(),
         s.caution.code(),
         if s.sectors.is_empty() {
@@ -352,7 +349,6 @@ const fn demo(flag: Flag, wave: WaveLevel, caution: Caution, sectors_bits: u8) -
     State {
         flag,
         wave,
-        in_pit: false,
         session: Session::Racing,
         caution,
         sectors: SectorMask::from_bits(sectors_bits),
@@ -404,13 +400,13 @@ mod tests {
         let text = "\
             # comment\n\
             \n\
-            0   F=N;B=0;P=0;S=pre-race\n\
-            500 F=Y;B=1;P=0;S=racing\n\
+            0   F=N;B=0;S=pre-race\n\
+            500 F=Y;B=1;S=racing\n\
         ";
         let steps = parse_scenario(text).unwrap();
         assert_eq!(steps.len(), 2);
         assert_eq!(steps[0].0, Duration::from_millis(0));
-        assert_eq!(steps[0].1, "F=N;B=0;P=0;S=pre-race");
+        assert_eq!(steps[0].1, "F=N;B=0;S=pre-race");
         assert_eq!(steps[1].0, Duration::from_millis(500));
     }
 

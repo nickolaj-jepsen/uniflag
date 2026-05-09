@@ -69,7 +69,6 @@ Useful raw fields:
 |-----------------------------------------------------------|---------|
 | `DataCorePlugin.GameRawData.Telemetry.SessionFlags`       | Bitmask of all current flags |
 | `DataCorePlugin.GameRawData.Telemetry.PlayerCarTowTime`   | Tow-truck recovery state (proxy for damage) |
-| `DataCorePlugin.GameRawData.Telemetry.OnPitRoad`          | In pit lane |
 
 The `SessionFlags` bits are documented by iRacing as `irsdk_Flags` — `Checkered`,
 `White`, `Green`, `Yellow`, `Red`, `Blue`, `Debris`, `Crossed`, `YellowWaving`,
@@ -115,8 +114,6 @@ Not flags, but useful for the display anyway:
 
 | Property                                                   | Use |
 |------------------------------------------------------------|-----|
-| `DataCorePlugin.GameData.IsInPitLane`                      | Pit-lane indicator (icon overlay or side stripe) |
-| `DataCorePlugin.GameData.IsInPit`                          | Stationary in pit box |
 | `DataCorePlugin.GameData.SessionTypeName`                  | "Race" / "Practice" / "Qualifying" |
 | `DataCorePlugin.GameData.SessionState`                     | "PreSession" / "Green" / "FullCourseYellow" / "Finished" |
 | `DataCorePlugin.GameData.PlayerName` / `CarModel` / `TrackName` | Splash/idle screen content |

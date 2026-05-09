@@ -77,7 +77,7 @@ Some constraints to keep the firmware simple:
 A single semicolon-separated record per update tick. Example:
 
 ```
-F=Y;B=0;G=N;P=0;S=racing;C=N;Z=\n
+F=Y;B=0;G=N;S=racing;C=N;Z=\n
 ```
 
 Field meanings:
@@ -87,7 +87,6 @@ Field meanings:
 | `F`   | `N` (none) / `Y` / `B` / `K` (black) / `W` / `C` (checkered) / `G` (green) / `O` (orange) / `P` (penalty) | Active flag |
 | `B`   | `0` / `1` / `2` | Wave level (none / single-waved / double-waved) — drives the per-flag effect intensity |
 | `G`   | `N`/`Y` | Green flag pulse (one-shot, e.g. on green start) |
-| `P`   | `0`/`1` | Pit-limiter or in-pit |
 | `S`   | `replay` / `racing` / `paused` / `pre-race` / `post-race` | Session state |
 | `C`   | `N` / `V` (VSC) / `S` (Safety Car) | Caution state, orthogonal to `F` — coexists with any flag |
 | `Z`   | (empty) / `1` / `2` / `3` / `12` / `13` / `23` / `123` | Sector-yellow mask, ascending unique digits |
@@ -120,7 +119,6 @@ if([DataCorePlugin.GameData.Flag_Checkered],'C',
 if([DataCorePlugin.GameData.Flag_Green],    'G',
                                             'N'))))))
 + ';B=' + if([DataCorePlugin.GameData.Flag_Yellow], '1', '0')
-+ ';P=' + if([DataCorePlugin.GameData.IsInPitLane],  '1', '0')
 + ';S=' + isnull([DataCorePlugin.GameData.SessionTypeName], 'unknown')
 + '\r\n'
 ```

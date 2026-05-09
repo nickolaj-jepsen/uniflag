@@ -55,8 +55,6 @@
 //!   1-px black gaps. Active sectors pulse yellow at 2 Hz (4 Hz on
 //!   `B=2`); inactive sectors stay dim yellow so the band is always
 //!   visible when any sector is set. Suppressed under red flag.
-//! - **In-pit (`P=1`)**: rightmost two columns painted in pit-blue —
-//!   topmost overlay, drawn over caution and sector band alike.
 
 mod anim;
 mod effects;

@@ -9,40 +9,36 @@
 # - red flag overriding VSC.
 
 # Idle racing baseline.
-0      F=N;B=0;P=0;S=racing;C=N;Z=
+0      F=N;B=0;S=racing;C=N;Z=
 
 # Yellow ahead in sector 2 — sector band lights up; rest of the panel is
 # the racing-idle splash since F=N.
-3000   F=N;B=0;P=0;S=racing;C=N;Z=2
+3000   F=N;B=0;S=racing;C=N;Z=2
 
 # Driver enters S2: now the global flag is yellow too, sector still lit.
-3000   F=Y;B=1;P=0;S=racing;C=N;Z=2
+3000   F=Y;B=1;S=racing;C=N;Z=2
 
 # Yellow extends to S3 as well (host emits both bits while driver in S2).
-3000   F=Y;B=1;P=0;S=racing;C=N;Z=23
+3000   F=Y;B=1;S=racing;C=N;Z=23
 
 # Cleared.
-3000   F=N;B=0;P=0;S=racing;C=N;Z=
+3000   F=N;B=0;S=racing;C=N;Z=
 
 # VSC deployed — diagonal yellow/white stripes.
-2000   F=N;B=0;P=0;S=racing;C=V;Z=
+2000   F=N;B=0;S=racing;C=V;Z=
 
 # VSC plus a sector hint (host telling us the trigger zone).
-4000   F=N;B=0;P=0;S=racing;C=V;Z=2
+4000   F=N;B=0;S=racing;C=V;Z=2
 
 # Promoted to a real Safety Car — yellow base with a sweeping band.
-4000   F=N;B=0;P=0;S=racing;C=S;Z=
+4000   F=N;B=0;S=racing;C=S;Z=
 
 # Red flag drops while VSC was still active. Red overrides caution; the
 # sector band is also suppressed under red. Onset white flash plays.
-3000   F=R;B=0;P=0;S=racing;C=V;Z=23
+3000   F=R;B=0;S=racing;C=V;Z=23
 
 # Restart after stoppage.
-4000   F=N;B=0;P=0;S=racing;C=N;Z=
-
-# Pit stripe overlays caution: VSC + in-pit lights up the right-edge
-# pit stripe over the diagonal stripes.
-2000   F=N;B=0;P=1;S=racing;C=V;Z=
+4000   F=N;B=0;S=racing;C=N;Z=
 
 # Done.
-4000   F=N;B=0;P=0;S=post-race;C=N;Z=
+4000   F=N;B=0;S=post-race;C=N;Z=

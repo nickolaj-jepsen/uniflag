@@ -17,14 +17,13 @@ the panel stays dark, since the firmware never sees a complete line to
 parse. Fields are semicolon-separated `key=value` pairs:
 
 ```
-F=Y;B=1;P=0;S=racing
+F=Y;B=1;S=racing
 ```
 
 | Field | Values                                                           | Meaning                                |
 |-------|------------------------------------------------------------------|----------------------------------------|
 | `F`   | `N` `Y` `B` `K` `W` `R` `G` `C` `O`                              | Active flag                            |
 | `B`   | `0` `1` `2`                                                      | Wave level (none / single-waved / double-waved) |
-| `P`   | `0` `1`                                                          | In-pit indicator                       |
 | `S`   | `pre-race` `racing` `paused` `post-race` `replay` `unknown`      | Session state                          |
 | `C`   | `N` `V` `S`                                                      | Caution: none / Virtual Safety Car / Safety Car |
 | `Z`   | (empty) `1` `2` `3` `12` `13` `23` `123`                         | Sector-yellow mask (ascending unique digits) |
@@ -103,7 +102,6 @@ if([DataCorePlugin.GameData.Flag_Green],    'G',
 if([DataCorePlugin.GameData.Flag_Orange],   'O',
                                             'N')))))))
 + ';B=' + if([DataCorePlugin.GameData.Flag_Yellow], '1', '0')
-+ ';P=' + if([DataCorePlugin.GameData.IsInPitLane], '1', '0')
 + ';S=' + if(isnull([DataCorePlugin.GameData.SessionTypeName]), 'unknown',
           if([DataCorePlugin.GameData.SessionTypeName] = 'Race', 'racing',
           if([DataCorePlugin.GameData.SessionTypeName] = 'Practice', 'pre-race',

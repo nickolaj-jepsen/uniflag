@@ -5,13 +5,12 @@
 //! `\n` (the parser also accepts `\r\n` and trailing whitespace). The whole
 //! API is `no_std` and allocation-free.
 //!
-//! Example: `F=Y;B=2;P=0;S=racing;C=N;Z=\n`
+//! Example: `F=Y;B=2;S=racing;C=N;Z=\n`
 //!
 //! | Field | Values | Meaning |
 //! |-------|--------|---------|
 //! | `F`   | `N` `Y` `B` `K` `W` `R` `G` `C` `O` | flag (none/yellow/blue/black/white/red/green/chequered/orange) |
 //! | `B`   | `0` `1` `2` | wave level (none / single-waved / double-waved) |
-//! | `P`   | `0` `1` | in-pit indicator |
 //! | `S`   | `pre-race` `racing` `paused` `post-race` `replay` `unknown` | session state |
 //! | `C`   | `N` `V` `S` | caution (none / virtual safety car / safety car) |
 //! | `Z`   | (empty) `1` `2` `3` `12` `13` `23` `123` | sector-yellow mask, ascending unique digits |
@@ -104,7 +103,6 @@ pub struct SectorMask(u8);
 pub struct State {
     pub flag: Flag,
     pub wave: WaveLevel,
-    pub in_pit: bool,
     pub session: Session,
     pub caution: Caution,
     pub sectors: SectorMask,
@@ -259,7 +257,6 @@ impl State {
             match key {
                 b"F" => state.flag = parse_flag(val)?,
                 b"B" => state.wave = parse_wave(val)?,
-                b"P" => state.in_pit = parse_bool(val)?,
                 b"S" => state.session = parse_session(val)?,
                 b"C" => state.caution = parse_caution(val)?,
                 b"Z" => state.sectors = parse_sectors(val)?,
@@ -282,8 +279,6 @@ impl State {
         w.put(self.flag.code().as_bytes());
         w.put(b";B=");
         w.put(self.wave.code().as_bytes());
-        w.put(b";P=");
-        w.put(if self.in_pit { b"1" } else { b"0" });
         w.put(b";S=");
         w.put(self.session.code().as_bytes());
         w.put(b";C=");
@@ -319,14 +314,6 @@ fn parse_flag(v: &[u8]) -> Result<Flag, ParseError> {
         b"G" => Ok(Flag::Green),
         b"C" => Ok(Flag::Checkered),
         b"O" => Ok(Flag::Orange),
-        _ => Err(ParseError::BadValue),
-    }
-}
-
-fn parse_bool(v: &[u8]) -> Result<bool, ParseError> {
-    match v {
-        b"0" => Ok(false),
-        b"1" => Ok(true),
         _ => Err(ParseError::BadValue),
     }
 }
@@ -427,13 +414,12 @@ mod tests {
 
     #[test]
     fn parse_canonical_line() {
-        let s = State::parse(b"F=Y;B=1;P=0;S=racing").unwrap();
+        let s = State::parse(b"F=Y;B=1;S=racing").unwrap();
         assert_eq!(
             s,
             State {
                 flag: Flag::Yellow,
                 wave: WaveLevel::Single,
-                in_pit: false,
                 session: Session::Racing,
                 ..State::default()
             }
@@ -442,7 +428,7 @@ mod tests {
 
     #[test]
     fn parse_canonical_line_with_caution_and_sectors() {
-        let s = State::parse(b"F=Y;B=1;P=0;S=racing;C=V;Z=12").unwrap();
+        let s = State::parse(b"F=Y;B=1;S=racing;C=V;Z=12").unwrap();
         assert_eq!(s.flag, Flag::Yellow);
         assert_eq!(s.caution, Caution::VirtualSafetyCar);
         assert_eq!(s.sectors, SectorMask::from_bits(0b011));
@@ -526,13 +512,13 @@ mod tests {
 
     #[test]
     fn parse_double_waved() {
-        let s = State::parse(b"F=Y;B=2;P=0;S=racing").unwrap();
+        let s = State::parse(b"F=Y;B=2;S=racing").unwrap();
         assert_eq!(s.wave, WaveLevel::Double);
     }
 
     #[test]
     fn parse_with_crlf_and_trailing_whitespace() {
-        let s = State::parse(b"F=N;B=0;P=0;S=pre-race \r\n").unwrap();
+        let s = State::parse(b"F=N;B=0;S=pre-race \r\n").unwrap();
         assert_eq!(s.flag, Flag::None);
         assert_eq!(s.session, Session::PreRace);
     }
@@ -590,7 +576,6 @@ mod tests {
         let s = State {
             flag: Flag::Checkered,
             wave: WaveLevel::Double,
-            in_pit: true,
             session: Session::PostRace,
             caution: Caution::SafetyCar,
             sectors: SectorMask::from_bits(0b111),
@@ -613,7 +598,6 @@ mod tests {
             let s = State {
                 flag,
                 wave: WaveLevel::Single,
-                in_pit: true,
                 session: Session::Racing,
                 ..State::default()
             };
@@ -629,7 +613,6 @@ mod tests {
             let s = State {
                 flag: Flag::Yellow,
                 wave: WaveLevel::None,
-                in_pit: false,
                 session,
                 ..State::default()
             };
@@ -645,7 +628,6 @@ mod tests {
             let s = State {
                 flag: Flag::Yellow,
                 wave,
-                in_pit: false,
                 session: Session::Racing,
                 ..State::default()
             };
@@ -661,7 +643,6 @@ mod tests {
             let s = State {
                 flag: Flag::Yellow,
                 wave: WaveLevel::None,
-                in_pit: false,
                 session: Session::Racing,
                 caution,
                 ..State::default()
@@ -679,7 +660,6 @@ mod tests {
             let s = State {
                 flag: Flag::None,
                 wave: WaveLevel::None,
-                in_pit: false,
                 session: Session::Racing,
                 sectors: mask,
                 ..State::default()

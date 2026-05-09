@@ -160,7 +160,6 @@ implementation; the highlights worth noting in docs:
 | Per-flag effects (60 fps)         | done | strobes, breathing, sweeps, scrolling chequered, rotating mechanical roundel; sin LUT in `render/anim.rs`, dispatch in `render/effects.rs` |
 | Onset transitions                 | done | red onset white-flash (~66 ms); green onset L→R sweep (~500 ms) |
 | Wave-level wire field             | done | `B=0/1/2` (static / single-waved / double-waved) replaces v1's `blink: bool` |
-| Pit-lane stripe                   | done | 2-px right edge in pit-blue, painted as overlay over every effect |
 | Brightness buttons                | done | up / down / sleep-toggle, no persistence |
 | `embassy-rp::flash` brightness persistence | deferred | needs long-press detection; one erase per click would block USB CDC for ~25 ms each time |
 | `embedded-graphics` `DrawTarget`  | deferred | not needed for v1 — no text/icons in the flag display |
