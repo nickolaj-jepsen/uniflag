@@ -31,7 +31,8 @@
 //! - **None + Racing/Paused**: minimal "alive" marker — three static dim
 //!   corner dots and one slow-pulsing dot in the bottom-right.
 //! - **None + PreRace/PostRace/Replay/Unknown**: "ready" indicator —
-//!   centred green ring breathing at 0.5 Hz.
+//!   centred green ring breathing at 0.5 Hz for the first 5 s, then
+//!   fades to the same minimal alive marker as race-idle.
 //!
 //! Precedence — what actually fills the panel when multiple states are
 //! active (highest wins):

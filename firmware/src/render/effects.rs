@@ -100,9 +100,10 @@ pub fn paint(display: &mut Display, state: &State, frame: u32, flag_age: u32, co
         (Flag::Checkered, _) => paint_checkered(display, frame),
         (Flag::None, _) => match state.session {
             // Race in progress (or paused mid-session) → minimal "alive"
-            // marker. Anything else → the more visible "armed" indicator.
+            // marker. Anything else → the more visible "armed" indicator,
+            // which times out to the same alive marker after 5 s.
             Session::Racing | Session::Paused => paint_race_idle(display, frame),
-            _ => paint_ready(display, frame),
+            _ => paint_ready(display, frame, flag_age),
         },
     }
     // Red flag suppresses the sector band — drivers must stop, extra
@@ -322,10 +323,17 @@ fn paint_race_idle(display: &mut Display, frame: u32) {
     display.set_pixel(max_x, max_y, pulse_m, pulse_m, pulse_m);
 }
 
-fn paint_ready(display: &mut Display, frame: u32) {
+fn paint_ready(display: &mut Display, frame: u32, flag_age: u32) {
     // Pre-race / menus / replay: armed-and-waiting indicator. Hollow green
     // ring centred on the panel, breathing at 0.5 Hz. Reads as "ready for
-    // green" — same colour family as the green-flag rendering.
+    // green" — same colour family as the green-flag rendering. After 5 s
+    // we fall back to the same minimal alive marker as race-idle so the
+    // orb doesn't sit there indefinitely on a quiet panel.
+    const ORB_DURATION_FRAMES: u32 = 300; // 5 s at 60 fps
+    if flag_age >= ORB_DURATION_FRAMES {
+        paint_race_idle(display, frame);
+        return;
+    }
     const PERIOD: u32 = 120; // 0.5 Hz at 60 fps
     let envelope = anim::breathe(frame, PERIOD);
     // Map 0..=255 envelope to brightness 40..=200.
