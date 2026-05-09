@@ -1,0 +1,12 @@
+# A short race arc: pre-race → green start → caution → resume → finish.
+
+0     F=N;B=0;P=0;S=pre-race
+3000  F=G;B=0;P=0;S=racing
+8000  F=Y;B=1;P=0;S=racing
+6000  F=Y;B=0;P=0;S=racing
+4000  F=N;B=0;P=0;S=racing
+2000  F=B;B=0;P=0;S=racing
+3000  F=N;B=0;P=1;S=racing
+4000  F=N;B=0;P=0;S=racing
+6000  F=W;B=0;P=0;S=racing
+4000  F=C;B=0;P=0;S=post-race

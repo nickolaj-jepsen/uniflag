@@ -1,0 +1,9 @@
+[package]
+name = "proto"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "uniflag wire-protocol types — shared between firmware and the simulator."
+
+[lints]
+workspace = true
