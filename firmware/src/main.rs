@@ -3,7 +3,7 @@
 
 mod buttons;
 mod display;
-mod render;
+mod runtime;
 mod storage;
 
 use embassy_executor::Spawner;
@@ -136,7 +136,7 @@ async fn main(spawner: Spawner) {
     // ------------------------------------------------------------------
     // Spawn workers
     // ------------------------------------------------------------------
-    spawner.spawn(render_task(display, flash).expect("spawn render task"));
+    spawner.spawn(runtime_task(display, flash).expect("spawn runtime task"));
     spawner.spawn(
         buttons::run(p.PIN_21, p.PIN_26, p.PIN_27, &BRIGHTNESS_CHAN).expect("spawn buttons task"),
     );
@@ -199,12 +199,12 @@ fn handle_line(line: &[u8]) {
 }
 
 // =============================================================================
-// Render task
+// Runtime task
 // =============================================================================
 
 #[embassy_executor::task]
-async fn render_task(display: Display, flash: FlashStorage) -> ! {
-    render::run(display, flash, &STATE_SIGNAL, &BRIGHTNESS_CHAN).await
+async fn runtime_task(display: Display, flash: FlashStorage) -> ! {
+    runtime::run(display, flash, &STATE_SIGNAL, &BRIGHTNESS_CHAN).await
 }
 
 // =============================================================================

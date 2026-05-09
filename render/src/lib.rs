@@ -17,9 +17,11 @@
 #![no_std]
 
 pub mod anim;
+pub mod brightness;
 pub mod effects;
 pub mod surface;
 
+pub use brightness::{Action as BrightnessAction, BrightnessController};
 pub use surface::{Rgb, Surface};
 
 /// Panel width in pixels. Both the Cosmic Unicorn hardware and the host

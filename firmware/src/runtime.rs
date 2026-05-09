@@ -1,14 +1,15 @@
-//! Flag → display renderer.
+//! Embassy task that drives the panel.
 //!
-//! Holds a [`Display`] and a [`proto::State`]. Runs a 60 fps animation
-//! loop; every tick we recompute the whole panel from the current state
-//! plus a frame counter, so flag effects (strobes, sweeps, scrolling
-//! chequered, breathing splash) are always live.
+//! Holds the hardware [`Display`] and the persisted [`FlashStorage`].
+//! Runs a 60 fps animation loop: every tick we recompute the whole panel
+//! from the current [`State`] plus a frame counter, so flag effects
+//! (strobes, sweeps, scrolling chequered, breathing splash) stay live.
 //!
 //! Per-flag rendering details and animation primitives live in the
-//! `uniflag-render` crate (`effects`, `anim`); this module just owns the
-//! embassy task that wires signals/timers/persistence to those paint
-//! functions.
+//! `uniflag-render` crate (`effects`, `anim`); the brightness/sleep
+//! state machine lives there too as
+//! [`uniflag_render::BrightnessController`]. This module just wires the
+//! signals/timers/persistence to those pieces.
 //!
 //! v3 rendering rules (per-flag, "as realistic as possible").
 //!
@@ -62,10 +63,12 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Timer};
 
-use crate::buttons::{BrightnessAction, BrightnessChannel};
+use proto::State;
+use uniflag_render::BrightnessController;
+
+use crate::buttons::BrightnessChannel;
 use crate::display::Display;
 use crate::storage::{self, FlashStorage};
-use proto::State;
 
 /// Animation tick. ~60 fps; full-panel per-pixel paint costs ≈ 330 µs so
 /// this is well under 2 % CPU.
@@ -75,15 +78,7 @@ const FRAME_TICK_MS: u64 = 16;
 /// Unicorn at 100% is uncomfortably bright in a typical sim-rig setup;
 /// this is around 30% perceived after gamma.
 const DEFAULT_BRIGHTNESS: u8 = 80;
-/// Step size per button press. ~5% of full range.
-const BRIGHTNESS_STEP: u8 = 12;
-/// What the SleepToggle button drops brightness to (and restores on the
-/// next press if not adjusted otherwise).
-const SLEEP_BRIGHTNESS: u8 = 6;
-/// Auto-save quiescence window. After the last brightness change, wait
-/// this long before writing to flash. Coalesces rapid clicks into a
-/// single ~25 ms erase/write.
-const SAVE_DEBOUNCE: Duration = Duration::from_millis(2000);
+
 /// How long we'll keep showing the last received state before declaring
 /// the host disconnected and blanking the panel. SimHub pushes at 5 Hz
 /// (200 ms), so 1.5 s tolerates ~7 dropped messages.
@@ -96,13 +91,9 @@ pub async fn run(
     brightness_chan: &'static BrightnessChannel,
 ) -> ! {
     let initial_brightness = storage::load_brightness(&mut flash).unwrap_or(DEFAULT_BRIGHTNESS);
+    let mut brightness = BrightnessController::new(initial_brightness);
 
     let mut state = State::default();
-    let mut brightness = initial_brightness;
-    let mut last_awake_brightness = initial_brightness;
-    let mut last_saved = initial_brightness;
-    let mut dirty = false;
-    let mut dirty_since = Instant::now();
     let mut frame: u32 = 0;
     let mut flag_changed_at: u32 = 0;
     // `None` until the first message arrives — the panel boots dark and
@@ -111,7 +102,7 @@ pub async fn run(
     let mut last_state_at: Option<Instant> = None;
     let frame_tick = Duration::from_millis(FRAME_TICK_MS);
 
-    display.set_brightness(brightness);
+    display.set_brightness(brightness.current());
     uniflag_render::effects::paint(&mut display, &state, frame, 0, false);
     display.present().await;
 
@@ -129,60 +120,27 @@ pub async fn run(
                 }
                 state = new;
                 last_state_at = Some(Instant::now());
-                let age = frame.wrapping_sub(flag_changed_at);
-                uniflag_render::effects::paint(&mut display, &state, frame, age, true);
             }
             Either3::Second(_) => {
                 frame = frame.wrapping_add(1);
-                let age = frame.wrapping_sub(flag_changed_at);
-                let connected = last_state_at.is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
-                uniflag_render::effects::paint(&mut display, &state, frame, age, connected);
             }
             Either3::Third(action) => {
-                let new_brightness =
-                    apply_brightness(action, brightness, &mut last_awake_brightness);
-                if new_brightness != brightness {
-                    // The user is still actively adjusting — restart the
-                    // debounce window so we only commit once they settle.
-                    dirty_since = Instant::now();
-                }
-                brightness = new_brightness;
-                dirty = brightness != last_saved;
-                display.set_brightness(brightness);
-                let age = frame.wrapping_sub(flag_changed_at);
-                let connected = last_state_at.is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
-                uniflag_render::effects::paint(&mut display, &state, frame, age, connected);
+                brightness.apply(action, now_ms());
+                display.set_brightness(brightness.current());
             }
         }
+
+        let age = frame.wrapping_sub(flag_changed_at);
+        let connected = last_state_at.is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
+        uniflag_render::effects::paint(&mut display, &state, frame, age, connected);
         display.present().await;
 
-        if dirty && dirty_since.elapsed() >= SAVE_DEBOUNCE {
-            storage::save_brightness(&mut flash, brightness);
-            last_saved = brightness;
-            dirty = false;
+        if let Some(b) = brightness.maybe_save(now_ms()) {
+            storage::save_brightness(&mut flash, b);
         }
     }
 }
 
-fn apply_brightness(action: BrightnessAction, current: u8, last_awake: &mut u8) -> u8 {
-    match action {
-        BrightnessAction::Up => {
-            let next = current.saturating_add(BRIGHTNESS_STEP);
-            *last_awake = next;
-            next
-        }
-        BrightnessAction::Down => {
-            let next = current.saturating_sub(BRIGHTNESS_STEP);
-            *last_awake = next;
-            next
-        }
-        BrightnessAction::SleepToggle => {
-            if current <= SLEEP_BRIGHTNESS {
-                (*last_awake).max(BRIGHTNESS_STEP)
-            } else {
-                *last_awake = current;
-                SLEEP_BRIGHTNESS
-            }
-        }
-    }
+fn now_ms() -> u64 {
+    Instant::now().as_millis()
 }
