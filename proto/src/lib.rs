@@ -5,14 +5,19 @@
 //! `\n` (the parser also accepts `\r\n` and trailing whitespace). The whole
 //! API is `no_std` and allocation-free.
 //!
-//! Example: `F=Y;B=1;P=0;S=racing\n`
+//! Example: `F=Y;B=2;P=0;S=racing\n`
 //!
 //! | Field | Values | Meaning |
 //! |-------|--------|---------|
 //! | `F`   | `N` `Y` `B` `K` `W` `R` `G` `C` `O` | flag (none/yellow/blue/black/white/red/green/chequered/orange) |
-//! | `B`   | `0` `1` | blink the active flag (waved-yellow / caution) |
+//! | `B`   | `0` `1` `2` | wave level (none / single-waved / double-waved) |
 //! | `P`   | `0` `1` | in-pit indicator |
 //! | `S`   | `pre-race` `racing` `paused` `post-race` `replay` `unknown` | session state |
+//!
+//! `B=0` is a static (displayed) flag. `B=1` is single-waved — a marshal is
+//! actively signalling. `B=2` is double-waved, indicating a more serious
+//! incident; renderer treats it as a stronger version of `B=1`. Sims that
+//! don't distinguish single from double map any "waved" state to `B=1`.
 //!
 //! Unknown keys are silently ignored, so adding new fields is
 //! backwards-compatible. Unknown values for a known key return
@@ -49,10 +54,25 @@ pub enum Session {
     Replay,
 }
 
+/// How vigorously the active flag is being waved.
+///
+/// `None` is a static / displayed flag. `Single` is a single-waved flag (the
+/// marshal is signalling — local caution, faster car approaching, etc.).
+/// `Double` is double-waved, used in real motorsport for a more serious
+/// incident; the renderer treats it as a more urgent variant of `Single`
+/// (e.g. faster strobe).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum WaveLevel {
+    #[default]
+    None,
+    Single,
+    Double,
+}
+
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct State {
     pub flag: Flag,
-    pub blink: bool,
+    pub wave: WaveLevel,
     pub in_pit: bool,
     pub session: Session,
 }
@@ -93,6 +113,16 @@ impl Session {
     }
 }
 
+impl WaveLevel {
+    pub fn code(self) -> &'static str {
+        match self {
+            WaveLevel::None => "0",
+            WaveLevel::Single => "1",
+            WaveLevel::Double => "2",
+        }
+    }
+}
+
 impl State {
     /// Parse a single line. Trailing `\r`, `\n`, space, and tab are
     /// stripped. Missing fields default to [`State::default`]. Unknown
@@ -120,7 +150,7 @@ impl State {
             let val = &field[eq + 1..];
             match key {
                 b"F" => state.flag = parse_flag(val)?,
-                b"B" => state.blink = parse_bool(val)?,
+                b"B" => state.wave = parse_wave(val)?,
                 b"P" => state.in_pit = parse_bool(val)?,
                 b"S" => state.session = parse_session(val)?,
                 _ => { /* forward-compat: ignore unknown keys */ }
@@ -141,7 +171,7 @@ impl State {
         w.put(b"F=");
         w.put(self.flag.code().as_bytes());
         w.put(b";B=");
-        w.put(if self.blink { b"1" } else { b"0" });
+        w.put(self.wave.code().as_bytes());
         w.put(b";P=");
         w.put(if self.in_pit { b"1" } else { b"0" });
         w.put(b";S=");
@@ -183,6 +213,15 @@ fn parse_bool(v: &[u8]) -> Result<bool, ParseError> {
     match v {
         b"0" => Ok(false),
         b"1" => Ok(true),
+        _ => Err(ParseError::BadValue),
+    }
+}
+
+fn parse_wave(v: &[u8]) -> Result<WaveLevel, ParseError> {
+    match v {
+        b"0" => Ok(WaveLevel::None),
+        b"1" => Ok(WaveLevel::Single),
+        b"2" => Ok(WaveLevel::Double),
         _ => Err(ParseError::BadValue),
     }
 }
@@ -235,6 +274,7 @@ mod tests {
         Session::Replay,
         Session::Unknown,
     ];
+    const ALL_WAVES: [WaveLevel; 3] = [WaveLevel::None, WaveLevel::Single, WaveLevel::Double];
 
     #[test]
     fn parse_canonical_line() {
@@ -243,11 +283,17 @@ mod tests {
             s,
             State {
                 flag: Flag::Yellow,
-                blink: true,
+                wave: WaveLevel::Single,
                 in_pit: false,
                 session: Session::Racing,
             }
         );
+    }
+
+    #[test]
+    fn parse_double_waved() {
+        let s = State::parse(b"F=Y;B=2;P=0;S=racing").unwrap();
+        assert_eq!(s.wave, WaveLevel::Double);
     }
 
     #[test]
@@ -261,7 +307,7 @@ mod tests {
     fn parse_unknown_field_is_ignored() {
         let s = State::parse(b"F=Y;X=hello;B=1").unwrap();
         assert_eq!(s.flag, Flag::Yellow);
-        assert!(s.blink);
+        assert_eq!(s.wave, WaveLevel::Single);
     }
 
     #[test]
@@ -274,7 +320,7 @@ mod tests {
     fn parse_consecutive_separators() {
         let s = State::parse(b";F=Y;;B=1;").unwrap();
         assert_eq!(s.flag, Flag::Yellow);
-        assert!(s.blink);
+        assert_eq!(s.wave, WaveLevel::Single);
     }
 
     #[test]
@@ -286,7 +332,8 @@ mod tests {
     #[test]
     fn parse_bad_value_returns_err() {
         assert_eq!(State::parse(b"F=Z"), Err(ParseError::BadValue));
-        assert_eq!(State::parse(b"B=2"), Err(ParseError::BadValue));
+        assert_eq!(State::parse(b"B=3"), Err(ParseError::BadValue));
+        assert_eq!(State::parse(b"B=x"), Err(ParseError::BadValue));
         assert_eq!(State::parse(b"S=foo"), Err(ParseError::BadValue));
     }
 
@@ -308,7 +355,7 @@ mod tests {
         // Pick the longest possible state — chequered + post-race.
         let s = State {
             flag: Flag::Checkered,
-            blink: true,
+            wave: WaveLevel::Double,
             in_pit: true,
             session: Session::PostRace,
         };
@@ -329,7 +376,7 @@ mod tests {
         for &flag in &ALL_FLAGS {
             let s = State {
                 flag,
-                blink: true,
+                wave: WaveLevel::Single,
                 in_pit: true,
                 session: Session::Racing,
             };
@@ -344,13 +391,28 @@ mod tests {
         for &session in &ALL_SESSIONS {
             let s = State {
                 flag: Flag::Yellow,
-                blink: false,
+                wave: WaveLevel::None,
                 in_pit: false,
                 session,
             };
             let mut buf = [0u8; MAX_LINE_LEN];
             let n = s.format(&mut buf);
             assert_eq!(State::parse(&buf[..n]).unwrap(), s, "session {:?}", session);
+        }
+    }
+
+    #[test]
+    fn round_trip_every_wave_level() {
+        for &wave in &ALL_WAVES {
+            let s = State {
+                flag: Flag::Yellow,
+                wave,
+                in_pit: false,
+                session: Session::Racing,
+            };
+            let mut buf = [0u8; MAX_LINE_LEN];
+            let n = s.format(&mut buf);
+            assert_eq!(State::parse(&buf[..n]).unwrap(), s, "wave {:?}", wave);
         }
     }
 

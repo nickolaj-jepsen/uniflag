@@ -21,7 +21,10 @@ firmware/
 └── src/
     ├── main.rs             ← init, USB CDC + parser, task spawn
     ├── display.rs          ← Cosmic Unicorn driver (PIO + DMA + framebuffer + gamma)
-    ├── render.rs           ← flag → pixels (incl. brightness state)
+    ├── render.rs           ← 60 fps frame loop, brightness state, dispatch into effects/
+    ├── render/
+    │   ├── anim.rs         ← sin LUT + strobe / breathe / wave_mult / scale_rgb primitives
+    │   └── effects.rs      ← per-flag paint functions (yellow strobe, red onset flash, etc.)
     └── buttons.rs          ← polled debounce → BrightnessAction events
 ```
 
@@ -154,10 +157,10 @@ implementation; the highlights worth noting in docs:
 
 | Capability                        | Status | Notes |
 |-----------------------------------|--------|-------|
-| Solid-fill flags                  | done | every flag value renders cleanly |
-| Chequered tile                    | done | 4×4, black/white |
-| Pit-lane stripe                   | done | 2-px right edge in pit-blue |
-| Blink animation (waved-yellow)    | done | 250 ms toggle |
+| Per-flag effects (60 fps)         | done | strobes, breathing, sweeps, scrolling chequered, rotating mechanical roundel; sin LUT in `render/anim.rs`, dispatch in `render/effects.rs` |
+| Onset transitions                 | done | red onset white-flash (~66 ms); green onset L→R sweep (~500 ms) |
+| Wave-level wire field             | done | `B=0/1/2` (static / single-waved / double-waved) replaces v1's `blink: bool` |
+| Pit-lane stripe                   | done | 2-px right edge in pit-blue, painted as overlay over every effect |
 | Brightness buttons                | done | up / down / sleep-toggle, no persistence |
 | `embassy-rp::flash` brightness persistence | deferred | needs long-press detection; one erase per click would block USB CDC for ~25 ms each time |
 | `embedded-graphics` `DrawTarget`  | deferred | not needed for v1 — no text/icons in the flag display |

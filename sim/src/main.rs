@@ -18,7 +18,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, ValueEnum};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::terminal;
-use proto::{Flag, Session, State, MAX_LINE_LEN};
+use proto::{Flag, Session, State, WaveLevel, MAX_LINE_LEN};
 
 const DEFAULT_PORT: &str = "/dev/ttyACM0";
 const DEFAULT_BAUD: u32 = 115_200;
@@ -128,15 +128,18 @@ fn send_state(sink: &mut Sink, state: &State) -> Result<()> {
 
 const HOTKEY_LEGEND: &str = "\
 hotkeys:
-  n  none           space  toggle blink
-  y  yellow         p      toggle pit
-  b  blue           1      session: pre-race
-  k  black          2      session: racing
-  w  white          3      session: paused
-  r  red            4      session: post-race
-  g  green          5      session: replay
-  c  chequered      h      this help
-  o  orange         q      quit
+  n  none           space  cycle wave (none/single/double)
+  y  yellow         ,      wave: none      (static)
+  b  blue           .      wave: single    (single-waved)
+  k  black          /      wave: double    (double-waved)
+  w  white          p      toggle pit
+  r  red            1      session: pre-race
+  g  green          2      session: racing
+  c  chequered      3      session: paused
+  o  orange         4      session: post-race
+                    5      session: replay
+                    h      this help
+                    q      quit
 ";
 
 fn run_interactive(sink: &mut Sink) -> Result<()> {
@@ -222,7 +225,16 @@ fn handle_key(k: KeyEvent) -> Action {
         KeyCode::Char('g') => Action::Mutate(|s| s.flag = Flag::Green),
         KeyCode::Char('c') => Action::Mutate(|s| s.flag = Flag::Checkered),
         KeyCode::Char('o') => Action::Mutate(|s| s.flag = Flag::Orange),
-        KeyCode::Char(' ') => Action::Mutate(|s| s.blink = !s.blink),
+        KeyCode::Char(' ') => Action::Mutate(|s| {
+            s.wave = match s.wave {
+                WaveLevel::None => WaveLevel::Single,
+                WaveLevel::Single => WaveLevel::Double,
+                WaveLevel::Double => WaveLevel::None,
+            }
+        }),
+        KeyCode::Char(',') => Action::Mutate(|s| s.wave = WaveLevel::None),
+        KeyCode::Char('.') => Action::Mutate(|s| s.wave = WaveLevel::Single),
+        KeyCode::Char('/') => Action::Mutate(|s| s.wave = WaveLevel::Double),
         KeyCode::Char('p') => Action::Mutate(|s| s.in_pit = !s.in_pit),
         KeyCode::Char('1') => Action::Mutate(|s| s.session = Session::PreRace),
         KeyCode::Char('2') => Action::Mutate(|s| s.session = Session::Racing),
@@ -235,9 +247,9 @@ fn handle_key(k: KeyEvent) -> Action {
 
 fn print_state(s: &State) {
     eprintln!(
-        "  flag={:<10} blink={} pit={} session={}\r",
+        "  flag={:<10} wave={} pit={} session={}\r",
         format!("{:?}", s.flag),
-        s.blink as u8,
+        s.wave.code(),
         s.in_pit as u8,
         s.session.code(),
     );
@@ -295,31 +307,48 @@ fn parse_scenario(text: &str) -> Result<Vec<(Duration, String)>> {
 
 fn run_demo(sink: &mut Sink) -> Result<()> {
     eprintln!("uniflag-sim → demo (Ctrl-C to stop)");
-    let cycle = [
-        Flag::None,
-        Flag::Yellow,
-        Flag::Blue,
-        Flag::Black,
-        Flag::White,
-        Flag::Red,
-        Flag::Green,
-        Flag::Checkered,
-        Flag::Orange,
-    ];
     let mut idx = 0usize;
     loop {
+        let (flag, wave) = DEMO_CYCLE[idx];
         let state = State {
-            flag: cycle[idx],
-            blink: false,
+            flag,
+            wave,
             in_pit: false,
             session: Session::Racing,
         };
         send_state(sink, &state)?;
-        eprintln!("  {:?}", cycle[idx]);
+        eprintln!("  {:?} wave={}", flag, wave.code());
         std::thread::sleep(DEMO_STEP);
-        idx = (idx + 1) % cycle.len();
+        idx = (idx + 1) % DEMO_CYCLE.len();
     }
 }
+
+/// Walk every flag, and for flags whose effect changes with wave level,
+/// also cycle through the three wave variants. Black, chequered, and none
+/// look identical at every wave level so they only appear once.
+const DEMO_CYCLE: &[(Flag, WaveLevel)] = &[
+    (Flag::None, WaveLevel::None),
+    (Flag::Yellow, WaveLevel::None),
+    (Flag::Yellow, WaveLevel::Single),
+    (Flag::Yellow, WaveLevel::Double),
+    (Flag::Blue, WaveLevel::None),
+    (Flag::Blue, WaveLevel::Single),
+    (Flag::Blue, WaveLevel::Double),
+    (Flag::Black, WaveLevel::None),
+    (Flag::White, WaveLevel::None),
+    (Flag::White, WaveLevel::Single),
+    (Flag::White, WaveLevel::Double),
+    (Flag::Red, WaveLevel::None),
+    (Flag::Red, WaveLevel::Single),
+    (Flag::Red, WaveLevel::Double),
+    (Flag::Green, WaveLevel::None),
+    (Flag::Green, WaveLevel::Single),
+    (Flag::Green, WaveLevel::Double),
+    (Flag::Checkered, WaveLevel::None),
+    (Flag::Orange, WaveLevel::None),
+    (Flag::Orange, WaveLevel::Single),
+    (Flag::Orange, WaveLevel::Double),
+];
 
 #[cfg(test)]
 mod tests {

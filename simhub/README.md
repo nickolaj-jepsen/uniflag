@@ -21,9 +21,17 @@ F=Y;B=1;P=0;S=racing
 | Field | Values                                                           | Meaning                                |
 |-------|------------------------------------------------------------------|----------------------------------------|
 | `F`   | `N` `Y` `B` `K` `W` `R` `G` `C` `O`                              | Active flag                            |
-| `B`   | `0` `1`                                                          | Blink the active flag (waved-yellow)   |
+| `B`   | `0` `1` `2`                                                      | Wave level (none / single-waved / double-waved) |
 | `P`   | `0` `1`                                                          | In-pit indicator                       |
 | `S`   | `pre-race` `racing` `paused` `post-race` `replay` `unknown`      | Session state                          |
+
+`B=0` is a static / displayed flag. `B=1` is single-waved (the marshal is
+actively signalling — local caution, faster car approaching, etc.); the
+firmware renders this with a 2 Hz strobe (or breathing pulse for blue).
+`B=2` is double-waved, signalling a more serious incident; the renderer
+treats it as a more urgent variant — typically a 4 Hz strobe. Sims that
+don't distinguish single from double should map any "waved" state to
+`B=1`.
 
 Unknown keys are silently ignored, so adding new fields later won't
 break older firmware. See `proto/src/lib.rs` for the canonical
@@ -92,11 +100,15 @@ if([DataCorePlugin.GameData.Flag_Orange],   'O',
 Notes:
 
 - `Flag_Yellow` triggering both the `F=Y` field *and* `B=1` is
-  intentional — the firmware blinks waved-yellow. If your sim
-  distinguishes "static" yellow from "waved" yellow and you only want
-  the waved variant to blink, replace the `B=` line with a sim-specific
-  property (e.g. `[DataCorePlugin.GameRawData.Graphics.globalYellow]`
-  for ACC, or a bit-test on iRacing's `SessionFlags` mask).
+  intentional: the unified property doesn't distinguish static from
+  waved, so we treat any yellow as single-waved. If your sim *does*
+  distinguish, swap the `B=` line for one that maps the bits explicitly.
+  For iRacing, `SessionFlags` exposes `YellowWaving` / `CautionWaving`;
+  for ACC, `[DataCorePlugin.GameRawData.Graphics.flag] = 2` plus
+  `[DataCorePlugin.GameRawData.Graphics.globalYellow]` distinguishes
+  global vs sector yellows. The firmware understands `B=2` (double-waved)
+  for situations a sim flags as more urgent — wire it up if the data is
+  available, otherwise leave at `1`.
 - The unified `Flag_Orange` property was added late; very old SimHub
   versions may not have it. If your formula errors on save, drop that
   line.

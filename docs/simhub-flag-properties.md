@@ -126,8 +126,20 @@ Not flags, but useful for the display anyway:
 ## Putting it together
 
 For uniflag's first iteration, the formula in `simhub-custom-serial.md` uses only the
-unified `GameData.Flag_*` set. Once we have it working we can extend the message to
-include sector-localised yellows (per-sim) and per-driver flags.
+unified `GameData.Flag_*` set and emits `B=1` for any active yellow (the firmware
+treats `B=1` as single-waved, `B=2` as double-waved, `B=0` as static). To upgrade
+to genuine wave-level distinction:
+
+- **iRacing**: bit-test `[DataCorePlugin.GameRawData.Telemetry.SessionFlags]` for the
+  `YellowWaving` / `CautionWaving` bits to emit `B=2`; static `Yellow` / `Caution`
+  bits give `B=1`. (See `irsdk_Flags` in the iRacing SDK for the bit positions.)
+- **ACC**: `[DataCorePlugin.GameRawData.Graphics.flag] = 2` indicates a yellow event;
+  there is no single/double-waved distinction in the SDK so leave at `B=1`.
+- **rF2 / LMU**: `[DataCorePlugin.GameRawData.Scoring.mYellowFlagState]` exposes a
+  numeric severity (`PendingYellow`, `Yellow`, `LastLap`, `Resume`, …) — map the
+  more urgent values to `B=2`.
+
+Sector-localised yellows and per-driver flags are still future work.
 
 ## Sources
 

@@ -82,7 +82,7 @@ Field meanings:
 | Field | Values | Meaning |
 |-------|--------|---------|
 | `F`   | `N` (none) / `Y` / `B` / `K` (black) / `W` / `C` (checkered) / `G` (green) / `O` (orange) / `P` (penalty) | Active flag |
-| `B`   | `0`/`1` | Should the display blink (e.g. local yellow) |
+| `B`   | `0` / `1` / `2` | Wave level (none / single-waved / double-waved) — drives the per-flag effect intensity |
 | `G`   | `N`/`Y` | Green flag pulse (one-shot, e.g. on green start) |
 | `P`   | `0`/`1` | Pit-limiter or in-pit |
 | `S`   | `replay` / `racing` / `paused` / `pre-race` / `post-race` | Session state |
