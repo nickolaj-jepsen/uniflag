@@ -29,7 +29,7 @@ fmt-check:
 # Mirror CI: clippy on host crates, then on firmware (different target).
 clippy:
     cargo clippy -p proto -p uniflag-render -p uniflag-sim --all-targets -- -D warnings
-    cargo clippy --all-targets --manifest-path firmware/Cargo.toml -- -D warnings
+    cargo clippy --all-targets --manifest-path firmware/Cargo.toml --target thumbv6m-none-eabi -- -D warnings
 
 # Tests on host crates only (firmware is no_std, `test = false`).
 test:
@@ -37,7 +37,7 @@ test:
 
 # Build the firmware ELF (release).
 build:
-    cargo build --release --manifest-path firmware/Cargo.toml
+    cargo build --release --manifest-path firmware/Cargo.toml --target thumbv6m-none-eabi
 
 # Convert the firmware ELF to a UF2 image.
 img: build
