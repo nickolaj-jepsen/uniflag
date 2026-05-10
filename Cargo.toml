@@ -10,7 +10,7 @@ default-members = ["proto", "render", "sim"]
 
 [workspace.package]
 edition = "2021"
-license = "GPL-2.0-or-later"
+license = "GPL-3.0-or-later"
 authors = ["Nickolaj Jepsen <nickolaj1177@gmail.com>"]
 repository = "https://github.com/nickolaj1177/uniflag"
 

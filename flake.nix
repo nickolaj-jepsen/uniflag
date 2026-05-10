@@ -43,7 +43,7 @@
 
           meta = {
             description = "Host-side simulator that pretends to be SimHub";
-            license     = pkgs.lib.licenses.gpl2Plus;
+            license     = pkgs.lib.licenses.gpl3Plus;
             mainProgram  = "uniflag-sim";
             platforms   = pkgs.lib.platforms.linux;
           };
@@ -82,7 +82,7 @@
 
           meta = {
             description = "uniflag firmware for the original Pimoroni Cosmic Unicorn (RP2040, Embassy)";
-            license     = pkgs.lib.licenses.gpl2Plus;
+            license     = pkgs.lib.licenses.gpl3Plus;
             platforms   = pkgs.lib.platforms.all;
           };
         };
