@@ -1,3 +1,6 @@
+> [!WARNING]
+> **This project is vibecoded.** Run at your own risk. No warranties, no support, just a fun weekend hack.
+
 # uniflag
 
 A sim-racing flag-display for the Pimoroni Cosmic Unicorn (32×32 RGB matrix,
