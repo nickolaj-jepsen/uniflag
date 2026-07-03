@@ -1,0 +1,36 @@
+---
+source: render/tests/golden_scenarios.rs
+expression: render(sc)
+---
+WW                            WW
+WWW                          WWW
+ WWW                        WWW 
+  WWW                      WWW  
+   WWW                    WWW   
+    WWW                  WWW    
+     WWW                WWW     
+      WWW              WWW      
+       WWW            WWW       
+        WWW          WWW        
+         WWW        WWW         
+          WWW      WWW          
+           WWW    WWW           
+            WWW  WWW            
+             WWWWWW             
+              WWWW              
+              WWWW              
+             WWWWWW             
+            WWW  WWW            
+           WWW    WWW           
+          WWW      WWW          
+         WWW        WWW         
+        WWW          WWW        
+       WWW            WWW       
+      WWW              WWW      
+     WWW                WWW     
+    WWW                  WWW    
+   WWW                    WWW   
+  WWW                      WWW  
+ WWW                        WWW 
+WWW                          WWW
+WW                            WW

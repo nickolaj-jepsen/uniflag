@@ -1,0 +1,36 @@
+---
+source: render/tests/golden_scenarios.rs
+expression: render(sc)
+---
+YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY      WWWWW      WWWWW      YY
+YY     WW   WW    WW   WW     YY
+YY     WW         WW          YY
+YY     WW         WW          YY
+YY      WWWWW     WW          YY
+YY          WW    WW          YY
+YY          WW    WW          YY
+YY          WW    WW          YY
+YY     WW   WW    WW          YY
+YY     WW   WW    WW   WW     YY
+YY      WWWWW      WWWWW      YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YY                            YY
+YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY

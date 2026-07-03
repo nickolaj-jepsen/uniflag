@@ -9,6 +9,9 @@
 //!   functions write to.
 //! - [`effects`] — per-flag paint functions (`paint`, `paint_yellow`,
 //!   `paint_red`, …) generic over any [`Surface`].
+//! - [`scenarios`] — single-source table of named
+//!   `(State, frame, flag_age, connected)` tuples pinned by the snapshot
+//!   suite and (M3) exported as golden frames for the C# renderer port.
 //!
 //! Host integration tests in `render/tests/` provide their own
 //! `MockSurface` (see `tests/common/mod.rs`) — keeping it test-side avoids
@@ -19,6 +22,7 @@
 pub mod anim;
 pub mod brightness;
 pub mod effects;
+pub mod scenarios;
 pub mod surface;
 
 pub use brightness::{Action as BrightnessAction, BrightnessController};
