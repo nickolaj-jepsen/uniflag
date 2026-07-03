@@ -13,7 +13,6 @@ bench = false
 
 [dependencies]
 proto = { path = "../proto" }
-uniflag-render = { path = "../render" }
 
 # Embassy — versions match embassy-rs/embassy stable as of May 2026.
 embassy-rp        = { version = "0.10.0", features = ["unstable-pac", "time-driver", "critical-section-impl", "rp2040"] }
@@ -27,9 +26,6 @@ embassy-futures   = { version = "0.1.2" }
 # (0.3) so the Program type matches Common::load_program's signature.
 pio        = "0.3"
 pio-proc   = "0.3"
-
-# Drawing layer
-embedded-graphics = "0.8.1"
 
 # Cortex-M runtime
 cortex-m    = { version = "0.7.6", features = ["inline-asm"] }

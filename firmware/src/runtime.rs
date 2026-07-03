@@ -1,146 +1,142 @@
 //! Embassy task that drives the panel.
 //!
-//! Holds the hardware [`Display`] and the persisted [`FlashStorage`].
-//! Runs a 60 fps animation loop: every tick we recompute the whole panel
-//! from the current [`State`] plus a frame counter, so flag effects
-//! (strobes, sweeps, scrolling chequered, breathing splash) stay live.
+//! v2: the firmware renders nothing of its own during normal operation —
+//! the host streams complete RGB888 frames at 30 fps (docs/protocol.md,
+//! "stream-as-heartbeat") and this task blits them. The v1 effects code
+//! and its precedence rules retired to the host renderer; their spec
+//! lives in `docs/effects-spec.md`.
 //!
-//! Per-flag rendering details and animation primitives live in the
-//! `uniflag-render` crate (`effects`, `anim`); the brightness/sleep
-//! state machine lives there too as
-//! [`uniflag_render::BrightnessController`]. This module just wires the
-//! signals/timers/persistence to those pieces.
+//! Select loop, in arrival order:
 //!
-//! v3 rendering rules (per-flag, "as realistic as possible").
-//!
-//! Per-flag base layer (renders unless overridden by precedence below):
-//! - **Yellow**: solid + faint diagonal cloth-wave overlay; under wave
-//!   level 1 (single-waved) a 2 Hz strobe; under level 2 (double-waved) a
-//!   4 Hz strobe.
-//! - **Red**: white onset flash for ~66 ms on transition into red, then
-//!   solid + faint wave; strobes at 2 Hz / 4 Hz under wave levels.
-//! - **Blue**: 0.5 Hz breathing under static; 2-3 Hz breathing + a brighter
-//!   sweep band under wave levels.
-//! - **Green**: bright band sweep L→R for ~500 ms on transition, then
-//!   solid + faint wave.
-//! - **White**: solid + wave; 3 Hz / 5 Hz strobe under wave levels.
-//! - **Black**: solid black with a slow-pulsing white "X" across both
-//!   diagonals — a clear penalty mark, distinct from a powered-off panel
-//!   and from every other flag rendering.
-//! - **Orange (mechanical)**: rotating quartered black/orange pattern,
-//!   period 1 s / 250 ms / ~133 ms under wave 0/1/2.
-//! - **Checkered**: 4×4 tiles scrolling diagonally at 30 px/s.
-//! - **None + Racing/Paused**: minimal "alive" marker — three static dim
-//!   corner dots and one slow-pulsing dot in the bottom-right.
-//! - **None + PreRace/PostRace/Replay/Unknown**: "ready" indicator —
-//!   centred green ring breathing at 0.5 Hz for the first 5 s, then
-//!   fades to the same minimal alive marker as race-idle.
-//!
-//! Precedence — what actually fills the panel when multiple states are
-//! active (highest wins):
-//! 1. **Disconnected** (no host updates for `CONNECT_TIMEOUT`): all LEDs
-//!    off, no overlays. Boot state until SimHub starts emitting.
-//! 2. **Red flag** wins over caution and any other flag — drivers must
-//!    react to red regardless of session-wide state.
-//! 3. **Caution (`C=V` or `C=S`)** wins over all flags except red.
-//!    Both render as a real-motorsport "digiflag" board: white letters
-//!    on black, surrounded by a 2-px yellow border that breathes very
-//!    slowly (0.25 Hz, ~80–100 % brightness) so the panel reads as live
-//!    without distracting.
-//!    - **VSC (`C=V`)**: white `VSC` letters (7×11 glyphs, 1-px gaps).
-//!    - **Safety Car (`C=S`)**: white `SC` letters (same glyphs, wider
-//!      gap since only two letters need to fit).
-//! 4. Otherwise the per-flag base layer above.
-//!
-//! Overlays drawn on top of the base layer:
-//! - **Sector band (`Z=...`)**: bottom 2 rows, three 10-px segments with
-//!   1-px black gaps. Active sectors pulse yellow at 2 Hz (4 Hz on
-//!   `B=2`); inactive sectors stay dim yellow so the band is always
-//!   visible when any sector is set. Suppressed under red flag.
+//! - **Frame** (zero-copy slot from `cdc_rx_loop`) → blit into the back
+//!   buffer + `present().await`, keeping v1's paint-into-back /
+//!   await-present cadence so a mid-paint refresh never tears.
+//! - **Brightness** → remembered and applied (via
+//!   [`Display::set_brightness`]) when the next streamed frame blits —
+//!   near-immediate at 30 fps. Deliberately *not* applied to the local
+//!   screens: those always paint at full brightness, so a stale dim or
+//!   sleep value from a host that then died can't render them invisible
+//!   (docs/effects-spec.md §7 exists so "device alive, no host" is
+//!   distinguishable from a powered-off panel).
+//! - **Long press** (any button) → toggle the local test screen
+//!   ([`screens::paint_test`]). Streamed frames are still consumed while
+//!   it shows, so the stream stays live and un-toggling snaps straight
+//!   back to it.
+//! - **Tick** (16 ms, the workspace convention for "60 fps") → advance
+//!   the free-running frame counter and repaint whichever *local* screen
+//!   is active: the test screen, or — when no decodable Frame has
+//!   arrived for [`CONNECT_TIMEOUT`] — the section-7a fallback screen
+//!   ([`screens::paint_fallback`]), which is also the boot state.
 
-use embassy_futures::select::{select3, Either3};
+use core::sync::atomic::Ordering;
+
+use embassy_futures::select::{select4, Either4};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
-use embassy_time::{Duration, Instant, Timer};
+use embassy_sync::zerocopy_channel::Receiver as FrameReceiver;
+use embassy_time::{Duration, Instant, Ticker};
 
-use proto::State;
-use uniflag_render::BrightnessController;
-
-use crate::buttons::BrightnessChannel;
 use crate::display::Display;
-use crate::storage::{self, FlashStorage};
+use crate::screens;
+use crate::{FrameBuf, TestToggleChannel, BUTTON_REPORTING, FW_VERSION};
 
-/// Animation tick. ~60 fps; full-panel per-pixel paint costs ≈ 330 µs so
-/// this is well under 2 % CPU.
-const FRAME_TICK_MS: u64 = 16;
+/// Local-screen animation tick. 16 ms — the same "60 fps" convention the
+/// effects spec pins its frame counts to (docs/effects-spec.md §2.2).
+const FRAME_TICK: Duration = Duration::from_millis(16);
 
-/// Default brightness on boot when nothing is persisted yet. The Cosmic
-/// Unicorn at 100% is uncomfortably bright in a typical sim-rig setup;
-/// this is around 30% perceived after gamma.
-const DEFAULT_BRIGHTNESS: u8 = 80;
-
-/// How long we'll keep showing the last received state before declaring
-/// the host disconnected and blanking the panel. SimHub pushes at 5 Hz
-/// (200 ms), so 1.5 s tolerates ~7 dropped messages.
+/// How long without a decodable Frame before we drop to the local
+/// fallback screen. Carried over from v1's disconnect timeout; the host
+/// streams at 30 fps, so 1.5 s tolerates ~45 missed frames
+/// (docs/protocol.md §Stream-as-heartbeat).
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(1500);
 
 pub async fn run(
     mut display: Display,
-    mut flash: FlashStorage,
-    state_signal: &'static Signal<CriticalSectionRawMutex, State>,
-    brightness_chan: &'static BrightnessChannel,
+    mut frames: FrameReceiver<'static, CriticalSectionRawMutex, FrameBuf>,
+    brightness: &'static Signal<CriticalSectionRawMutex, u8>,
+    test_toggle: &'static TestToggleChannel,
 ) -> ! {
-    let initial_brightness = storage::load_brightness(&mut flash).unwrap_or(DEFAULT_BRIGHTNESS);
-    let mut brightness = BrightnessController::new(initial_brightness);
-
-    let mut state = State::default();
+    // Free-running frame counter for the local screens. Only advanced by
+    // the ticker, so the fallback heartbeat keeps its 2 s period no
+    // matter what else is going on.
     let mut frame: u32 = 0;
-    let mut flag_changed_at: u32 = 0;
-    // `None` until the first message arrives — the panel boots dark and
-    // stays that way until the host emits, rather than briefly showing a
-    // default `State`. Set on every state arrival, read on each tick.
-    let mut last_state_at: Option<Instant> = None;
-    let frame_tick = Duration::from_millis(FRAME_TICK_MS);
+    // `None` until the first frame arrives — boot shows the fallback
+    // screen until the host streams.
+    let mut last_frame_at: Option<Instant> = None;
+    // Host-commanded brightness, applied to streamed frames at blit
+    // time. Local screens ignore it (module docs) — 255 maps to the
+    // unity multiplier, matching the boot default (display.rs).
+    let mut host_brightness: u8 = 255;
+    let mut test_mode = false;
+    let mut ticker = Ticker::every(FRAME_TICK);
 
-    display.set_brightness(brightness.current());
-    uniflag_render::effects::paint(&mut display, &state, frame, 0, false);
+    // Boot state: the section-7a fallback (frame 0 is inside the blink's
+    // on-phase, so power-up shows the heartbeat dot immediately).
+    screens::paint_fallback(&mut display, frame);
     display.present().await;
 
     loop {
-        match select3(
-            state_signal.wait(),
-            Timer::after(frame_tick),
-            brightness_chan.receive(),
+        // `paint_local` marks the arms after which a *local* screen (test
+        // or fallback) may need repainting; the streamed path presents
+        // inline in its own arm.
+        let mut paint_local = false;
+
+        match select4(
+            frames.receive(),
+            brightness.wait(),
+            test_toggle.receive(),
+            ticker.next(),
         )
         .await
         {
-            Either3::First(new) => {
-                if new.flag != state.flag {
-                    flag_changed_at = frame;
+            Either4::First(pixels) => {
+                last_frame_at = Some(Instant::now());
+                let show = !test_mode;
+                if show {
+                    display.set_brightness(host_brightness);
+                    display.blit_rgb888(pixels);
                 }
-                state = new;
-                last_state_at = Some(Instant::now());
+                frames.receive_done();
+                if show {
+                    display.present().await;
+                }
             }
-            Either3::Second(_) => {
+            Either4::Second(value) => {
+                host_brightness = value;
+                // Applied when the next streamed frame blits; the 30 fps
+                // stream makes that near-immediate. Local screens never
+                // see it (module docs).
+            }
+            Either4::Third(()) => {
+                test_mode = !test_mode;
+                paint_local = true; // react on toggle, not the next tick
+            }
+            Either4::Fourth(()) => {
                 frame = frame.wrapping_add(1);
-            }
-            Either3::Third(action) => {
-                brightness.apply(action, now_ms());
-                display.set_brightness(brightness.current());
+                paint_local = true;
             }
         }
 
-        let age = frame.wrapping_sub(flag_changed_at);
-        let connected = last_state_at.is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
-        uniflag_render::effects::paint(&mut display, &state, frame, age, connected);
-        display.present().await;
-
-        if let Some(b) = brightness.maybe_save(now_ms()) {
-            storage::save_brightness(&mut flash, b);
+        if paint_local {
+            let connected = last_frame_at.is_some_and(|t| t.elapsed() < CONNECT_TIMEOUT);
+            if last_frame_at.is_some() && !connected {
+                // Stream silence is the host-liveness signal
+                // (docs/protocol.md §Stream-as-heartbeat): the host is
+                // gone, so disarm button reporting until the next Hello.
+                // Guarded on `is_some` so a host that has handshaken but
+                // not yet streamed isn't disarmed prematurely.
+                BUTTON_REPORTING.store(false, Ordering::Relaxed);
+            }
+            if test_mode {
+                display.set_brightness(255);
+                screens::paint_test(&mut display, FW_VERSION);
+                display.present().await;
+            } else if !connected {
+                display.set_brightness(255);
+                screens::paint_fallback(&mut display, frame);
+                display.present().await;
+            }
+            // else: the stream owns the panel; ticks do nothing.
         }
     }
-}
-
-fn now_ms() -> u64 {
-    Instant::now().as_millis()
 }

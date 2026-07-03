@@ -156,7 +156,6 @@ pub struct Display {
     _common: Common<'static, PIO0>,
 }
 
-#[allow(dead_code)] // some accessors used by later phases (renderer, buttons)
 impl Display {
     pub fn new(
         pio: Peri<'static, PIO0>,
@@ -300,6 +299,14 @@ impl Display {
         Display {
             back,
             front,
+            // Boot default: full brightness (multiplier 256 = unity),
+            // deliberately. The runtime re-applies the host value before
+            // every streamed blit and pins the local screens at full
+            // brightness (runtime.rs), so this default only covers the
+            // boot fallback paint — where full matters: the fallback's
+            // sole lit pixel is already the dim literal (40, 14, 0), and
+            // scaling it further would risk making "device alive, no
+            // host" invisible.
             brightness: 256,
             _sm: sm0,
             _common: common,
@@ -307,15 +314,12 @@ impl Display {
     }
 
     /// Set the brightness multiplier. 0..=255 (255 = full).
-    /// Applied to `r/g/b` *before* gamma correction.
+    /// Applied to `r/g/b` *before* gamma correction, matching the wire
+    /// contract for the Brightness packet: `(c * (value + 1)) >> 8`
+    /// (docs/protocol.md §Payload layouts).
     pub fn set_brightness(&mut self, value: u8) {
         // Upstream stores 0..=256 ((value+1) gives 256 at max so unity).
         self.brightness = value as u16 + 1;
-    }
-
-    pub fn brightness(&self) -> u8 {
-        // Round 256 (full) down to 255 for the public byte view.
-        self.brightness.saturating_sub(1).min(255) as u8
     }
 
     /// Write a pixel. Coordinates are panel-logical: `(0,0)` is the
@@ -357,13 +361,20 @@ impl Display {
             gamma_b >>= 1;
         }
     }
-}
 
-impl uniflag_render::Surface for Display {
-    fn set_pixel(&mut self, x: i32, y: i32, (r, g, b): uniflag_render::Rgb) {
-        Display::set_pixel(self, x, y, r, g, b);
+    /// Blit one wire-format frame into the back buffer: RGB888, row-major
+    /// from the top-left, 3 bytes per pixel — exactly the `Frame` packet
+    /// payload (docs/protocol.md §Payload layouts). Layered on
+    /// [`Self::set_pixel`], so the brightness multiplier and gamma apply
+    /// per pixel. Call [`Self::present`] afterwards to show it.
+    pub fn blit_rgb888(&mut self, rgb: &[u8; WIDTH * HEIGHT * 3]) {
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                let i = (y * WIDTH + x) * 3;
+                self.set_pixel(x as i32, y as i32, rgb[i], rgb[i + 1], rgb[i + 2]);
+            }
+        }
     }
-    // `fill` / `fill_with` use the trait defaults (loop over set_pixel).
 }
 
 impl Display {

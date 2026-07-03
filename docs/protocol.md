@@ -127,6 +127,14 @@ host                                        device
 - `Brightness` is re-sent by the host on every (re)connect; the device
   never assumes a value survives a reconnect.
 - After `HelloAck`, `ButtonEvent` packets flow device→host at any time.
+- **Hosts must tolerate device→host packets arriving *before* the
+  `HelloAck`** and skip them (drop, do not error). The device gates
+  ButtonEvent reporting on a completed handshake and clears its TX queue
+  on each `Hello`, but it cannot observe COM open/close: a press landing
+  inside the ~1.5 s silence window can leave one packet wedged in the
+  in-flight write and deliver it to the next session ahead of the ack.
+  `uniflag-cli` already discards pre-ack packets; any other host must
+  do the same.
 
 ## Stream-as-heartbeat
 

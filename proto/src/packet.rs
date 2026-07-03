@@ -31,6 +31,16 @@ use crate::{cobs, crc};
 /// change after the M6 freeze.
 pub const PROTOCOL_VERSION: u8 = 1;
 
+/// USB vendor id the device enumerates with and hosts filter on during
+/// discovery: pid.codes' shared vendor id (see docs/protocol.md
+/// §Transport).
+pub const USB_VID: u16 = 0x1209;
+
+/// USB product id. `0x0001` is the pid.codes **test PID**; the registered
+/// PID `0xF1A6` replaces it once granted (docs/v2-tracking.md). Hosts
+/// should accept both during the transition.
+pub const USB_PID: u16 = 0x0001;
+
 pub const PANEL_WIDTH: usize = 32;
 pub const PANEL_HEIGHT: usize = 32;
 
