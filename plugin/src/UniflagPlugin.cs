@@ -20,9 +20,16 @@ namespace Uniflag
 
         internal UniflagSettings Settings { get; private set; }
 
+        // M2a throwaway (delete with Spike/ once docs/web-overlay.md has its
+        // verdict): serves the overlay test page's WS frames on
+        // ws://127.0.0.1:8972/ws. Real page hosting is designed in M5.
+        private Spike.OverlaySpikeServer _spike;
+
         public void Init(PluginManager pluginManager)
         {
             Settings = this.ReadCommonSettings("GeneralSettings", () => new UniflagSettings());
+            _spike = new Spike.OverlaySpikeServer();
+            _spike.Start(8972);
         }
 
         public void DataUpdate(PluginManager pluginManager, ref GameData data)
@@ -33,6 +40,8 @@ namespace Uniflag
 
         public void End(PluginManager pluginManager)
         {
+            _spike?.Stop();
+            _spike = null;
             this.SaveCommonSettings("GeneralSettings", Settings);
         }
 
