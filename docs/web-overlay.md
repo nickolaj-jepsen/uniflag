@@ -53,15 +53,40 @@ Two caveats when reading the numbers:
 
 Result cells are filled from the dev box only — no synthetic numbers.
 
+Measured 2026-07-03 on the dev box (SimHub 9.11.21, licensed; plugin spike
+WS host on ws://127.0.0.1:8972/ws).
+
 | Environment | rAF fps | received /s | painted /s | cursor motion (eyeball) | verdict |
 |---|---|---|---|---|---|
-| Desktop Chrome / Edge (baseline) | | | | | |
-| DashStudio Web Page View — licensed tier | | | | | |
-| DashStudio Web Page View — free tier (10 fps dash cap behaviour) | | | | | |
-| SimHub HTML rendering mode (issue #1494) | | | | | |
+| Desktop Chrome / Edge (baseline) | 120 | 30 | 30 | good | good |
+| DashStudio Web Page View — licensed tier | 30 | 30 | 26 | a bit jittery | good enough |
+| DashStudio Web Page View — free tier (10 fps dash cap behaviour) | — | — | — | — | *not measurable on a licensed install; see below* |
+| SimHub HTML rendering mode (issue #1494) | — | — | — | — | *not reproduced locally; known broken upstream, see below* |
+
+Notes on the measured rows: the desktop baseline is ideal (paint locks to
+the 30 Hz delivery; the 144 Hz-class display gives rAF 120). The licensed
+Web Page View runs its embedded browser at 30 fps rAF and paints ~26/s —
+occasional coalesced frames and slightly jittery cursor motion, visually
+acceptable for a flag panel whose effects are ≤ 5 Hz strobes.
 
 ## Verdict
 
-_TBD — after the matrix is measured: go / degraded call, the chosen overlay
-target fps, and any required workarounds (cache-busting, rendering-mode
-incompatibility notes, free-tier degradation)._
+**GO** — the Web Page View overlay is viable on the licensed tier.
+
+- **Overlay target fps: 30** (matches the WS delivery rate; the licensed
+  Web Page View sustains ~26 painted with acceptable jitter — no design
+  change warranted, flag effects are ≤ 5 Hz).
+- **Free tier: untested** (there is no way to simulate the free tier on a
+  licensed install; unlicensing the dev box wasn't worth it). The 10 fps
+  dash cap *may* throttle the overlay. Documented degradation, not a
+  redesign risk: even at a capture-side 10 fps the panel remains readable —
+  flag changes and ≤ 5 Hz strobes survive; only motion smoothness suffers.
+  Revisit if a free-tier user reports choppiness (the HUD + cursor
+  procedure above diagnoses it in one look).
+- **HTML rendering mode: do not enable.** Not reproduced locally (the
+  setting was not locatable on 9.11.21), but Web Page View is reported
+  broken under it upstream (SimHub issue #1494). User docs must state:
+  the uniflag overlay requires the default rendering mode.
+- Carry-forward for M5: cache-bust the page URL with a version query param
+  (Web Page View caches across plugin updates); localhost-only binding
+  stands.
