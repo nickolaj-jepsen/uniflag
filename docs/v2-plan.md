@@ -64,10 +64,14 @@ build/test harness, an isolated Windows CI job, and both unbounded external cloc
    `/p:SimHubDir=...`) and `plugin-test` (vstest/dotnet test).
 8. `.github/workflows/ci.yml`: add an **isolated, non-gating** `windows-latest`
    job (no `needs:`, not in any required-checks group): `actions/cache` on the
-   pinned SimHub installer, download on miss, extract reference DLLs (innoextract,
-   scripted fallback to silent `/VERYSILENT` install), msbuild, run the
-   placeholder test, upload the plugin DLL artifact. The three ubuntu Rust jobs
-   are untouched.
+   staged reference DLLs (~10 MB) keyed by the pinned SimHub version; on miss,
+   download the versioned GitHub-release installer and run a silent
+   `/VERYSILENT` install. *(M1 research finding, empirically verified: SimHub
+   9.11.21 uses Inno Setup 6.4.3 and innoextract ≤ 1.9 — the newest release —
+   cannot unpack it, so the silent install is the only viable path, not the
+   fallback the plan originally assumed.)* Then build, run the placeholder
+   test, upload the plugin DLL artifact. The three ubuntu Rust jobs are
+   untouched.
 
 **Verification:** SimHub on the dev box lists the plugin and renders the tab
 (screenshot in the tracking issue). CI green twice consecutively, second run
@@ -570,7 +574,7 @@ ship-on-test-PID release fallback (with its window fixed in M1).
 | # | Risk | Mitigation | Milestone |
 |---|------|-----------|-----------|
 | 1 | SimHub plugin API undocumented (lifecycle, settings persistence, tab hosting, DataUpdate cadence) | Skeleton spike before any feature code; findings captured in `docs/simhub-plugin-api.md`; pin one reference SimHub version | M1 |
-| 2 | CI SimHub-installer extraction flaky | Cache installer keyed by pinned version; innoextract with scripted silent-install fallback; job isolated and never gates Rust legs | M1 |
+| 2 | CI SimHub-installer extraction flaky | Cache staged reference DLLs keyed by pinned version; headless silent install (innoextract cannot unpack Inno Setup ≥ 6.4); job isolated and never gates Rust legs | M1 |
 | 3 | pid.codes approval unbounded, human-gated | PR filed day 1 with a defined fallback window; PID is a one-line shared constant; dual-PID discovery filter during transition; explicit ship-on-test-PID fallback decision at release | M1 / M9 / M12 |
 | 4 | GPLv3 plugin linking proprietary SimHub.Plugins.dll (licensing gray area) | Conscious recorded decision up front; DLLs never committed; release-zip audit confirms no proprietary DLLs ship | M1 / M12 |
 | 5 | Free-tier 10 fps cap and/or HTML rendering mode degrade/break the Web Page View overlay; 800×600 cap | Dummy-frame spike measures all matrix cells before web-sink design; verdict + workarounds in `docs/web-overlay.md`; documented degradation, not redesign | M2a / M5 |
