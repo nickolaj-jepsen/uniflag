@@ -38,6 +38,14 @@ Caveats:
   [#579](https://github.com/SHWotever/SimHub/issues/579) tracked broadening the unified
   flag list past the original blue/black/white/yellow/checkered five). Make sure the
   user's SimHub is a recent build before relying on them.
+- **Typed model vs property bag** (verified by reflection against
+  `GameReaderCommon.dll`, SimHub 9.x): on the typed `StatusDataBase` class that a C#
+  plugin reads in `DataUpdate`, the unified flags are **`int` 0/1, not `bool`**
+  (`Flag_Yellow`, `Flag_Blue`, `Flag_Black`, `Flag_White`, `Flag_Checkered`,
+  `Flag_Green`, `Flag_Orange`, plus a `Flag_Name` string). `Flag_Penalty` is **not** a
+  typed member on that build — it only exists (if at all) in SimHub's name-based
+  property bag that NCalc formulas resolve against. Plugin code should stick to the
+  seven typed flags.
 
 ## Per-sim raw-data fallbacks
 
@@ -79,6 +87,14 @@ The `SessionFlags` bits are documented by iRacing as `irsdk_Flags` — `Checkere
 the bitmask is there if we need precise behaviour (e.g. distinguishing displayed
 yellow vs waved yellow).
 
+Caution detection (salvaged from the v1 serial-profile research): the `Caution` bit
+in `SessionFlags` is **`0x4000`** — bit-test it in NCalc as
+`([...SessionFlags] & 0x4000) > 0`. The physical safety car is exposed separately as
+the **`SafetyCarActive`** property (`[DataCorePlugin.GameData.SafetyCarActive]`).
+Note that `SafetyCarActive` lives in the name-based property bag only — it is *not*
+a typed `StatusDataBase` member (verified by reflection, SimHub 9.x), so a C# plugin
+can only reach it via the property bag or via iRacing raw telemetry.
+
 ### rFactor 2 / Le Mans Ultimate
 
 Both expose a per-corner `Sectors` flag colour and a per-vehicle penalty status. The
@@ -89,9 +105,16 @@ unified `Flag_*` properties cover the common cases. For richer info:
 | `DataCorePlugin.GameRawData.Scoring.mYellowFlagState`          | Global yellow state |
 | `DataCorePlugin.GameRawData.Scoring.mSectorFlag[0..2]`         | Per-sector flag |
 | `DataCorePlugin.GameRawData.Telemetry.mPenalties`              | Active penalties |
+| `DataCorePlugin.GameRawData.Scoring.mGamePhase`                | Session phase enum — **5 = Green flag, 6 = Full Course Yellow / Safety Car** |
 
-(Names may differ slightly between rF2 and LMU — verify in the in-app properties
-picker once we have a running install.)
+The `mGamePhase` values above follow the ISI InternalsPlugin / rF2 shared-memory
+`GamePhase` enum (`GreenFlag = 5`, `FullCourseYellow = 6`). Beware: the v1
+serial-profile research (and the v1 profile in `simhub/README.md`) had these two
+**inverted** — don't copy that mapping. There is no phase value for "safety car
+deployed"; phase 6 covers both an FCY and an SC, so distinguish them via
+`mYellowFlagState` / the pace-car fields, not `mGamePhase` alone. Mods can deviate,
+so **verify against your install** in the in-app properties picker. (Other property
+names may also differ slightly between rF2 and LMU.)
 
 ### Assetto Corsa (vanilla)
 
@@ -144,7 +167,7 @@ double-waved flag. To recover that, fall back to raw data:
 | iRacing          | ✓   | ✓  | `SessionFlags` bitmask for `Caution` / `CautionWaving`; `SafetyCarActive` for SC |
 | F1 (Codemasters) | ✓   | ✓  | `m_safetyCarStatus` raw enum (0=none, 1=full SC, 2=VSC, 3=formation lap)    |
 | ACC              | —   | —  | No first-class VSC / SC concept exposed.                                    |
-| rF2 / LMU        | ✓   | ✓  | `mGamePhase` enum exposes pace-car / FCY phases.                            |
+| rF2 / LMU        | ✓   | ✓  | `mGamePhase` = 6 covers both FCY and a deployed SC (5 = green flag); tell them apart via `mYellowFlagState` / pace-car fields — verify per install. |
 | Automobilista 2  | ✓   | ✓  | `mSafetyCarStatus` raw field.                                               |
 
 ## Sector-localised yellows by sim
@@ -156,6 +179,48 @@ double-waved flag. To recover that, fall back to raw data:
 | rF2 / LMU               | `GameRawData.Scoring.mSectorFlag[0..2]` | One value per sector.                                               |
 | iRacing                 | (none)                                  | `SessionFlags` is global only.                                      |
 | Assetto Corsa (vanilla) | (none)                                  | No per-sector flags exposed.                                        |
+
+## Generic adapter mapping (plugin)
+
+How the v2 plugin's generic adapter (`plugin/src/Adapters/GenericAdapter.cs`) maps
+the unified layer to the render state. Doc and code state the same contract —
+change them together.
+
+- **Inputs**: the seven typed unified flags off `StatusDataBase` (int 0/1, see
+  above), `SessionTypeName`, and `GameData.GamePaused`. No raw data — per-sim
+  refinements (waves, VSC/SC, sector yellows) layer on in M10 via game-keyed
+  adapters that run after the generic one and override its result.
+- **Flag priority** when several are set (parity with the v1 NCalc formula that
+  shipped in `simhub/uniflag.shsds`):
+  **Yellow > Blue > Black > White > Checkered > Green > Orange.**
+  The unified layer never surfaces a red flag, so the generic adapter never emits
+  one either.
+- **Wave heuristic**: the unified booleans can't distinguish a displayed from a
+  waved flag, so a yellow is always treated as **single-waved** (the marshal is
+  signalling); every other flag is static. Same tradeoff the v1 formula made.
+- **Session mapping** from `SessionTypeName` (ordinal case-insensitive substring
+  matching): `GamePaused` → *Paused* outright; null/empty → *Unknown*; names
+  containing `practice`, `qualif`, `test`, `warmup`, `hotlap`, `hotstint` or
+  `superpole` → *PreRace* (covers iRacing's "Offline Testing" / "Lone Qualify" /
+  "Open Practice", ACC's "HOTSTINT" / "SUPERPOLE", Codemasters' "Practice n" /
+  "Qualifying n"); otherwise names containing `race` → *Racing*; anything else →
+  *Unknown*. Pre-race keywords are checked before `race` so a combined name can't
+  misroute.
+- **Caution / sectors**: always none/empty from the generic adapter — first-class
+  VSC/SC and sector-local yellows only exist in per-sim raw data (see the tables
+  above).
+- **No-game predicate**: the plugin shows its connected-idle marker (instead of
+  running the adapter) unless `GameRunning && !GameInMenu && NewData != null`.
+  A paused game still counts as live — it renders as the *Paused* session, not as
+  connected-idle.
+
+## Property-layer gotchas
+
+- **Bad property paths return null in NCalc**, and null silently breaks
+  string concatenation — the whole formula evaluates to an empty string and the
+  serial line is silently dropped rather than erroring. Wrap risky references in
+  `isnull(x, fallback)`. This applies to any name-based property access (raw-data
+  paths that differ per install are the usual culprits), not just flags.
 
 ## Sources
 

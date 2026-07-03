@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using GameReaderCommon;
 using SimHub.Plugins;
+using Uniflag.Adapters;
 using Uniflag.Rendering;
 
 namespace Uniflag
@@ -33,6 +34,11 @@ namespace Uniflag
         // ws://127.0.0.1:8972/ws. Real page hosting is designed in M5.
         private Spike.OverlaySpikeServer _spike;
 
+        // Telemetry path (M4): one reused snapshot + an immutable pipeline —
+        // zero avoidable allocation on the 60 Hz update thread.
+        private readonly TelemetrySnapshot _snapshot = new TelemetrySnapshot();
+        private readonly AdapterPipeline _adapters = new AdapterPipeline();
+
         public void Init(PluginManager pluginManager)
         {
             Settings = this.ReadCommonSettings("GeneralSettings", () => new UniflagSettings());
@@ -43,8 +49,27 @@ namespace Uniflag
 
         public void DataUpdate(PluginManager pluginManager, ref GameData data)
         {
-            // M4: feed the game adapters. Runs on SimHub's update thread (~60 Hz),
-            // also while no game is running — keep it allocation-light.
+            // Runs on SimHub's update thread (~60 Hz), including while no
+            // game is running. Everything is copied out of `data` by the
+            // extractor; the ref is never stored.
+            RendererLoop renderer = Renderer;
+            if (renderer == null)
+            {
+                return; // End() raced the update thread during teardown
+            }
+            GameDataExtractor.Extract(ref data, _snapshot);
+            if (!_snapshot.HasLiveSession)
+            {
+                // No live game session — the predicate is GameRunning &&
+                // !GameInMenu && NewData != null (TelemetrySnapshot
+                // .HasLiveSession): menus and process-only detection carry
+                // no usable flag state, so show the §7b connected-idle
+                // marker. This feeds the NORMAL channel; the settings-tab
+                // cycler's override keeps winning if active.
+                renderer.SetConnectedIdle();
+                return;
+            }
+            renderer.SetState(_adapters.Map(_snapshot), connected: true);
         }
 
         public void End(PluginManager pluginManager)

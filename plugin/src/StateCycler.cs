@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Debug state-cycler (docs/v2-plan.md M3 step 7): steps the renderer's
-// input through a deterministic tour of the full flag/wave/caution/sector
-// vocabulary so the preview animates with zero hardware and zero game.
-// Deliberately WPF-free (it only talks to the rendering core) so the
-// sequence and stepping logic are unit-testable from plain xunit.
+// Debug state-cycler (docs/v2-plan.md M3 step 7, arbitration reworked in
+// M4): steps the renderer's OVERRIDE input through a deterministic tour of
+// the full flag/wave/caution/sector vocabulary so the preview animates with
+// zero hardware and zero game — and keeps animating even while DataUpdate
+// feeds the normal input at 60 Hz. Deliberately WPF-free (it only talks to
+// the rendering core) so the sequence and stepping logic are unit-testable
+// from plain xunit.
 
 using System;
 using System.Collections.Generic;
@@ -14,12 +16,14 @@ using Uniflag.Rendering;
 namespace Uniflag
 {
     /// <summary>
-    /// Steps a <see cref="RendererLoop"/>'s input state through
+    /// Steps a <see cref="RendererLoop"/>'s override input through
     /// <see cref="BuildSequence"/> every <see cref="StepMilliseconds"/>,
-    /// always with <c>connected = true</c>. <see cref="Stop"/> parks the
-    /// renderer back on the blank disconnected default (the firmware's
-    /// boot-dark posture), so disabling the cycler never leaves a stale
-    /// flag frozen on the preview.
+    /// always with <c>connected = true</c>. The override channel wins over
+    /// the live telemetry feed, so the tour shows even mid-session;
+    /// <see cref="Stop"/> clears the override, falling the renderer back to
+    /// its last normal input (the live adapter view, or boot-dark blank if
+    /// nothing has fed it yet) — never a stale tour flag frozen on the
+    /// preview.
     ///
     /// Thread-safe; <see cref="Start"/>/<see cref="Stop"/> are idempotent
     /// and restart the tour from the beginning.
@@ -29,36 +33,39 @@ namespace Uniflag
         /// <summary>Dwell time per state — long enough to see every strobe/sweep.</summary>
         public const int StepMilliseconds = 2000;
 
-        private readonly Action<RenderState, bool> _apply;
+        private readonly Action<RenderState, bool> _applyOverride;
+        private readonly Action _clearOverride;
         private readonly IReadOnlyList<RenderState> _sequence;
         private readonly object _gate = new object();
         private Timer _timer;
         private int _index;
 
-        /// <summary>Cycle <paramref name="renderer"/>'s input state.</summary>
+        /// <summary>Cycle <paramref name="renderer"/>'s override input.</summary>
         public StateCycler(RendererLoop renderer)
-            : this(MakeApply(renderer))
+            : this(OverrideOf(renderer), renderer.ClearOverride)
         {
         }
 
         /// <summary>
-        /// Core constructor: <paramref name="apply"/> receives each
-        /// (state, connected) step. Used directly by tests to observe the
-        /// applied sequence without a renderer.
+        /// Core constructor: <paramref name="applyOverride"/> receives each
+        /// (state, connected) step; <paramref name="clearOverride"/> is
+        /// invoked once per <see cref="Stop"/>. Used directly by tests to
+        /// observe the applied sequence without a renderer.
         /// </summary>
-        public StateCycler(Action<RenderState, bool> apply)
+        public StateCycler(Action<RenderState, bool> applyOverride, Action clearOverride)
         {
-            _apply = apply ?? throw new ArgumentNullException(nameof(apply));
+            _applyOverride = applyOverride ?? throw new ArgumentNullException(nameof(applyOverride));
+            _clearOverride = clearOverride ?? throw new ArgumentNullException(nameof(clearOverride));
             _sequence = BuildSequence();
         }
 
-        private static Action<RenderState, bool> MakeApply(RendererLoop renderer)
+        private static Action<RenderState, bool> OverrideOf(RendererLoop renderer)
         {
             if (renderer == null)
             {
                 throw new ArgumentNullException(nameof(renderer));
             }
-            return renderer.SetState;
+            return renderer.SetOverrideState;
         }
 
         /// <summary>Whether the timer is currently stepping.</summary>
@@ -92,9 +99,9 @@ namespace Uniflag
         }
 
         /// <summary>
-        /// Stop stepping, wait for any in-flight step to finish, then park
-        /// the renderer input on the blank disconnected default. No-op if
-        /// not running.
+        /// Stop stepping, wait for any in-flight step to finish, then clear
+        /// the renderer's override so it falls back to the normal input.
+        /// No-op if not running.
         /// </summary>
         public void Stop()
         {
@@ -113,7 +120,7 @@ namespace Uniflag
                 // Dispose(WaitHandle) signals only after queued/executing
                 // callbacks complete. Even if the 1 s wait ever expired,
                 // OnTimer's gate below makes a straggler a no-op — the
-                // parked default cannot be overwritten either way.
+                // cleared override cannot be re-set by a stale step.
                 if (timer.Dispose(drained))
                 {
                     drained.WaitOne(1000);
@@ -121,10 +128,10 @@ namespace Uniflag
             }
             lock (_gate)
             {
-                // Skip the park if a racing Start already began a new tour.
+                // Skip the clear if a racing Start already began a new tour.
                 if (_timer == null)
                 {
-                    _apply(RenderState.Default, false);
+                    _clearOverride();
                 }
             }
         }
@@ -140,7 +147,7 @@ namespace Uniflag
             {
                 RenderState next = _sequence[_index];
                 _index = (_index + 1) % _sequence.Count;
-                _apply(next, true);
+                _applyOverride(next, true);
             }
         }
 
@@ -151,15 +158,15 @@ namespace Uniflag
             lock (_gate)
             {
                 // A callback that lost the race with Stop must not step (or
-                // clobber the parked default); manual Advance stays un-gated
-                // for tests/diagnostics.
+                // re-assert a cleared override); manual Advance stays
+                // un-gated for tests/diagnostics.
                 if (_timer == null)
                 {
                     return;
                 }
                 RenderState next = _sequence[_index];
                 _index = (_index + 1) % _sequence.Count;
-                _apply(next, true);
+                _applyOverride(next, true);
             }
         }
 

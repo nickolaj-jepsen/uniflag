@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// State-cycler tests (docs/v2-plan.md M3 step 7): the debug tour is
-// deterministic, covers the whole flag/wave/caution/sector vocabulary,
-// applies entries in order with connected=true, and stopping parks the
-// renderer input on the blank disconnected default.
+// State-cycler tests (docs/v2-plan.md M3 step 7, override semantics from
+// M4): the debug tour is deterministic, covers the whole
+// flag/wave/caution/sector vocabulary, applies entries in order on the
+// override channel with connected=true, and stopping clears the override
+// (falling the renderer back to its normal input) instead of clobbering it.
 
 using System;
 using System.Collections.Generic;
@@ -88,8 +89,10 @@ namespace Uniflag.Tests
         public void AdvanceAppliesTheSequenceInOrderConnectedAndWraps()
         {
             var applied = new List<KeyValuePair<RenderState, bool>>();
+            int cleared = 0;
             var cycler = new StateCycler(
-                (state, connected) => applied.Add(new KeyValuePair<RenderState, bool>(state, connected)));
+                (state, connected) => applied.Add(new KeyValuePair<RenderState, bool>(state, connected)),
+                () => cleared++);
             IReadOnlyList<RenderState> sequence = StateCycler.BuildSequence();
 
             int steps = sequence.Count + 3; // wrap past the end of the tour
@@ -99,6 +102,7 @@ namespace Uniflag.Tests
             }
 
             Assert.Equal(steps, applied.Count);
+            Assert.Equal(0, cleared); // Advance never touches the clear path
             for (int i = 0; i < steps; i++)
             {
                 Assert.True(applied[i].Value, $"step {i} must apply connected=true");
@@ -107,17 +111,29 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void StopParksTheRendererOnTheDisconnectedDefault()
+        public void StopClearsTheOverrideAfterTheLastStep()
         {
             var gate = new object();
-            var applied = new List<KeyValuePair<RenderState, bool>>();
-            using var cycler = new StateCycler((state, connected) =>
-            {
-                lock (gate)
+            // Interleaved event log: "step" per override application,
+            // "clear" per clear-override call — Stop's clear must come after
+            // every step, exactly once.
+            var events = new List<string>();
+            using var cycler = new StateCycler(
+                (state, connected) =>
                 {
-                    applied.Add(new KeyValuePair<RenderState, bool>(state, connected));
-                }
-            });
+                    Assert.True(connected, "tour steps always apply connected=true");
+                    lock (gate)
+                    {
+                        events.Add("step");
+                    }
+                },
+                () =>
+                {
+                    lock (gate)
+                    {
+                        events.Add("clear");
+                    }
+                });
 
             cycler.Start();
             Assert.True(cycler.IsRunning);
@@ -126,7 +142,7 @@ namespace Uniflag.Tests
             {
                 lock (gate)
                 {
-                    if (applied.Count >= 1)
+                    if (events.Count >= 1)
                     {
                         break;
                     }
@@ -139,12 +155,22 @@ namespace Uniflag.Tests
 
             lock (gate)
             {
-                // Stop drains the in-flight step, then applies the blank
-                // disconnected default — always the final application.
-                KeyValuePair<RenderState, bool> last = applied[applied.Count - 1];
-                Assert.False(last.Value, "the final application must be disconnected");
-                AssertStatesEqual(RenderState.Default, last.Key);
+                // Stop drains the in-flight step, then clears the override —
+                // always the final event, and never a state application.
+                Assert.Equal("clear", events[events.Count - 1]);
+                Assert.Single(events.FindAll(e => e == "clear"));
             }
+        }
+
+        [Fact]
+        public void StopWithoutStartDoesNotClear()
+        {
+            int cleared = 0;
+            var cycler = new StateCycler((state, connected) => { }, () => cleared++);
+            // Never started: there is no override to clear — a spurious
+            // clear could cancel someone else's override.
+            cycler.Stop();
+            Assert.Equal(0, cleared);
         }
     }
 }

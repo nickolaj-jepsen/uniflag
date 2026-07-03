@@ -3,11 +3,12 @@
 // The one-renderer→N-sinks core (docs/v2-plan.md M3 step 6 and the
 // "Renderer clock discipline" policy): a dedicated background thread ticks
 // the 60 fps internal frame counter that all ported animation math assumes
-// (docs/effects-spec.md §1), paints the whole panel via Effects.Paint into
-// a back buffer, publishes the completed 3072-byte RGB888 frame, and hands
-// it to every registered IFrameSink. Sinks sample this clock; the counter
-// is never rebased to a sink's rate (30 fps USB, the overlay's measured
-// fps, WPF's display cadence) — that would halve every strobe rate.
+// (docs/effects-spec.md §1), paints the whole panel via Effects.Paint (or
+// IdleEffects.PaintConnectedIdle in the connected-idle mode) into a back
+// buffer, publishes the completed 3072-byte RGB888 frame, and hands it to
+// every registered IFrameSink. Sinks sample this clock; the counter is
+// never rebased to a sink's rate (30 fps USB, the overlay's measured fps,
+// WPF's display cadence) — that would halve every strobe rate.
 //
 // WPF-free by contract: plugin/src/Rendering/ must stay loadable from plain
 // xunit with no SimHub-assembly or System.Windows dependency.
@@ -20,11 +21,46 @@ using System.Threading;
 namespace Uniflag.Rendering
 {
     /// <summary>
+    /// What the renderer paints each tick — the three-state idle model of
+    /// docs/effects-spec.md §7, from the plugin's point of view.
+    /// </summary>
+    public enum RenderInputMode
+    {
+        /// <summary>
+        /// Boot-dark blank panel (the firmware's disconnected posture,
+        /// §7 state (a) as seen host-side). The initial mode, and what
+        /// <see cref="RendererLoop.SetState"/> selects for
+        /// <c>connected = false</c>.
+        /// </summary>
+        Blank,
+
+        /// <summary>
+        /// Plugin connected-idle (§7b): renderer alive, no game session.
+        /// Painted by <see cref="IdleEffects.PaintConnectedIdle"/> — never
+        /// by <see cref="Effects.Paint"/>, which stays golden-frozen.
+        /// </summary>
+        ConnectedIdle,
+
+        /// <summary>Live game state through <see cref="Effects.Paint"/>.</summary>
+        Live,
+    }
+
+    /// <summary>
     /// The renderer loop. Lifecycle is ref-counted on sink registration: the
     /// render thread runs while at least one sink is registered and stops
     /// when the last one is removed (<see cref="Dispose"/> stops it
     /// unconditionally). The animation clock (frame index, flag age) is
     /// preserved across stop/start cycles.
+    ///
+    /// <para><b>Input arbitration:</b> two channels feed the loop. The
+    /// <i>normal</i> channel (<see cref="SetState"/>,
+    /// <see cref="SetConnectedIdle"/>) is for the live telemetry path; the
+    /// <i>override</i> channel (<see cref="SetOverrideState"/>,
+    /// <see cref="ClearOverride"/>) is for diagnostics like the settings-tab
+    /// state cycler. While an override is active it wins every tick — a
+    /// 60 Hz DataUpdate stream cannot clobber it; clearing it falls back to
+    /// whatever the normal channel last said (boot-dark blank if it never
+    /// spoke).</para>
     ///
     /// <para><b>Hot path:</b> zero allocation per frame — the paint target,
     /// the publish buffer and the sink snapshot array are all reused;
@@ -58,12 +94,16 @@ namespace Uniflag.Rendering
         private Thread _retiring;
         private bool _disposed;
 
-        // Latest input, latched once at the top of every tick. Boots
-        // disconnected — mirroring the firmware's boot-dark posture
-        // (firmware/src/runtime.rs:99-102) — until someone calls SetState.
+        // Latest input, latched once at the top of every tick. The normal
+        // channel boots blank — mirroring the firmware's boot-dark posture
+        // (firmware/src/runtime.rs:99-102) — until someone feeds it; the
+        // override channel, when active, shadows it entirely.
         private readonly object _inputGate = new object();
-        private RenderState _inputState = RenderState.Default;
-        private bool _inputConnected;
+        private RenderInputMode _normalMode = RenderInputMode.Blank;
+        private RenderState _normalState = RenderState.Default;
+        private bool _overrideActive;
+        private RenderInputMode _overrideMode = RenderInputMode.Blank;
+        private RenderState _overrideState = RenderState.Default;
 
         // Double buffer: _back is painted each tick; _front is the published
         // copy handed to sinks and pull-readers, swapped in under
@@ -107,19 +147,67 @@ namespace Uniflag.Rendering
         }
 
         /// <summary>
-        /// Replace the renderer's input. Thread-safe; the new value is
-        /// latched at the start of the next tick. Flag-age tracking (red and
-        /// green onsets, the ready orb's 5 s fallback) resets whenever the
-        /// latched <see cref="RenderState.Flag"/> differs from the previous
-        /// tick's — session or caution changes do not reset it, mirroring
+        /// Replace the renderer's <b>normal</b> input. Thread-safe; the new
+        /// value is latched at the start of the next tick (or shadowed until
+        /// an active override clears). Flag-age tracking (red and green
+        /// onsets, the ready orb's 5 s fallback) resets whenever the latched
+        /// <see cref="RenderState.Flag"/> differs from the previous tick's —
+        /// session or caution changes do not reset it, mirroring
         /// firmware/src/runtime.rs:117-120.
         /// </summary>
         public void SetState(RenderState state, bool connected)
         {
             lock (_inputGate)
             {
-                _inputState = state;
-                _inputConnected = connected;
+                _normalMode = connected ? RenderInputMode.Live : RenderInputMode.Blank;
+                _normalState = state;
+            }
+        }
+
+        /// <summary>
+        /// Switch the <b>normal</b> input to the connected-idle marker
+        /// (docs/effects-spec.md §7b) — renderer alive, no game session.
+        /// The latched state becomes <see cref="RenderState.Default"/>
+        /// (flag None), so flag-age bookkeeping keeps the firmware's
+        /// posture: a game session opening straight into a flag replays
+        /// that flag's onset, while opening flagless does not restart the
+        /// ready-orb window.
+        /// </summary>
+        public void SetConnectedIdle()
+        {
+            lock (_inputGate)
+            {
+                _normalMode = RenderInputMode.ConnectedIdle;
+                _normalState = RenderState.Default;
+            }
+        }
+
+        /// <summary>
+        /// Activate (or update) the <b>override</b> input: it wins over the
+        /// normal channel every tick until <see cref="ClearOverride"/>.
+        /// Same (state, connected) semantics as <see cref="SetState"/>;
+        /// flag-age tracking follows whichever channel is being painted.
+        /// </summary>
+        public void SetOverrideState(RenderState state, bool connected)
+        {
+            lock (_inputGate)
+            {
+                _overrideActive = true;
+                _overrideMode = connected ? RenderInputMode.Live : RenderInputMode.Blank;
+                _overrideState = state;
+            }
+        }
+
+        /// <summary>
+        /// Deactivate the override input, falling back to the last normal
+        /// input (boot-dark blank if the normal channel was never fed).
+        /// Idempotent.
+        /// </summary>
+        public void ClearOverride()
+        {
+            lock (_inputGate)
+            {
+                _overrideActive = false;
             }
         }
 
@@ -335,16 +423,27 @@ namespace Uniflag.Rendering
 
         private void RenderTick(long frameIndex)
         {
+            RenderInputMode mode;
             RenderState state;
-            bool connected;
             lock (_inputGate)
             {
-                state = _inputState;
-                connected = _inputConnected;
+                if (_overrideActive)
+                {
+                    mode = _overrideMode;
+                    state = _overrideState;
+                }
+                else
+                {
+                    mode = _normalMode;
+                    state = _normalState;
+                }
             }
 
             // Wrapping u32 frame counter + flag age, exactly as the firmware
-            // computes them (runtime.rs:125, 133).
+            // computes them (runtime.rs:125, 133). Tracking runs in every
+            // mode — ConnectedIdle latches RenderState.Default (flag None),
+            // matching the firmware's behaviour of keeping its last flag
+            // bookkeeping across disconnected spells.
             uint frame = unchecked((uint)frameIndex);
             if (state.Flag != _lastFlag)
             {
@@ -353,7 +452,16 @@ namespace Uniflag.Rendering
             }
             uint flagAge = unchecked(frame - _flagChangedAtFrame);
 
-            Effects.Paint(_back, state, frame, flagAge, connected);
+            if (mode == RenderInputMode.ConnectedIdle)
+            {
+                // Separate painter by contract: Effects.Paint is pinned by
+                // the golden corpus and must not grow new code paths.
+                IdleEffects.PaintConnectedIdle(_back, frame);
+            }
+            else
+            {
+                Effects.Paint(_back, state, frame, flagAge, mode == RenderInputMode.Live);
+            }
 
             lock (_publishGate)
             {

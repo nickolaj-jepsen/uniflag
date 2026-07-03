@@ -196,7 +196,11 @@ layered-adapter architecture; connected-idle implemented per the M3 spec.
    DataCorePlugin `Flag_*` normalized properties per
    `docs/simhub-flag-properties.md`. **Salvage now**, before simhub/README.md is
    replaced in M11: the per-sim raw-property research (iRacing SessionFlags bit
-   0x4000, ACC `globalYellow1/2/3`, rF2/LMU `mGamePhase` 5=SC 6=FCY) into that doc.
+   0x4000, ACC `globalYellow1/2/3`, rF2/LMU `mGamePhase`) into that doc.
+   *M4 review correction:* the v1 research (and this plan as originally written)
+   had `mGamePhase` inverted as "5=SC 6=FCY"; the canonical ISI/S397 enum is
+   **5 = green flag, 6 = full course yellow / safety car** — SC vs FCY must be
+   distinguished via `mYellowFlagState` / pace-car fields, not `mGamePhase` alone.
 3. Implement plugin connected-idle (dim marker) vs game-live rendering per the
    three-state spec authored in M3; renderer runs whenever ANY sink is active.
 

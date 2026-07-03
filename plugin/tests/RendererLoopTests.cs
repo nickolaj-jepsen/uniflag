@@ -2,7 +2,8 @@
 //
 // Renderer-loop unit tests (docs/v2-plan.md M3 step 6): frame-index
 // monotonicity, sink isolation (one broken sink must not kill the loop),
-// the sink-refcounted lifecycle, and the published-frame pull contract.
+// the sink-refcounted lifecycle, the published-frame pull contract, and the
+// M4 input arbitration (normal vs override channel, connected-idle mode).
 // Pure Uniflag.Rendering — no WPF, no SimHub assemblies.
 
 using System;
@@ -157,7 +158,7 @@ namespace Uniflag.Tests
             var dest = new byte[FrameBuffer.ByteLength];
             Assert.Equal(-1, loop.CopyLatestFrame(dest));
 
-            // The default input is disconnected, which paints every pixel
+            // The default input is the blank mode, which paints every pixel
             // black (the firmware boot-dark posture) — deterministic bytes
             // without pinning any animation timing.
             var sink = new RecordingSink();
@@ -168,6 +169,179 @@ namespace Uniflag.Tests
 
             Assert.True(index >= 0, "expected a published frame index");
             Assert.All(dest, b => Assert.Equal((byte)0, b));
+        }
+
+        // -------------------------------------------------------------------
+        // M4 input arbitration. The frame predicates below hold at EVERY
+        // frame index (static cloth-wave fills never strobe dark; the idle
+        // marker's breathe never leaves its range), so no animation timing
+        // is pinned.
+        // -------------------------------------------------------------------
+
+        private static RenderState LiveFlag(Flag flag)
+        {
+            RenderState state = RenderState.Default;
+            state.Flag = flag;
+            state.Session = Session.Racing;
+            return state;
+        }
+
+        // Blue static base: scale_rgb((0,64,255), 150..255) — every pixel
+        // has R == 0 and B > 0 at any frame.
+        private static bool IsBlueFill(byte[] frame)
+        {
+            for (int i = 0; i < frame.Length; i += 3)
+            {
+                if (frame[i] != 0 || frame[i + 2] == 0)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Yellow static base: scale_rgb((255,220,0), 150..255) — every pixel
+        // has R > 0 and B == 0 at any frame.
+        private static bool IsYellowFill(byte[] frame)
+        {
+            for (int i = 0; i < frame.Length; i += 3)
+            {
+                if (frame[i] == 0 || frame[i + 2] != 0)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Connected-idle (docs/effects-spec.md §7b): only (15,31) and
+        // (16,31) lit, both dim blue within the breathe range (0, 2..6,
+        // 8..24) — true at any frame.
+        private static bool IsConnectedIdle(byte[] frame)
+        {
+            for (int p = 0; p < FrameBuffer.Width * FrameBuffer.Height; p++)
+            {
+                int x = p % FrameBuffer.Width;
+                int y = p / FrameBuffer.Width;
+                int i = p * 3;
+                if (y == 31 && (x == 15 || x == 16))
+                {
+                    if (frame[i] != 0
+                        || frame[i + 1] < 2 || frame[i + 1] > 6
+                        || frame[i + 2] < 8 || frame[i + 2] > 24)
+                    {
+                        return false;
+                    }
+                }
+                else if (frame[i] != 0 || frame[i + 1] != 0 || frame[i + 2] != 0)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool IsAllBlack(byte[] frame)
+        {
+            foreach (byte b in frame)
+            {
+                if (b != 0)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Wait until the published frame satisfies <paramref name="predicate"/>
+        /// (input changes latch at the next tick, so a matching frame
+        /// appears within a tick or two).
+        /// </summary>
+        private static void WaitForFrame(RendererLoop loop, Func<byte[], bool> predicate, string what)
+        {
+            var dest = new byte[FrameBuffer.ByteLength];
+            WaitUntil(() => loop.CopyLatestFrame(dest) >= 0 && predicate(dest), what);
+        }
+
+        [Fact]
+        public void ConnectedIdleModePaintsTheIdleMarker()
+        {
+            using var loop = new RendererLoop();
+            loop.SetConnectedIdle();
+            var sink = new RecordingSink();
+            loop.AddSink(sink);
+            WaitForFrame(loop, IsConnectedIdle, "the §7b connected-idle frame");
+            loop.RemoveSink(sink);
+        }
+
+        [Fact]
+        public void OverrideWinsAndClearingFallsBackToTheNormalInput()
+        {
+            using var loop = new RendererLoop();
+            var sink = new RecordingSink();
+            loop.AddSink(sink);
+
+            // Normal input: live blue.
+            loop.SetState(LiveFlag(Flag.Blue), connected: true);
+            WaitForFrame(loop, IsBlueFill, "the normal-input blue frame");
+
+            // Override with live yellow — must clobber the normal view.
+            loop.SetOverrideState(LiveFlag(Flag.Yellow), connected: true);
+            WaitForFrame(loop, IsYellowFill, "the override yellow frame");
+
+            // Normal input keeps updating underneath: it must NOT show.
+            // Wait for at least two further ticks, then check the frame
+            // painted after the normal-channel update is still the override.
+            loop.SetState(LiveFlag(Flag.Blue), connected: true);
+            var scratch = new byte[FrameBuffer.ByteLength];
+            long seen = loop.CopyLatestFrame(scratch);
+            WaitUntil(
+                () => loop.CopyLatestFrame(scratch) >= seen + 2,
+                "two ticks after the shadowed normal-channel update");
+            Assert.True(IsYellowFill(scratch), "override must keep winning over normal-channel updates");
+
+            // Clearing the override falls back to the last normal input.
+            loop.ClearOverride();
+            WaitForFrame(loop, IsBlueFill, "the blue frame after clearing the override");
+
+            loop.RemoveSink(sink);
+        }
+
+        [Fact]
+        public void ClearingTheOverrideWithoutNormalInputFallsBackToBlank()
+        {
+            using var loop = new RendererLoop();
+            var sink = new RecordingSink();
+            loop.AddSink(sink);
+
+            loop.SetOverrideState(LiveFlag(Flag.Yellow), connected: true);
+            WaitForFrame(loop, IsYellowFill, "the override yellow frame");
+
+            // The normal channel was never fed: fall back to boot-dark.
+            loop.ClearOverride();
+            WaitForFrame(loop, IsAllBlack, "the blank frame after clearing the override");
+
+            loop.RemoveSink(sink);
+        }
+
+        [Fact]
+        public void OverrideWinsOverConnectedIdle()
+        {
+            using var loop = new RendererLoop();
+            var sink = new RecordingSink();
+            loop.AddSink(sink);
+
+            // The DataUpdate arbitration case: cycler override active while
+            // the telemetry path keeps reporting "no game".
+            loop.SetOverrideState(LiveFlag(Flag.Yellow), connected: true);
+            loop.SetConnectedIdle();
+            WaitForFrame(loop, IsYellowFill, "the override frame despite connected-idle on the normal channel");
+
+            loop.ClearOverride();
+            WaitForFrame(loop, IsConnectedIdle, "the connected-idle frame after clearing the override");
+
+            loop.RemoveSink(sink);
         }
 
         [Fact]
