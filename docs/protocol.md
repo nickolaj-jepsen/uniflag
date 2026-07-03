@@ -183,3 +183,38 @@ double-buffer + `set_pixel` blit + `present`).
 
 Known non-goals of the spike: Hello/HelloAck, Brightness, ButtonEvent,
 idle fallback, and the CDC TX path — all M6/M8 scope.
+
+## M8 bring-up measurements (2026-07-04, dev box → Cosmic Unicorn)
+
+Setup: production M8 firmware (commit `ba52794`, fw 0.1.0) flashed via
+`just flash`; `uniflag-cli stream` (30 fps, epoch-anchored deadlines)
+over Windows 11 USB FS on COM5. Everything the M2b spike left as
+non-goals is now covered.
+
+- **Handshake**: Hello → HelloAck round-trip on every (re)connect;
+  device reports `fw 0.1.0, protocol v1, panel 32x32`. Brightness
+  accepted and re-sent by the CLI per (re)connect.
+- **30-minute soak**: **54,000 frames in 1800.0006 s = 30.000 fps
+  exactly; 0 skipped deadlines, 0 link errors, 0 watchdog resets.**
+  (3× the M2b spike duration, on the full dispatcher instead of the
+  Frame-only spike path.)
+- **Patterns** *(maintainer-verified visually)*: solid, gradient,
+  checkerboard, moving-pixel, and the brightness sweep all render
+  correctly at 30 fps.
+- **ButtonEvents**: 12 short presses across all three buttons
+  (GPIO 21/26/27) and 2 long presses received host-side with correct
+  ids/kinds. Classify-on-release verified on hardware: long presses
+  produced **no** accompanying short event.
+- **Local screens** *(maintainer-verified visually)*: §7a amber
+  heartbeat at (0,0) on boot and within ~1.5 s of stream end;
+  long-press toggles the test-pattern + version screen and back while
+  frames keep streaming underneath.
+- **Reconnect**: an unplanned mid-stream link loss (cable strain,
+  `os error 22`) exercised the real recovery path: the CLI detected the
+  dead write, waited for COM5 to re-enumerate, reopened, re-handshook,
+  re-sent Brightness, and resumed at 30 fps — no process restart, no
+  device power cycle beyond the fault itself.
+- **Deferred**: the forced-panic watchdog-recovery flash test (panic →
+  spin → 8 s watchdog reset). The panic/watchdog design is unchanged
+  from v1 and the feed task survived the rework; revisit if a hang is
+  ever observed in the field.
