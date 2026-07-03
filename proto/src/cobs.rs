@@ -6,11 +6,15 @@
 //! [`decode`]. That property is what makes stream resync trivial: after
 //! any corruption, skip to the next `0x00` and the decoder is realigned.
 //!
-//! Canonical form: this encoder always terminates with a group header, so
-//! a payload that is an exact multiple of 254 non-zero bytes ends with a
-//! trailing `0x01` code byte (matching the reference C implementation and
-//! the common Rust/C# ports). The cross-language golden vectors freeze
-//! this choice; the decoder accepts both forms.
+//! Canonical form: this encoder always terminates with a group header —
+//! Cheshire & Baker's Listing 1 (`StuffData`), the same convention as
+//! Craig McQueen's cobs-c and the jamesmunns `cobs` crate — so a payload
+//! that is an exact multiple of 254 non-zero bytes ends with a trailing
+//! `0x01` code byte. **Beware: Wikipedia's `cobsEncode` example omits that
+//! trailing byte**, and the divergence is silent under round-trip testing
+//! because the decoder (like every decoder) accepts both forms. The
+//! cross-language golden vectors freeze the Listing-1 choice and include a
+//! 254-boundary case precisely so a Wikipedia-derived port fails loudly.
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -23,7 +27,9 @@ pub enum Error {
 }
 
 /// Worst-case encoded size for a `payload_len`-byte payload (excluding the
-/// wire delimiter): one code byte per started 254-byte group.
+/// wire delimiter): one code byte per started 254-byte group, plus the
+/// always-emitted final group header (an extra byte when the payload is an
+/// exact non-zero multiple of 254). Exactly tight for zero-free payloads.
 pub const fn max_encoded_len(payload_len: usize) -> usize {
     payload_len + payload_len / 254 + 1
 }

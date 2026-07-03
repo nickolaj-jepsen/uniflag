@@ -104,7 +104,13 @@ pub fn encode(
     wire: &mut [u8],
 ) -> Result<usize, Error> {
     let raw_len = write_raw(ty, payload, scratch)?;
-    let enc_len = cobs::encode(&scratch[..raw_len], wire).map_err(Error::Cobs)?;
+    // An undersized `wire` reports BufferTooSmall regardless of whether the
+    // COBS layer or the delimiter byte ran out of room — one caller
+    // mistake, one error value.
+    let enc_len = cobs::encode(&scratch[..raw_len], wire).map_err(|e| match e {
+        cobs::Error::BufferTooSmall => Error::BufferTooSmall,
+        other => Error::Cobs(other),
+    })?;
     if enc_len >= wire.len() {
         return Err(Error::BufferTooSmall);
     }
@@ -115,6 +121,12 @@ pub fn encode(
 /// Validate a COBS-decoded raw packet and split it into (type byte,
 /// payload). The type byte is returned raw so callers can ignore unknown
 /// types explicitly (forward compat) rather than erroring here.
+///
+/// The payload length is **not** validated against the type — a valid-CRC
+/// `Frame` with 5 bytes of payload parses fine. Callers must length-check
+/// before use (e.g. a Frame payload must be exactly
+/// [`FRAME_PAYLOAD_LEN`]); typed accessors that enforce this arrive with
+/// the M6 packet completion.
 pub fn parse_raw(raw: &[u8]) -> Result<(u8, &[u8]), Error> {
     if raw.len() < 3 {
         return Err(Error::TooShort);
@@ -188,6 +200,25 @@ mod tests {
         let (ty, payload) = parse_raw(&raw[..raw_len]).expect("parse");
         assert_eq!(ty, PacketType::Hello.to_byte());
         assert!(payload.is_empty());
+    }
+
+    #[test]
+    fn undersized_wire_buffer_is_one_error() {
+        // Both exhaustion points (COBS layer vs delimiter byte) report the
+        // same caller mistake with the same error value.
+        let payload = [0x01u8; FRAME_PAYLOAD_LEN];
+        let mut scratch = [0u8; MAX_RAW_LEN];
+        let mut wire = [0u8; MAX_WIRE_LEN];
+        assert!(encode(PacketType::Frame, &payload, &mut scratch, &mut wire).is_ok());
+        for short in [MAX_WIRE_LEN - 1, MAX_WIRE_LEN - 2] {
+            let res = encode(
+                PacketType::Frame,
+                &payload,
+                &mut scratch,
+                &mut wire[..short],
+            );
+            assert_eq!(res, Err(Error::BufferTooSmall), "wire len {short}");
+        }
     }
 
     #[test]

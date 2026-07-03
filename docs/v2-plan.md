@@ -249,7 +249,11 @@ round-trip. ASCII codec still untouched (render/sim depend on it until M7/M11).
 3. Check in golden vectors at top-level `testdata/proto/` (C#-reachable without
    entering a Rust crate): every packet **pre-COBS (with CRC) and post-COBS
    framed**, plus **negative vectors** (bad CRC, truncated frame,
-   garbage-then-resync).
+   garbage-then-resync), plus a **COBS 254-boundary vector** — a packet whose
+   raw form ends in exactly 254 non-zero bytes right after a zero — because
+   the widely copied Wikipedia `cobsEncode` variant silently omits the
+   canonical trailing group header on exactly that case (M2b verification
+   finding); a C# port derived from it must fail the vectors loudly.
 4. Rust tests: exhaustive round-trips in the style of the 28 inline tests in
    `proto/src/lib.rs`, plus golden decode/encode byte-exact, in a new
    `proto/tests/` integration-test dir (picked up automatically —
