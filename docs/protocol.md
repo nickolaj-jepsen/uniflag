@@ -1,11 +1,11 @@
 # uniflag v2 wire protocol
 
-> **Status: DRAFT (M2b).** The packet set freezes in M6; this document
-> currently covers the framing layers and the `Frame` packet proven by
-> the M2b streaming spike, plus the spike's measured results. Layouts
-> here are implemented in `proto/src/{crc,cobs,packet}.rs` — the code
-> and its tests are authoritative until the M6 freeze adds golden
-> vectors.
+> **Status: FROZEN (M6).** The packet set is complete as of M6; the byte
+> vectors under `testdata/proto/` are the frozen conformance fixtures
+> that both the Rust and C# codecs must round-trip. Layouts here are
+> implemented in `proto/src/{crc,cobs,packet}.rs`; this document, the
+> code, and the vectors must agree — any wire-visible change bumps
+> `PROTOCOL_VERSION`.
 
 ## Transport
 
@@ -40,18 +40,93 @@ type   := u8
 
 | type | direction | name | payload |
 |------|-----------|------|---------|
-| 0x01 | host→device | Hello | *(M6)* |
+| 0x01 | host→device | Hello | `[protocol_version: u8]` — exactly 1 B |
 | 0x02 | host→device | Frame | 3072 B RGB888, row-major from top-left, 3 B/pixel |
-| 0x03 | host→device | Brightness | *(M6)* |
-| 0x81 | device→host | HelloAck | *(M6: fw version, protocol version, panel W×H)* |
-| 0x82 | device→host | ButtonEvent | *(M6)* |
+| 0x03 | host→device | Brightness | `[value: u8]` — exactly 1 B |
+| 0x81 | device→host | HelloAck | `[protocol_version: u8][width: u8][height: u8][fw_version: ASCII…]` — ≥ 3 B |
+| 0x82 | device→host | ButtonEvent | `[button: u8][kind: u8]` — exactly 2 B |
 
 Host→device types have the high bit clear; device→host set.
-`PROTOCOL_VERSION = 1` (carried in HelloAck from M6).
+`PROTOCOL_VERSION = 1` (carried in both Hello and HelloAck).
 
 Sizes: max raw packet (Frame) = 3075 B; max on-the-wire packet
 incl. delimiter = **3089 B** (`packet::MAX_WIRE_LEN`, sizes the
 firmware RX accumulator).
+
+## Payload layouts
+
+All multi-byte values are little-endian (today the only multi-byte field
+in the protocol is the framing-layer CRC-16; every payload field below is
+a single byte or a byte string). A known packet type whose payload length
+doesn't match its layout is **dropped by the receiver**
+(`packet::Error::BadLength` in `proto`) — the same silent-drop posture as
+a bad CRC. Unknown packet *types* are the opposite: always passed through
+parsing and ignored, never an error (forward compat).
+
+### Hello (`0x01`, host→device) — exactly 1 byte
+
+| offset | size | field | notes |
+|--------|------|-------|-------|
+| 0 | 1 | `protocol_version` | the host's `PROTOCOL_VERSION` |
+
+### Frame (`0x02`, host→device) — exactly 3072 bytes
+
+RGB888, row-major from the top-left, 3 bytes per pixel. With `(x, y)`
+0-indexed, `x` growing right and `y` growing down:
+
+| offset | size | field |
+|--------|------|-------|
+| `(y*32 + x)*3 + 0` | 1 | red, pixel `(x, y)` |
+| `(y*32 + x)*3 + 1` | 1 | green, pixel `(x, y)` |
+| `(y*32 + x)*3 + 2` | 1 | blue, pixel `(x, y)` |
+
+### Brightness (`0x03`, host→device) — exactly 1 byte
+
+| offset | size | field | notes |
+|--------|------|-------|-------|
+| 0 | 1 | `value` | display brightness multiplier `0..=255`; the device applies it to each channel **pre-gamma** as `(c * (value + 1)) >> 8` |
+
+### HelloAck (`0x81`, device→host) — minimum 3 bytes
+
+| offset | size | field | notes |
+|--------|------|-------|-------|
+| 0 | 1 | `protocol_version` | the device's `PROTOCOL_VERSION` |
+| 1 | 1 | `width` | panel width in pixels (32) |
+| 2 | 1 | `height` | panel height in pixels (32) |
+| 3 | remainder | `fw_version` | firmware version string: ASCII, no NUL terminator, may be empty. No wire-level length cap; the Rust *encoder* caps it at `packet::MAX_FW_VERSION_LEN` (32 B) — parsers must accept any length the framing allows |
+
+### ButtonEvent (`0x82`, device→host) — exactly 2 bytes
+
+| offset | size | field | notes |
+|--------|------|-------|-------|
+| 0 | 1 | `button` | 0 = GPIO 21 (brightness up), 1 = GPIO 26 (brightness down), 2 = GPIO 27 (sleep) |
+| 1 | 1 | `kind` | 0 = short press (classified on release), 1 = long press. A long press never *also* fires a short press |
+
+Only the 2-byte length is frozen; the `button`/`kind` id spaces are open.
+Receivers must ignore unassigned values rather than reject the packet, so
+future firmware buttons don't break older hosts.
+
+## Handshake
+
+```text
+host                                        device
+  ── Hello { protocol_version } ──────────→        on every (re)connect
+  ←─ HelloAck { proto, w, h, fw_version } ─
+  ── Brightness { value } ────────────────→        re-sent on every (re)connect
+  ── Frame, Frame, … (30 fps) ────────────→        stream-as-heartbeat
+  ←─ ButtonEvent ───────────────────────────       any time after HelloAck
+```
+
+- On every connect and reconnect the host opens with `Hello`, carrying
+  its `PROTOCOL_VERSION`.
+- The device replies `HelloAck` with its own protocol version, panel
+  dimensions, and firmware version.
+- The plugin validates **protocol-version equality**. On mismatch it
+  refuses to drive the device and surfaces the mismatch to the user
+  (refuse-with-message — no silent fallback, no best-effort mode).
+- `Brightness` is re-sent by the host on every (re)connect; the device
+  never assumes a value survives a reconnect.
+- After `HelloAck`, `ButtonEvent` packets flow device→host at any time.
 
 ## Stream-as-heartbeat
 
