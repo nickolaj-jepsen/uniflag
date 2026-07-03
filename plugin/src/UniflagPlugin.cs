@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using GameReaderCommon;
 using SimHub.Plugins;
+using Uniflag.Rendering;
 
 namespace Uniflag
 {
@@ -20,6 +21,13 @@ namespace Uniflag
 
         internal UniflagSettings Settings { get; private set; }
 
+        /// <summary>
+        /// The 60 fps rendering core (M3). Created in Init, disposed in End;
+        /// its thread only runs while at least one sink is registered (e.g.
+        /// the settings tab's preview while visible).
+        /// </summary>
+        internal RendererLoop Renderer { get; private set; }
+
         // M2a throwaway (delete with Spike/ once docs/web-overlay.md has its
         // verdict): serves the overlay test page's WS frames on
         // ws://127.0.0.1:8972/ws. Real page hosting is designed in M5.
@@ -28,6 +36,7 @@ namespace Uniflag
         public void Init(PluginManager pluginManager)
         {
             Settings = this.ReadCommonSettings("GeneralSettings", () => new UniflagSettings());
+            Renderer = new RendererLoop();
             _spike = new Spike.OverlaySpikeServer();
             _spike.Start(8972);
         }
@@ -42,12 +51,14 @@ namespace Uniflag
         {
             _spike?.Stop();
             _spike = null;
+            Renderer?.Dispose();
+            Renderer = null;
             this.SaveCommonSettings("GeneralSettings", Settings);
         }
 
         public Control GetWPFSettingsControl(PluginManager pluginManager)
         {
-            return new SettingsControl();
+            return new SettingsControl(Renderer);
         }
     }
 }
