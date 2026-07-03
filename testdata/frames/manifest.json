@@ -1,0 +1,562 @@
+[
+  {
+    "name": "snap_yellow_static",
+    "file": "snap_yellow_static.rgb",
+    "state": {
+      "flag": "Yellow",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_yellow_single_wave_on_phase",
+    "file": "snap_yellow_single_wave_on_phase.rgb",
+    "state": {
+      "flag": "Yellow",
+      "wave": "Single",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_yellow_double_wave",
+    "file": "snap_yellow_double_wave.rgb",
+    "state": {
+      "flag": "Yellow",
+      "wave": "Double",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_red_after_onset",
+    "file": "snap_red_after_onset.rgb",
+    "state": {
+      "flag": "Red",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 100,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_blue_static",
+    "file": "snap_blue_static.rgb",
+    "state": {
+      "flag": "Blue",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_blue_single_wave",
+    "file": "snap_blue_single_wave.rgb",
+    "state": {
+      "flag": "Blue",
+      "wave": "Single",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_green_onset",
+    "file": "snap_green_onset.rgb",
+    "state": {
+      "flag": "Green",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 15,
+    "flag_age": 15,
+    "connected": true
+  },
+  {
+    "name": "snap_green_settled",
+    "file": "snap_green_settled.rgb",
+    "state": {
+      "flag": "Green",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 100,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_white_static",
+    "file": "snap_white_static.rgb",
+    "state": {
+      "flag": "White",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_black_flag_x",
+    "file": "snap_black_flag_x.rgb",
+    "state": {
+      "flag": "Black",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 25,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_orange_step0",
+    "file": "snap_orange_step0.rgb",
+    "state": {
+      "flag": "Orange",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_orange_step1",
+    "file": "snap_orange_step1.rgb",
+    "state": {
+      "flag": "Orange",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 90,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_checkered",
+    "file": "snap_checkered.rgb",
+    "state": {
+      "flag": "Checkered",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_caution_vsc",
+    "file": "snap_caution_vsc.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "VirtualSafetyCar",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_caution_safety_car",
+    "file": "snap_caution_safety_car.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "SafetyCar",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_race_idle",
+    "file": "snap_race_idle.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_ready_orb",
+    "file": "snap_ready_orb.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "PreRace",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 30,
+    "flag_age": 30,
+    "connected": true
+  },
+  {
+    "name": "snap_sector_band_s2",
+    "file": "snap_sector_band_s2.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [2]
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "snap_sector_band_all_three",
+    "file": "snap_sector_band_all_three.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [1, 2, 3]
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "red_onset_frame0",
+    "file": "red_onset_frame0.rgb",
+    "state": {
+      "flag": "Red",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 0,
+    "flag_age": 0,
+    "connected": true
+  },
+  {
+    "name": "red_onset_frame1",
+    "file": "red_onset_frame1.rgb",
+    "state": {
+      "flag": "Red",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 1,
+    "flag_age": 1,
+    "connected": true
+  },
+  {
+    "name": "red_onset_frame2",
+    "file": "red_onset_frame2.rgb",
+    "state": {
+      "flag": "Red",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 2,
+    "flag_age": 2,
+    "connected": true
+  },
+  {
+    "name": "red_onset_frame3",
+    "file": "red_onset_frame3.rgb",
+    "state": {
+      "flag": "Red",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 3,
+    "flag_age": 3,
+    "connected": true
+  },
+  {
+    "name": "blue_double_wave",
+    "file": "blue_double_wave.rgb",
+    "state": {
+      "flag": "Blue",
+      "wave": "Double",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 8,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "yellow_single_wave_off_phase",
+    "file": "yellow_single_wave_off_phase.rgb",
+    "state": {
+      "flag": "Yellow",
+      "wave": "Single",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 20,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "red_single_wave_off_phase",
+    "file": "red_single_wave_off_phase.rgb",
+    "state": {
+      "flag": "Red",
+      "wave": "Single",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 20,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "red_double_wave_off_phase",
+    "file": "red_double_wave_off_phase.rgb",
+    "state": {
+      "flag": "Red",
+      "wave": "Double",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 10,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "green_single_wave_off_phase",
+    "file": "green_single_wave_off_phase.rgb",
+    "state": {
+      "flag": "Green",
+      "wave": "Single",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 20,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "yellow_double_wave_alt_phase",
+    "file": "yellow_double_wave_alt_phase.rgb",
+    "state": {
+      "flag": "Yellow",
+      "wave": "Double",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 8,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "white_single_wave_on_phase",
+    "file": "white_single_wave_on_phase.rgb",
+    "state": {
+      "flag": "White",
+      "wave": "Single",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 10,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "white_single_wave_off_phase",
+    "file": "white_single_wave_off_phase.rgb",
+    "state": {
+      "flag": "White",
+      "wave": "Single",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 15,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "white_double_wave_on_phase",
+    "file": "white_double_wave_on_phase.rgb",
+    "state": {
+      "flag": "White",
+      "wave": "Double",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 13,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "white_double_wave_off_phase",
+    "file": "white_double_wave_off_phase.rgb",
+    "state": {
+      "flag": "White",
+      "wave": "Double",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 8,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "orange_step2",
+    "file": "orange_step2.rgb",
+    "state": {
+      "flag": "Orange",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 180,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "orange_step3",
+    "file": "orange_step3.rgb",
+    "state": {
+      "flag": "Orange",
+      "wave": "None",
+      "session": "Unknown",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 270,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "ready_orb_fallback_after_300",
+    "file": "ready_orb_fallback_after_300.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "PreRace",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 360,
+    "flag_age": 360,
+    "connected": true
+  },
+  {
+    "name": "sector_band_double_wave_on_phase",
+    "file": "sector_band_double_wave_on_phase.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "Double",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [2]
+    },
+    "frame": 20,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "sector_band_double_wave_off_phase",
+    "file": "sector_band_double_wave_off_phase.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "Double",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [2]
+    },
+    "frame": 10,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "race_idle_breathe_peak",
+    "file": "race_idle_breathe_peak.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 60,
+    "flag_age": 100,
+    "connected": true
+  },
+  {
+    "name": "race_idle_breathe_trough",
+    "file": "race_idle_breathe_trough.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": []
+    },
+    "frame": 180,
+    "flag_age": 100,
+    "connected": true
+  }
+]
