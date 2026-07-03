@@ -85,10 +85,13 @@ double-buffer + `set_pixel` blit + `present`).
     everything after renders.
   - 5,000 non-zero bytes (> the 3,089 B accumulator → forced overflow
     path, drop-until-delimiter), then 600 frames: clean, 0 reconnects.
-- Cable yank / host reconnect (stale-COM-handle path): the CLI's
-  reopen-retry loop reconnects after replug and streaming resumes
-  without restarting the tool. *(exercised via the --stream
-  auto-reconnect; device boots dark and resumes on first frame)*
+- Cable yank / host reconnect (Windows stale-COM-handle path): **not
+  live-tested in M2b** — the CLI's reopen-retry loop exists and
+  open-failure handling was exercised (port contention with SimHub),
+  but no mid-stream physical yank was performed. Deliberately deferred
+  to the M8 hardware checklist, which repeats the yank/replug soak on
+  the hardened firmware, and to M9 (risk #17) where the .NET
+  reconnect path is the one that ships.
 - **Verdict for M6/M8: GO.** 30 fps whole-frame writes over CDC are
   comfortably sustainable on this stack; 0x00-delimiter resync
   recovers from partial frames and accumulator overflow without a
