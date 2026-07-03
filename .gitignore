@@ -3,3 +3,16 @@ result
 result-*
 .direnv/
 *.uf2
+
+# SimHub plugin (.NET)
+plugin/**/bin/
+plugin/**/obj/
+.vs/
+*.user
+
+# Extracted SimHub reference DLLs (proprietary, never committed)
+.simhub/
+
+# Release packaging
+dist/
+*.zip

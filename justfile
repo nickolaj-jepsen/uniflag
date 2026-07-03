@@ -15,6 +15,8 @@ mount := if os_family() == "windows" {
 } else {
     "/run/media/" + env_var_or_default('USER', '') + "/RPI-RP2"
 }
+# SimHub install (or extracted-installer dir) providing the plugin's reference DLLs.
+simhub_dir := env_var_or_default('UNIFLAG_SIMHUB_DIR', 'C:\Program Files (x86)\SimHub')
 
 default:
     @just --list
@@ -87,3 +89,13 @@ chmod-serial:
 # Run the host-side simulator interactively against the device.
 sim *ARGS: chmod-serial
     cargo run --release -p uniflag-sim -- --port {{serial}} {{ARGS}}
+
+# Build the SimHub plugin (override the SimHub location with $env:UNIFLAG_SIMHUB_DIR).
+[windows]
+plugin-build:
+    dotnet build plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}"
+
+# Run the SimHub plugin test suite.
+[windows]
+plugin-test:
+    dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}"
