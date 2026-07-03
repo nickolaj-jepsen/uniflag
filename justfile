@@ -94,6 +94,13 @@ sim *ARGS: chmod-serial
 overlay-serve:
     python -m http.server 8000 --directory overlay
 
+# Regenerate the cross-language golden fixtures (testdata/frames, testdata/proto).
+# Only ever run this deliberately, in a reviewed commit — the fixtures are the
+# frozen contract both the Rust and C# suites must match byte-exactly.
+golden-regen:
+    cargo run -p uniflag-render --example dump_golden
+    cargo test -p proto --test golden_vectors -- --ignored regen
+
 # Build the SimHub plugin (override the SimHub location with $env:UNIFLAG_SIMHUB_DIR).
 [windows]
 plugin-build:
