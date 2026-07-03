@@ -15,6 +15,7 @@ RP2040 / Pico W). Driven by [SimHub] over USB CDC.
 
 - `firmware/` — embedded firmware (Rust + embassy-rs, RP2040)
 - `proto/` — wire-protocol types shared between firmware and the simulator
+- `plugin/` — SimHub plugin (C#, .NET Framework 4.8 — v2 work in progress)
 - `sim/` — host-side simulator (`uniflag-sim`) that pretends to be SimHub
 - `simhub/` — SimHub-side "Custom serial device" profile + setup notes
 - `docs/` — external references: Cosmic Unicorn hardware, SimHub plugin / properties
@@ -71,3 +72,13 @@ works against the bundled `uniflag-sim` host without SimHub running.
 
 Cosmic Unicorn hardware / PIO and the SimHub plugin / property
 catalogue live under [`docs/`](docs/README.md).
+
+## License
+
+uniflag is licensed under GPL-3.0-or-later (see [LICENSE](LICENSE)).
+The SimHub plugin (`plugin/`) additionally carries a GPLv3 section 7
+linking exception permitting distribution of builds that link SimHub's
+proprietary plugin assemblies (`SimHub.Plugins.dll` etc.) — see
+[LICENSE-EXCEPTION](LICENSE-EXCEPTION). Releases never include SimHub's
+own DLLs; install [SimHub] to obtain them. Contributions to `plugin/`
+are accepted under GPL-3.0-or-later including this exception.
