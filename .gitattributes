@@ -1,0 +1,4 @@
+# Golden fixtures are byte-exact cross-language contracts — never let git
+# touch their line endings (autocrlf on Windows would CRLF-mangle the JSON
+# manifests and break the byte-identity asserts in both test suites).
+testdata/** -text
