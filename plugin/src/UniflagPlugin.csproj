@@ -18,6 +18,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- overlay/index.html is the single source of the overlay page: OverlayWebServer
+         serves this embedded copy at GET /, and `just overlay-serve` serves the same
+         file from disk for iteration. LogicalName is pinned — it is the manifest name
+         OverlayWebServer.PageResourceName looks up. -->
+    <EmbeddedResource Include="..\..\overlay\index.html" LogicalName="Uniflag.Web.index.html" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Private=false: never copy SimHub's proprietary DLLs into our output. -->
     <Reference Include="SimHub.Plugins">
       <HintPath>$(SimHubDir)\SimHub.Plugins.dll</HintPath>

@@ -1,0 +1,26 @@
+{
+  "ScreenCount": 1.0,
+  "InGameScreensIndexs": [
+    0
+  ],
+  "IdleScreensIndexs": [
+    0
+  ],
+  "MainPreviewIndex": 0,
+  "IsOverlay": true,
+  "OverlaySizeWarning": false,
+  "MetadataVersion": 2.0,
+  "EnableOnDashboardMessaging": true,
+  "PitScreensIndexs": [
+    0
+  ],
+  "PreferredTouchMode": 0,
+  "SimHubVersion": "9.11.21",
+  "Category": "Uniflag",
+  "Title": "Uniflag Overlay",
+  "Description": "32x32 LED flag panel overlay served by the Uniflag plugin at http://127.0.0.1:8972/. Requires the Uniflag plugin to be running; see docs/web-overlay.md.",
+  "Author": "Nickolaj Jepsen",
+  "Width": 320.0,
+  "Height": 320.0,
+  "DashboardVersion": "1"
+}

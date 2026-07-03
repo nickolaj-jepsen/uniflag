@@ -6,6 +6,7 @@ using GameReaderCommon;
 using SimHub.Plugins;
 using Uniflag.Adapters;
 using Uniflag.Rendering;
+using Uniflag.Web;
 
 namespace Uniflag
 {
@@ -24,15 +25,20 @@ namespace Uniflag
 
         /// <summary>
         /// The 60 fps rendering core (M3). Created in Init, disposed in End;
-        /// its thread only runs while at least one sink is registered (e.g.
-        /// the settings tab's preview while visible).
+        /// its thread only runs while at least one sink is registered (the
+        /// settings tab's preview, or the web overlay while a browser/dash
+        /// client is connected).
         /// </summary>
         internal RendererLoop Renderer { get; private set; }
 
-        // M2a throwaway (delete with Spike/ once docs/web-overlay.md has its
-        // verdict): serves the overlay test page's WS frames on
-        // ws://127.0.0.1:8972/ws. Real page hosting is designed in M5.
-        private Spike.OverlaySpikeServer _spike;
+        /// <summary>
+        /// The web overlay host (M5): serves the LED-dot page and the frame
+        /// WebSocket on http://127.0.0.1:8972/. Started in Init — a bind
+        /// failure becomes a settings-tab status, never a crash — and
+        /// stopped in End (SimHub rebuilds plugins at every game change, so
+        /// the port must come back cleanly).
+        /// </summary>
+        internal OverlayWebServer WebServer { get; private set; }
 
         // Telemetry path (M4): one reused snapshot + an immutable pipeline —
         // zero avoidable allocation on the 60 Hz update thread.
@@ -43,8 +49,8 @@ namespace Uniflag
         {
             Settings = this.ReadCommonSettings("GeneralSettings", () => new UniflagSettings());
             Renderer = new RendererLoop();
-            _spike = new Spike.OverlaySpikeServer();
-            _spike.Start(8972);
+            WebServer = new OverlayWebServer(new RendererSinkHost(Renderer));
+            WebServer.Start(OverlayWebServer.DefaultPort);
         }
 
         public void DataUpdate(PluginManager pluginManager, ref GameData data)
@@ -74,8 +80,9 @@ namespace Uniflag
 
         public void End(PluginManager pluginManager)
         {
-            _spike?.Stop();
-            _spike = null;
+            // Server first: it unregisters its sink from the renderer.
+            WebServer?.Stop();
+            WebServer = null;
             Renderer?.Dispose();
             Renderer = null;
             this.SaveCommonSettings("GeneralSettings", Settings);
@@ -83,7 +90,7 @@ namespace Uniflag
 
         public Control GetWPFSettingsControl(PluginManager pluginManager)
         {
-            return new SettingsControl(Renderer);
+            return new SettingsControl(Renderer, WebServer);
         }
     }
 }

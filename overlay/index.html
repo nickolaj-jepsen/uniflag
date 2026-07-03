@@ -1,19 +1,31 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>uniflag overlay â€” M2a fps spike</title>
+<title>uniflag overlay</title>
 <!--
-  M2a feasibility page (docs/v2-plan.md): a 32x32 LED-dot canvas fed either by
-  a local dummy generator (default) or by raw 3072-byte RGB888 binary frames
-  over a WebSocket (?ws=ws://127.0.0.1:8972/ws). The point of this page is the
-  instrumentation panel: it separates rAF cadence, frame delivery, and frames
-  actually painted, so an environment that throttles the render loop (e.g. a
-  10 fps dash cap) is distinguishable from one that throttles delivery.
+  The uniflag virtual panel (docs/web-overlay.md): a 32x32 LED-dot canvas fed
+  raw 3072-byte RGB888 binary frames (row-major, top-left origin, no
+  COBS/CRC) over a WebSocket from the SimHub plugin's overlay server.
 
-  Fully self-contained by design: no CDN, no external fonts, works from both
-  file:// and http:// â€” it will later ship as an embedded assembly resource.
+  This file is the SINGLE SOURCE of the page: the plugin embeds it as an
+  assembly resource (LogicalName Uniflag.Web.index.html, see
+  plugin/src/UniflagPlugin.csproj) and serves it at http://127.0.0.1:8972/,
+  and `just overlay-serve` serves the identical file from disk for iteration
+  outside SimHub. Fully self-contained by design: no CDN, no external fonts;
+  works from file:// and http://.
+
+  Query parameters:
+    ?v=N        cache-buster only, ignored by the page. The DashStudio Web
+                Page View caches hard across plugin updates; the committed
+                dash carries ?v=1 - bump it with plugin releases.
+    ?ws=URL     override the frame source (default ws://127.0.0.1:8972/ws).
+    ?hud=1      show the fps instrumentation panel (rAF / recv / paint /
+                dropped / gap) used for the M2a measurements and for
+                diagnosing dash fps caps - see docs/web-overlay.md.
+    ?src=dummy  local 30 Hz test-pattern generator instead of the WebSocket,
+                for skin iteration without a running plugin.
 -->
 <style>
   html, body { margin: 0; height: 100%; }
@@ -24,15 +36,29 @@
     justify-content: center;
     min-height: 100vh;
   }
-  /* Fits inside the 800x600 DashStudio overlay surface with margin,
-     and shrinks down to ~380px viewports. */
+  /* Fills the committed 320x320 overlay dash edge-to-edge (the LED dot gaps
+     provide the visual margin) and stays sane in a fullscreen browser. */
   #panel {
     display: block;
-    width: min(92vmin, 540px);
+    width: min(100vmin, 640px);
     aspect-ratio: 1 / 1;
-    border-radius: 8px;
-    box-shadow: 0 0 48px rgba(0, 0, 0, 0.7);
+    transition: opacity 0.3s;
   }
+  #panel.stale { opacity: 0.35; }
+  #status {
+    position: fixed;
+    bottom: 8px;
+    left: 8px;
+    margin: 0;
+    padding: 4px 8px;
+    font: 11px/1.5 ui-monospace, Consolas, "Courier New", monospace;
+    color: #c9d4de;
+    background: rgba(8, 10, 16, 0.78);
+    border: 1px solid #1c2430;
+    border-radius: 4px;
+    pointer-events: none;
+  }
+  #status.hidden { display: none; }
   #hud {
     position: fixed;
     top: 8px;
@@ -46,27 +72,35 @@
     border-radius: 4px;
     white-space: pre;
     pointer-events: none;
+    display: none;
   }
 </style>
 </head>
 <body>
-<canvas id="panel"></canvas>
-<pre id="hud">startingâ€¦</pre>
+<canvas id="panel" class="stale"></canvas>
+<div id="status">starting...</div>
+<pre id="hud"></pre>
 <script>
 'use strict';
 
 // ------------------------------------------------------------------ constants
 const W = 32, H = 32, PIXELS = W * H;
 const FRAME_BYTES = PIXELS * 3;          // RGB888, row-major, top-left origin
-const GEN_HZ = 30;                       // dummy generator timeline
+const DEFAULT_WS = 'ws://127.0.0.1:8972/ws'; // the plugin's fixed port
+const GEN_HZ = 30;                       // ?src=dummy generator timeline
 const BACKOFF_MIN_MS = 500, BACKOFF_MAX_MS = 8000;
 const TAU = Math.PI * 2;
+
+const params = new URLSearchParams(location.search);
+const wsUrl = params.get('ws') || DEFAULT_WS;
+const useDummy = params.get('src') === 'dummy';
+const showHud = params.get('hud') === '1';
 
 // --------------------------------------------------------------- shared state
 // Latest-frame-wins: one buffer, no queue. Every delivered frame bumps
 // `latestSeq`; the paint loop advances `paintedSeq` to match. The gap between
 // the two (minus the frame about to be painted) is frames that were received
-// but replaced before they ever hit the canvas â€” the "dropped" counter.
+// but replaced before they ever hit the canvas - the "dropped" counter.
 const latest = new Uint8Array(FRAME_BYTES);
 let latestSeq = 0, paintedSeq = 0;
 
@@ -77,10 +111,10 @@ const stats = {
   gapWindowMax: 0, gapSessionMax: 0,     // max ms between consecutive deliveries
   lastRecvAt: 0,
 };
-let wsStateText = 'n/a (dummy source)';
+let wsStateText = useDummy ? 'n/a (dummy source)' : 'connecting';
 
 // Record a delivery event of `count` frames (count > 1 when the generator
-// timeline caught up after a stalled timer â€” the skipped indices still count
+// timeline caught up after a stalled timer - the skipped indices still count
 // as received, they just never existed long enough to paint).
 function noteDelivery(count) {
   const now = performance.now();
@@ -95,8 +129,22 @@ function noteDelivery(count) {
   latestSeq += count;
 }
 
+// ------------------------------------------------------------- connection UI
+const statusEl = document.getElementById('status');
+const canvas = document.getElementById('panel');
+
+// Connected: no chrome at all (the overlay must look like a bare panel).
+// Anything else: small status line plus a dimmed panel showing the stale
+// last frame.
+function setConnState(connected, text) {
+  statusEl.classList.toggle('hidden', connected);
+  canvas.classList.toggle('stale', !connected);
+  if (!connected) statusEl.textContent = 'uniflag: ' + text;
+  wsStateText = text;
+}
+
 // ---------------------------------------------------------------- dummy source
-// Mirrors sim/src/main.rs::paint_test_pattern (the M2b firmware-spike sender):
+// Mirrors the renderer test pattern used since the M2a/M2b spikes: a
 // slow-scrolling colour gradient plus one bright white cursor pixel advancing
 // one position per frame. Stalls and coalescing are visible at a glance.
 function paintTestPattern(buf, f) {
@@ -113,9 +161,10 @@ function paintTestPattern(buf, f) {
 }
 
 function startDummy() {
+  setConnState(true, 'n/a (dummy source)');
   const t0 = performance.now();
   let genFrame = 0;
-  // Fixed 30 Hz timeline derived from performance.now() â€” deliberately NOT
+  // Fixed 30 Hz timeline derived from performance.now() - deliberately NOT
   // one-frame-per-rAF, so generator cadence and paint cadence stay
   // independent. The frame index is floor(elapsed / period): if the interval
   // timer fires late (background-tab throttling etc.) the missed indices are
@@ -134,16 +183,16 @@ function startDummy() {
 function startWs(url) {
   let backoff = BACKOFF_MIN_MS;
   const connect = () => {
-    wsStateText = 'connecting';
+    setConnState(false, 'connecting');
     let ws;
     try {
       ws = new WebSocket(url);
     } catch (e) {
-      wsStateText = 'bad url (' + e.name + ')';  // unrecoverable; no retry
+      setConnState(false, 'bad ws url (' + e.name + ')');  // unrecoverable; no retry
       return;
     }
     ws.binaryType = 'arraybuffer';
-    ws.onopen = () => { backoff = BACKOFF_MIN_MS; wsStateText = 'open'; };
+    ws.onopen = () => { backoff = BACKOFF_MIN_MS; setConnState(true, 'open'); };
     ws.onmessage = (ev) => {
       // Exactly one 3072-byte binary message per frame; anything else
       // (text pings, truncated frames) is ignored but counted.
@@ -156,7 +205,7 @@ function startWs(url) {
     };
     ws.onclose = () => {                 // fires after onerror too
       const wait = backoff;
-      wsStateText = 'closed, retry in ' + (wait / 1000).toFixed(1) + 's';
+      setConnState(false, 'disconnected, retry in ' + (wait / 1000).toFixed(1) + 's');
       backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
       setTimeout(connect, wait);
     };
@@ -165,7 +214,6 @@ function startWs(url) {
 }
 
 // -------------------------------------------------------------------- renderer
-const canvas = document.getElementById('panel');
 const ctx = canvas.getContext('2d');
 
 // The raw frame goes into a 32x32 offscreen canvas; a bilinear upscale of it,
@@ -248,32 +296,35 @@ function onRaf() {
 }
 
 // ------------------------------------------------------------------------- HUD
-const hud = document.getElementById('hud');
-const wsUrl = new URLSearchParams(location.search).get('ws');
-const srcText = wsUrl ? 'ws ' + wsUrl : 'dummy @ ' + GEN_HZ + ' Hz';
-
-let lastHud = performance.now();
-setInterval(() => {
-  const now = performance.now();
-  const dt = now - lastHud;              // real elapsed: rates stay honest even
-  lastHud = now;                         // if this timer itself gets throttled
-  const rate = (n) => (n * 1000 / dt).toFixed(1).padStart(5);
-  hud.textContent =
-    'src      ' + srcText + '\n' +
-    'ws       ' + wsStateText + '\n' +
-    'rAF /s   ' + rate(stats.raf) + '\n' +
-    'recv /s  ' + rate(stats.recv) + '   total ' + stats.recvTotal + '\n' +
-    'paint /s ' + rate(stats.paint) + '   total ' + stats.paintTotal + '\n' +
-    'dropped  ' + stats.dropped + '  (coalesced, latest-frame-wins)\n' +
-    'badsize  ' + stats.wrongSize + '\n' +
-    'gap ms   ' + Math.round(stats.gapWindowMax) + ' (win)  '
-                + Math.round(stats.gapSessionMax) + ' (max)';
-  stats.raf = stats.recv = stats.paint = 0;
-  stats.gapWindowMax = 0;
-}, 1000);
+// Off by default in production; ?hud=1 restores the M2a instrumentation
+// panel (docs/web-overlay.md explains how to read it).
+if (showHud) {
+  const hud = document.getElementById('hud');
+  hud.style.display = 'block';
+  const srcText = useDummy ? 'dummy @ ' + GEN_HZ + ' Hz' : 'ws ' + wsUrl;
+  let lastHud = performance.now();
+  setInterval(() => {
+    const now = performance.now();
+    const dt = now - lastHud;            // real elapsed: rates stay honest even
+    lastHud = now;                       // if this timer itself gets throttled
+    const rate = (n) => (n * 1000 / dt).toFixed(1).padStart(5);
+    hud.textContent =
+      'src      ' + srcText + '\n' +
+      'ws       ' + wsStateText + '\n' +
+      'rAF /s   ' + rate(stats.raf) + '\n' +
+      'recv /s  ' + rate(stats.recv) + '   total ' + stats.recvTotal + '\n' +
+      'paint /s ' + rate(stats.paint) + '   total ' + stats.paintTotal + '\n' +
+      'dropped  ' + stats.dropped + '  (coalesced, latest-frame-wins)\n' +
+      'badsize  ' + stats.wrongSize + '\n' +
+      'gap ms   ' + Math.round(stats.gapWindowMax) + ' (win)  '
+                  + Math.round(stats.gapSessionMax) + ' (max)';
+    stats.raf = stats.recv = stats.paint = 0;
+    stats.gapWindowMax = 0;
+  }, 1000);
+}
 
 // ------------------------------------------------------------------------ boot
-if (wsUrl) startWs(wsUrl); else startDummy();
+if (useDummy) startDummy(); else startWs(wsUrl);
 window.addEventListener('resize', resize);
 resize();
 requestAnimationFrame(onRaf);

@@ -27,5 +27,11 @@
                   Margin="0,8,0,0"
                   Checked="OnCycleStatesToggled"
                   Unchecked="OnCycleStatesToggled" />
+
+        <TextBlock Text="Web overlay" FontWeight="Bold" Margin="0,16,0,0" />
+        <TextBlock x:Name="WebOverlayStatusText"
+                   Text="Not running"
+                   TextWrapping="Wrap"
+                   Margin="0,4,0,0" />
     </StackPanel>
 </UserControl>
