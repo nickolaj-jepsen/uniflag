@@ -46,3 +46,89 @@ jobs:
         with:
           tool: just
       - run: just test
+
+  # Isolated and deliberately non-gating: no `needs:`, not in any required-checks
+  # group. A SimHub-installer outage must never red the Rust pipeline.
+  plugin:
+    name: plugin (windows)
+    runs-on: windows-latest
+    env:
+      SIMHUB_VERSION: '9.11.21'
+      # SHA-256 of the SimHub.9.11.21.zip GitHub release asset (computed 2026-07-03).
+      SIMHUB_ZIP_SHA256: '4660A46FC741CD108E472AFFCD6E05B294C9D34407FA2A14863BB63461C6FF70'
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cache only the staged reference assemblies (~10 MB), keyed by the pinned
+      # version: a hit skips both the ~218 MB installer download and the ~2 min
+      # silent install. The proprietary DLLs live only in the ephemeral,
+      # repo-scoped cache — never in the repo or any published artifact.
+      - name: Cache SimHub reference assemblies
+        id: simhub-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\simhub-refs
+          key: ${{ runner.os }}-simhub-refs-${{ env.SIMHUB_VERSION }}-v1
+
+      - name: Install SimHub silently and stage reference DLLs
+        if: steps.simhub-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          # innoextract (newest release 1.9, Inno Setup ceiling 6.0.5) cannot
+          # unpack SimHub's Inno Setup 6.4.3 installer, so the headless silent
+          # install is the primary path, not a fallback.
+          $ErrorActionPreference = 'Stop'
+          $v    = $env:SIMHUB_VERSION
+          $zip  = "$env:RUNNER_TEMP\SimHub.$v.zip"
+          $tmp  = "$env:RUNNER_TEMP\simhub-setup"
+          $app  = "$env:RUNNER_TEMP\simhub-app"
+          $refs = "$env:RUNNER_TEMP\simhub-refs"
+          $log  = "$env:RUNNER_TEMP\simhub-install.log"
+
+          curl.exe -fsSL -o $zip "https://github.com/SHWotever/SimHub/releases/download/$v/SimHub.$v.zip"
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($hash -ne $env:SIMHUB_ZIP_SHA256) {
+            throw "SimHub.$v.zip SHA-256 mismatch: got $hash, expected $env:SIMHUB_ZIP_SHA256"
+          }
+
+          Expand-Archive $zip -DestinationPath $tmp -Force
+          $setup = Get-ChildItem $tmp -Filter 'SimHubSetup_*.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'SimHubSetup_*.exe not found inside release zip' }
+
+          # The setup exe is a GUI-subsystem app: Start-Process -Wait is required.
+          $p = Start-Process -FilePath $setup.FullName -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SP-', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS',
+            "/DIR=$app", "/LOG=$log"
+          )
+          if ($p.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log -Tail 120 }
+            throw "SimHub installer exited with code $($p.ExitCode)"
+          }
+
+          New-Item -ItemType Directory -Force $refs | Out-Null
+          foreach ($dll in 'SimHub.Plugins.dll', 'GameReaderCommon.dll', 'log4net.dll', 'SimHub.Logging.dll') {
+            Copy-Item (Join-Path $app $dll) $refs
+          }
+          Get-ChildItem $refs | Format-Table Name, Length
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Build plugin
+        shell: pwsh
+        env:
+          UNIFLAG_SIMHUB_DIR: ${{ runner.temp }}\simhub-refs
+        run: just plugin-build
+
+      - name: Test plugin
+        shell: pwsh
+        env:
+          UNIFLAG_SIMHUB_DIR: ${{ runner.temp }}\simhub-refs
+        run: just plugin-test
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UniflagPlugin
+          path: plugin/src/bin/Release/net48/UniflagPlugin.dll
