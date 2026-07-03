@@ -31,6 +31,13 @@
 
 #![no_std]
 
+// v2 binary protocol (COBS framing, CRC-16, packet layer). Coexists with
+// the ASCII line codec below until the v2 rework retires it — see
+// docs/v2-plan.md, milestones M2b/M6/M11.
+pub mod cobs;
+pub mod crc;
+pub mod packet;
+
 /// Maximum length of a formatted line, including the trailing `\n`. Caller
 /// must pass a buffer of at least this size to [`State::format`].
 pub const MAX_LINE_LEN: usize = 48;
