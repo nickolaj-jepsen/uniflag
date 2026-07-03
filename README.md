@@ -14,9 +14,10 @@ RP2040 / Pico W). Driven by [SimHub] over USB CDC.
 ## Repo layout
 
 - `firmware/` — embedded firmware (Rust + embassy-rs, RP2040)
-- `proto/` — wire-protocol types shared between firmware and the simulator
+- `proto/` — wire-protocol types shared between firmware and the host tools
 - `plugin/` — SimHub plugin (C#, .NET Framework 4.8 — v2 work in progress)
-- `sim/` — host-side simulator (`uniflag-sim`) that pretends to be SimHub
+- `cli/` — host-side bring-up CLI (`uniflag-cli`): test-pattern streamer and
+  protocol diagnostic for the panel
 - `simhub/` — SimHub-side "Custom serial device" profile + setup notes
 - `docs/` — external references: Cosmic Unicorn hardware, SimHub plugin / properties
 - `justfile` — task runner (see below)
@@ -44,11 +45,11 @@ with no arguments to list them.
 | `just build`     | release build of the firmware ELF                                         |
 | `just img`       | build, then convert ELF → UF2 at `target/uniflag.uf2`                     |
 | `just flash`     | full pipeline: build → UF2 → wait for `RPI-RP2` mount → copy → fix serial |
-| `just sim`       | run `uniflag-sim` interactively against the device's serial port          |
+| `just cli`       | run `uniflag-cli` against the device's serial port                        |
 
-The host crates (`proto`, `uniflag-sim`) are the workspace
-default-members; the firmware is excluded so a bare `cargo check` from
-the root doesn't try to cross-compile.
+The host crates (`proto`, `uniflag-render`, `uniflag-cli`) are the
+workspace default-members; the firmware is excluded so a bare
+`cargo check` from the root doesn't try to cross-compile.
 
 ## Flashing
 
@@ -65,8 +66,9 @@ the UF2).
 ## SimHub setup
 
 See [`simhub/README.md`](simhub/README.md) for the end-user setup
-(profile import, NCalc formula, troubleshooting). The firmware also
-works against the bundled `uniflag-sim` host without SimHub running.
+(profile import, NCalc formula, troubleshooting). The panel can also be
+driven without SimHub via the bundled `uniflag-cli` test-pattern
+streamer.
 
 ## External references
 

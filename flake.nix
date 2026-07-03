@@ -28,23 +28,23 @@
           rustc = embeddedToolchain;
         };
 
-        sim = pkgs.rustPlatform.buildRustPackage {
-          pname = "uniflag-sim";
+        cli = pkgs.rustPlatform.buildRustPackage {
+          pname = "uniflag-cli";
           version = "0.1.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
 
-          cargoBuildFlags = [ "-p" "uniflag-sim" ];
-          cargoTestFlags  = [ "-p" "uniflag-sim" "-p" "proto" ];
+          cargoBuildFlags = [ "-p" "uniflag-cli" ];
+          cargoTestFlags  = [ "-p" "uniflag-cli" "-p" "proto" ];
 
           # serialport-rs needs libudev on Linux.
           nativeBuildInputs = [ pkgs.pkg-config ];
           buildInputs       = [ pkgs.udev ];
 
           meta = {
-            description = "Host-side simulator that pretends to be SimHub";
+            description = "Binary-protocol test-pattern streamer and diagnostic CLI for the uniflag firmware";
             license     = pkgs.lib.licenses.gpl3Plus;
-            mainProgram  = "uniflag-sim";
+            mainProgram  = "uniflag-cli";
             platforms   = pkgs.lib.platforms.linux;
           };
         };
@@ -88,8 +88,8 @@
         };
       in {
         packages = {
-          inherit sim firmware;
-          default = sim;
+          inherit cli firmware;
+          default = cli;
         };
 
         devShells.default = pkgs.mkShell {
@@ -116,7 +116,7 @@
             echo "uniflag devShell ready."
             echo "  just --list           → available recipes"
             echo "  just build            → build firmware UF2"
-            echo "  just sim              → run the SimHub simulator"
+            echo "  just cli              → stream a test pattern to the device"
           '';
         };
       });

@@ -1,18 +1,21 @@
 [package]
-name = "uniflag-sim"
+name = "uniflag-cli"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-description = "Host-side simulator that pretends to be SimHub for the uniflag firmware."
+description = "Binary-protocol test-pattern streamer and diagnostic CLI for the uniflag firmware."
+
+[lib]
+name = "uniflag_cli"
+path = "src/lib.rs"
 
 [[bin]]
-name = "uniflag-sim"
+name = "uniflag-cli"
 path = "src/main.rs"
 
 [dependencies]
 proto      = { path = "../proto" }
 clap       = { version = "4.5", features = ["derive"] }
-crossterm  = "0.28"
 serialport = "4.6"
 anyhow     = "1.0"
 

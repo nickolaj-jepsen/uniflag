@@ -30,12 +30,12 @@ fmt-check:
 
 # Mirror CI: clippy on host crates, then on firmware (different target).
 clippy:
-    cargo clippy -p proto -p uniflag-render -p uniflag-sim --all-targets -- -D warnings
+    cargo clippy -p proto -p uniflag-render -p uniflag-cli --all-targets -- -D warnings
     cargo clippy --all-targets --manifest-path firmware/Cargo.toml --target thumbv6m-none-eabi -- -D warnings
 
 # Tests on host crates only (firmware is no_std, `test = false`).
 test:
-    cargo test -p proto -p uniflag-render -p uniflag-sim --all-targets
+    cargo test -p proto -p uniflag-render -p uniflag-cli --all-targets
 
 # Build the firmware ELF (release).
 build:
@@ -86,9 +86,9 @@ chmod-serial:
     @echo "Waiting for {{serial}} ..."
     while (-not ([System.IO.Ports.SerialPort]::GetPortNames() -contains '{{serial}}')) { Start-Sleep -Milliseconds 500 }
 
-# Run the host-side simulator interactively against the device.
-sim *ARGS: chmod-serial
-    cargo run --release -p uniflag-sim -- --port {{serial}} {{ARGS}}
+# Run the bring-up CLI against the device (streams a test pattern by default).
+cli *ARGS: chmod-serial
+    cargo run --release -p uniflag-cli -- --port {{serial}} {{ARGS}}
 
 # Serve the overlay test page over http:// (for contexts that refuse file://).
 overlay-serve:

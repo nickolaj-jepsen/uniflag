@@ -8,14 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Workspace layout
 
-- `proto/` — wire-protocol types (`no_std`, allocation-free), shared by firmware, render, and sim.
+- `proto/` — wire-protocol types (`no_std`, allocation-free), shared by firmware, render, and cli.
 - `render/` — `uniflag-render`, host-testable rendering primitives (`anim`, `effects`, `surface::Surface`, `BrightnessController`). `no_std`, depends only on `proto`. Snapshot tests in `render/tests/` use `insta` against an in-memory `MockSurface` (defined in `tests/common/mod.rs`).
 - `firmware/` — embedded firmware (`thumbv6m-none-eabi`, embassy-rs). Implements `Surface` for the hardware `Display` and runs the embassy task in `runtime.rs` that ties signals/timers/persistence to `uniflag_render::effects::paint`. Excluded from workspace `default-members` so a bare `cargo check` from the root doesn't try to cross-compile.
-- `sim/` — `uniflag-sim`, host-side simulator that pretends to be SimHub (interactive/scripted/demo).
+- `cli/` — `uniflag-cli`, binary-protocol test-pattern streamer and firmware diagnostic tool (stream/loopback/emit).
 - `simhub/` — end-user SimHub profile + setup notes.
 - `docs/` — external references (Cosmic Unicorn hardware/PIO, SimHub plugin/property catalogue).
 
-The host crates (`proto`, `uniflag-render`, `uniflag-sim`) are workspace `default-members`. To touch the firmware crate from the root, use `--manifest-path firmware/Cargo.toml` or `cd firmware && cargo ...`.
+The host crates (`proto`, `uniflag-render`, `uniflag-cli`) are workspace `default-members`. To touch the firmware crate from the root, use `--manifest-path firmware/Cargo.toml` or `cd firmware && cargo ...`.
 
 ## Common commands
 
@@ -25,13 +25,13 @@ All wrapped by `just` (run `just` to list). The justfile works on both Linux and
 |---------|-----------|
 | `just fmt` / `just fmt-check` | `cargo fmt --all` (the latter is the CI gate). |
 | `just clippy` | clippy on host crates **and** firmware separately (different target). `-D warnings`. |
-| `just test` | `cargo test -p proto -p uniflag-render -p uniflag-sim`. Firmware has `test = false` (it's `no_std`). |
+| `just test` | `cargo test -p proto -p uniflag-render -p uniflag-cli`. Firmware has `test = false` (it's `no_std`). |
 | `just build` | release build of the firmware ELF. |
 | `just img` | build, then convert ELF → UF2 at `target/uniflag.uf2`. |
 | `just flash` | full pipeline: build → UF2 → wait for `RPI-RP2` mount (hold BOOTSEL) → copy → wait for serial. |
-| `just sim` | run `uniflag-sim` interactively against the device's serial port. |
+| `just cli` | run `uniflag-cli` against the device's serial port (streams a test pattern by default). |
 
-Run a single host test: `cargo test -p proto -- parse_canonical_line` (or `-p uniflag-sim`).
+Run a single host test: `cargo test -p proto -- parse_canonical_line` (or `-p uniflag-cli`).
 
 CI mirrors `just fmt-check`, `just clippy` (both legs), and `just test` — keep them green.
 
@@ -75,9 +75,9 @@ State plumbing is one-way:
 
 **Persistent storage** (`storage.rs`) — the last 4 KB QSPI flash sector is reserved for settings (currently just brightness). Reservation is by linker-script: `firmware/memory.x` shrinks the `FLASH` region by `0x1000`, and `STORAGE_OFFSET` points at the carved sector. Erase + write blocks XIP for ~25 ms — debounce writes; the watchdog feed cadence is sized for it. Keep the `memory.x` reservation and `STORAGE_OFFSET` in lockstep.
 
-### Sim (`sim/src/main.rs`)
+### CLI (`cli/src/`)
 
-Three modes: interactive (hotkey-driven, default), scripted (`--script PATH`, replays `<delay-ms> <line>` files from `sim/scenarios/`), and demo (`--demo`, cycles every flag). Output goes to a serial port (`--port`) or stdout (`--no-port`). Useful for exercising the firmware end-to-end without SimHub running, or for verifying SimHub formula output (run `--no-port` and diff against expected lines).
+Speaks the v2 binary protocol (`proto::packet`). Three modes: stream (default — Hello/HelloAck handshake, then COBS-framed Frame packets at a monotonic-deadline-paced 30 fps, printing inbound ButtonEvents), loopback (decodes its own emitted byte stream in-process, no serial), and emit (writes exactly one encoded wire packet and exits, for golden byte-diff verification). Output goes to a serial port (`--port`) or stdout (`--no-port`); all human status goes to stderr. Testable logic (patterns, pacing, RX decode, wire builders) lives in `cli/src/lib.rs` modules; conformance tests in `cli/tests/` pin the emitted bytes against `testdata/proto/`.
 
 ## Conventions
 
