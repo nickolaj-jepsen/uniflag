@@ -1,0 +1,282 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>uniflag overlay â€” M2a fps spike</title>
+<!--
+  M2a feasibility page (docs/v2-plan.md): a 32x32 LED-dot canvas fed either by
+  a local dummy generator (default) or by raw 3072-byte RGB888 binary frames
+  over a WebSocket (?ws=ws://127.0.0.1:8972/ws). The point of this page is the
+  instrumentation panel: it separates rAF cadence, frame delivery, and frames
+  actually painted, so an environment that throttles the render loop (e.g. a
+  10 fps dash cap) is distinguishable from one that throttles delivery.
+
+  Fully self-contained by design: no CDN, no external fonts, works from both
+  file:// and http:// â€” it will later ship as an embedded assembly resource.
+-->
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #060609;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  /* Fits inside the 800x600 DashStudio overlay surface with margin,
+     and shrinks down to ~380px viewports. */
+  #panel {
+    display: block;
+    width: min(92vmin, 540px);
+    aspect-ratio: 1 / 1;
+    border-radius: 8px;
+    box-shadow: 0 0 48px rgba(0, 0, 0, 0.7);
+  }
+  #hud {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    margin: 0;
+    padding: 6px 9px;
+    font: 11px/1.5 ui-monospace, Consolas, "Courier New", monospace;
+    color: #9fb0bf;
+    background: rgba(8, 10, 16, 0.78);
+    border: 1px solid #1c2430;
+    border-radius: 4px;
+    white-space: pre;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="panel"></canvas>
+<pre id="hud">startingâ€¦</pre>
+<script>
+'use strict';
+
+// ------------------------------------------------------------------ constants
+const W = 32, H = 32, PIXELS = W * H;
+const FRAME_BYTES = PIXELS * 3;          // RGB888, row-major, top-left origin
+const GEN_HZ = 30;                       // dummy generator timeline
+const BACKOFF_MIN_MS = 500, BACKOFF_MAX_MS = 8000;
+const TAU = Math.PI * 2;
+
+// --------------------------------------------------------------- shared state
+// Latest-frame-wins: one buffer, no queue. Every delivered frame bumps
+// `latestSeq`; the paint loop advances `paintedSeq` to match. The gap between
+// the two (minus the frame about to be painted) is frames that were received
+// but replaced before they ever hit the canvas â€” the "dropped" counter.
+const latest = new Uint8Array(FRAME_BYTES);
+let latestSeq = 0, paintedSeq = 0;
+
+const stats = {
+  raf: 0, recv: 0, paint: 0,             // per-window counters, reset each HUD tick
+  recvTotal: 0, paintTotal: 0,
+  dropped: 0, wrongSize: 0,
+  gapWindowMax: 0, gapSessionMax: 0,     // max ms between consecutive deliveries
+  lastRecvAt: 0,
+};
+let wsStateText = 'n/a (dummy source)';
+
+// Record a delivery event of `count` frames (count > 1 when the generator
+// timeline caught up after a stalled timer â€” the skipped indices still count
+// as received, they just never existed long enough to paint).
+function noteDelivery(count) {
+  const now = performance.now();
+  if (stats.lastRecvAt > 0) {
+    const gap = now - stats.lastRecvAt;
+    if (gap > stats.gapWindowMax) stats.gapWindowMax = gap;
+    if (gap > stats.gapSessionMax) stats.gapSessionMax = gap;
+  }
+  stats.lastRecvAt = now;
+  stats.recv += count;
+  stats.recvTotal += count;
+  latestSeq += count;
+}
+
+// ---------------------------------------------------------------- dummy source
+// Mirrors sim/src/main.rs::paint_test_pattern (the M2b firmware-spike sender):
+// slow-scrolling colour gradient plus one bright white cursor pixel advancing
+// one position per frame. Stalls and coalescing are visible at a glance.
+function paintTestPattern(buf, f) {
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 3;
+      buf[i]     = (x * 8 + f * 2) & 0xFF;
+      buf[i + 1] = (y * 8 + 256 - (f & 0xFF)) & 0xFF;
+      buf[i + 2] = ((x + y) * 4) & 0xFF;
+    }
+  }
+  const c = (f % PIXELS) * 3;
+  buf[c] = buf[c + 1] = buf[c + 2] = 0xFF;
+}
+
+function startDummy() {
+  const t0 = performance.now();
+  let genFrame = 0;
+  // Fixed 30 Hz timeline derived from performance.now() â€” deliberately NOT
+  // one-frame-per-rAF, so generator cadence and paint cadence stay
+  // independent. The frame index is floor(elapsed / period): if the interval
+  // timer fires late (background-tab throttling etc.) the missed indices are
+  // delivered in one burst and show up honestly as received-then-coalesced.
+  setInterval(() => {
+    const target = Math.floor((performance.now() - t0) * GEN_HZ / 1000);
+    if (target <= genFrame) return;
+    const n = target - genFrame;
+    genFrame = target;
+    paintTestPattern(latest, genFrame);  // only the newest frame materialises
+    noteDelivery(n);
+  }, 1000 / GEN_HZ);
+}
+
+// ------------------------------------------------------------------- WS source
+function startWs(url) {
+  let backoff = BACKOFF_MIN_MS;
+  const connect = () => {
+    wsStateText = 'connecting';
+    let ws;
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      wsStateText = 'bad url (' + e.name + ')';  // unrecoverable; no retry
+      return;
+    }
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => { backoff = BACKOFF_MIN_MS; wsStateText = 'open'; };
+    ws.onmessage = (ev) => {
+      // Exactly one 3072-byte binary message per frame; anything else
+      // (text pings, truncated frames) is ignored but counted.
+      if (!(ev.data instanceof ArrayBuffer) || ev.data.byteLength !== FRAME_BYTES) {
+        stats.wrongSize++;
+        return;
+      }
+      latest.set(new Uint8Array(ev.data));
+      noteDelivery(1);
+    };
+    ws.onclose = () => {                 // fires after onerror too
+      const wait = backoff;
+      wsStateText = 'closed, retry in ' + (wait / 1000).toFixed(1) + 's';
+      backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
+      setTimeout(connect, wait);
+    };
+  };
+  connect();
+}
+
+// -------------------------------------------------------------------- renderer
+const canvas = document.getElementById('panel');
+const ctx = canvas.getContext('2d');
+
+// The raw frame goes into a 32x32 offscreen canvas; a bilinear upscale of it,
+// composited 'lighter' at low alpha, is the cheap bloom layer under the crisp
+// per-LED dots. One putImageData + two drawImage + <=1024 arcs per paint.
+const tiny = document.createElement('canvas');
+tiny.width = W; tiny.height = H;
+const tctx = tiny.getContext('2d');
+const tinyImg = tctx.createImageData(W, H);
+tinyImg.data.fill(255);                  // alpha preset; RGB overwritten per frame
+
+// Static under-layer (background + unlit dots), rebuilt only on resize.
+const under = document.createElement('canvas');
+
+let sizePx = 0, dotR = 0;
+const centers = new Float32Array(PIXELS * 2);
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const px = Math.max(64, Math.round(canvas.clientWidth * dpr));
+  if (px === sizePx) return;
+  sizePx = px;
+  canvas.width = canvas.height = px;
+  const cell = px / W;
+  dotR = cell * 0.37;                    // dot with a small gap to neighbours
+  for (let i = 0; i < PIXELS; i++) {
+    centers[i * 2]     = ((i % W) + 0.5) * cell;
+    centers[i * 2 + 1] = (Math.floor(i / W) + 0.5) * cell;
+  }
+  under.width = under.height = px;
+  const u = under.getContext('2d');
+  u.fillStyle = '#0a0a10';
+  u.fillRect(0, 0, px, px);
+  u.fillStyle = '#17171d';
+  for (let i = 0; i < PIXELS; i++) {
+    u.beginPath();
+    u.arc(centers[i * 2], centers[i * 2 + 1], dotR, 0, TAU);
+    u.fill();
+  }
+  paintPanel(latest);                    // repaint at the new resolution now
+}
+
+function paintPanel(buf) {
+  const d = tinyImg.data;
+  for (let p = 0, s = 0; p < FRAME_BYTES; p += 3, s += 4) {
+    d[s] = buf[p]; d[s + 1] = buf[p + 1]; d[s + 2] = buf[p + 2];
+  }
+  tctx.putImageData(tinyImg, 0, 0);
+
+  ctx.drawImage(under, 0, 0);
+  ctx.imageSmoothingEnabled = true;      // bilinear haze = the bloom
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.45;
+  ctx.drawImage(tiny, 0, 0, sizePx, sizePx);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+
+  for (let i = 0, p = 0; i < PIXELS; i++, p += 3) {
+    const r = buf[p], g = buf[p + 1], b = buf[p + 2];
+    if (r + g + b < 24) continue;        // near-black: keep the unlit dot
+    ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+    ctx.beginPath();
+    ctx.arc(centers[i * 2], centers[i * 2 + 1], dotR, 0, TAU);
+    ctx.fill();
+  }
+}
+
+// ------------------------------------------------------------------ paint loop
+function onRaf() {
+  requestAnimationFrame(onRaf);
+  stats.raf++;
+  if (latestSeq === paintedSeq) return;  // nothing new; skip the paint
+  // Everything newer than the last paint, minus the one frame painted now,
+  // was received but never shown.
+  stats.dropped += latestSeq - paintedSeq - 1;
+  paintedSeq = latestSeq;
+  paintPanel(latest);
+  stats.paint++;
+  stats.paintTotal++;
+}
+
+// ------------------------------------------------------------------------- HUD
+const hud = document.getElementById('hud');
+const wsUrl = new URLSearchParams(location.search).get('ws');
+const srcText = wsUrl ? 'ws ' + wsUrl : 'dummy @ ' + GEN_HZ + ' Hz';
+
+let lastHud = performance.now();
+setInterval(() => {
+  const now = performance.now();
+  const dt = now - lastHud;              // real elapsed: rates stay honest even
+  lastHud = now;                         // if this timer itself gets throttled
+  const rate = (n) => (n * 1000 / dt).toFixed(1).padStart(5);
+  hud.textContent =
+    'src      ' + srcText + '\n' +
+    'ws       ' + wsStateText + '\n' +
+    'rAF /s   ' + rate(stats.raf) + '\n' +
+    'recv /s  ' + rate(stats.recv) + '   total ' + stats.recvTotal + '\n' +
+    'paint /s ' + rate(stats.paint) + '   total ' + stats.paintTotal + '\n' +
+    'dropped  ' + stats.dropped + '  (coalesced, latest-frame-wins)\n' +
+    'badsize  ' + stats.wrongSize + '\n' +
+    'gap ms   ' + Math.round(stats.gapWindowMax) + ' (win)  '
+                + Math.round(stats.gapSessionMax) + ' (max)';
+  stats.raf = stats.recv = stats.paint = 0;
+  stats.gapWindowMax = 0;
+}, 1000);
+
+// ------------------------------------------------------------------------ boot
+if (wsUrl) startWs(wsUrl); else startDummy();
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(onRaf);
+</script>
+</body>
+</html>

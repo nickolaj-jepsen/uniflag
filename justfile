@@ -90,6 +90,10 @@ chmod-serial:
 sim *ARGS: chmod-serial
     cargo run --release -p uniflag-sim -- --port {{serial}} {{ARGS}}
 
+# Serve the overlay test page over http:// (for contexts that refuse file://).
+overlay-serve:
+    python -m http.server 8000 --directory overlay
+
 # Build the SimHub plugin (override the SimHub location with $env:UNIFLAG_SIMHUB_DIR).
 [windows]
 plugin-build:
