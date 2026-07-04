@@ -197,7 +197,8 @@ Shared palette (LED-tuned, carried over): `YELLOW (255,220,0)`,
 Gantry board (chrome per §8, lights as content):
 
 - **Ready** (iRacing `startReady`/`oneLapToGreen`, F1 formation lap): all five
-  lights dim amber standby breathe (`8 + Breathe(f,240)*16/255`).
+  lights amber standby breathe (`80 + Breathe(f,240)*80/255`, range 80..160 —
+  board content must read at a glance, unlike the idle-dim envelope).
 - **Set**: lights solid RED — `StartLightsLit` N of 5 left-to-right when the
   sim provides a count (LMU `mStartLight`/`mNumRedLights`), all five otherwise
   (iRacing `startSet`).

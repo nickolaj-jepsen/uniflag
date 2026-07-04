@@ -1,0 +1,1101 @@
+[
+  {
+    "name": "yellow_t0_ambient",
+    "file": "yellow_t0_ambient.rgb",
+    "description": "settled yellow cloth wave",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "yellow_t1_flash_white",
+    "file": "yellow_t1_flash_white.rgb",
+    "description": "onset flash, solid-white opening frame",
+    "sample_frame": 1,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Alert",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "yellow_t1_flash_blend",
+    "file": "yellow_t1_flash_blend.rgb",
+    "description": "onset flash mid-blend (age 5)",
+    "sample_frame": 5,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Alert",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "yellow_t1_pulse_on",
+    "file": "yellow_t1_pulse_on.rgb",
+    "description": "alert pulse on-phase",
+    "sample_frame": 40,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Alert",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "yellow_t1_pulse_off",
+    "file": "yellow_t1_pulse_off.rgb",
+    "description": "alert pulse off-phase (dimmed, not black)",
+    "sample_frame": 20,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Alert",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "yellow_t2_strobe_off",
+    "file": "yellow_t2_strobe_off.rgb",
+    "description": "urgent strobe off-phase (black)",
+    "sample_frame": 13,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Urgent",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "red_flash_ramp",
+    "file": "red_flash_ramp.rgb",
+    "description": "red onset ramp (age 4)",
+    "sample_frame": 4,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Red",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "red_t2_strobe_on",
+    "file": "red_t2_strobe_on.rgb",
+    "description": "red urgent strobe on-phase",
+    "sample_frame": 95,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Red",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "red_settled_ambient",
+    "file": "red_settled_ambient.rgb",
+    "description": "red settled to calm cloth wave",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Red",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "green_onset_band_mid",
+    "file": "green_onset_band_mid.rgb",
+    "description": "green signature sweep, band centred (age 15)",
+    "sample_frame": 15,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Green",
+          "tier": "Alert",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "green_settled_ambient",
+    "file": "green_settled_ambient.rgb",
+    "description": "green settled cloth wave",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Green",
+          "tier": "Alert",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "blue_t1_sweep",
+    "file": "blue_t1_sweep.rgb",
+    "description": "blue alert sweep band at x=18",
+    "sample_frame": 100,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Blue",
+          "tier": "Alert",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "blue_settled_ambient",
+    "file": "blue_settled_ambient.rgb",
+    "description": "blue settled, sweep stopped",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Blue",
+          "tier": "Alert",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "white_t0_settled",
+    "file": "white_t0_settled.rgb",
+    "description": "white settled cloth wave",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "White",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "black_attention_x_on",
+    "file": "black_attention_x_on.rgb",
+    "description": "black flag attention pulse, X bright",
+    "sample_frame": 40,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": true,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "black_ambient_breathe_mid",
+    "file": "black_ambient_breathe_mid.rgb",
+    "description": "black flag settled, X breathe mid-level",
+    "sample_frame": 360,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": true,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "dq_steady_x_and_board",
+    "file": "dq_steady_x_and_board.rgb",
+    "description": "disqualification: steady X + DQ board",
+    "sample_frame": 100,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "Disqualified",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "meatball_ambient_disc",
+    "file": "meatball_ambient_disc.rgb",
+    "description": "meatball settled, disc breathe mid-level",
+    "sample_frame": 360,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": true,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "checkered_attention_scroll",
+    "file": "checkered_attention_scroll.rgb",
+    "description": "checkered attention-speed scroll",
+    "sample_frame": 100,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Checkered",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "checkered_settled_drift",
+    "file": "checkered_settled_drift.rgb",
+    "description": "checkered settled lazy drift",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Checkered",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "debris_ambient_stripes",
+    "file": "debris_ambient_stripes.rgb",
+    "description": "debris stripe field",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Debris",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "sc_board_over_caution_yellow",
+    "file": "sc_board_over_caution_yellow.rgb",
+    "description": "SC board on the caution-forced yellow field",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "SafetyCar",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "vsc_board",
+    "file": "vsc_board.rgb",
+    "description": "VSC board on the caution-forced yellow field",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "VirtualSafetyCar",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "fcy_board",
+    "file": "fcy_board.rgb",
+    "description": "FCY board on the caution-forced yellow field",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "FullCourseYellow",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "dt_board_over_black_field",
+    "file": "dt_board_over_black_field.rgb",
+    "description": "drive-through board over the black field",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": true,
+          "black_detail": "DriveThrough",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "sg_board_over_black_field",
+    "file": "sg_board_over_black_field.rgb",
+    "description": "stop-and-go board over the black field",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": true,
+          "black_detail": "StopAndGo",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "demoted_x_board_over_yellow",
+    "file": "demoted_x_board_over_yellow.rgb",
+    "description": "bare black flag demoted to the X board under yellow",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Alert",
+          "black_flag": true,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "demoted_disc_board_over_black",
+    "file": "demoted_disc_board_over_black.rgb",
+    "description": "meatball demoted to the disc board under the black field",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": true,
+          "black_detail": "None",
+          "meatball": true,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "time_penalty_plus5_over_green",
+    "file": "time_penalty_plus5_over_green.rgb",
+    "description": "+5 time-penalty board over a green field",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Green",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 5,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "countdown_10_over_white",
+    "file": "countdown_10_over_white.rgb",
+    "description": "10-to-go countdown board over the white field",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "White",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 10,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "gantry_ready_breathe_mid",
+    "file": "gantry_ready_breathe_mid.rgb",
+    "description": "gantry standby breathe mid-level",
+    "sample_frame": 360,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Unknown",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Ready",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "gantry_set_3of5",
+    "file": "gantry_set_3of5.rgb",
+    "description": "gantry set phase, 3 of 5 lights",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Unknown",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Set",
+          "start_lights_lit": 3,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "gantry_go_lights_out",
+    "file": "gantry_go_lights_out.rgb",
+    "description": "gantry go phase, lights out",
+    "sample_frame": 100,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Unknown",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Go",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "incident_ring_settled_over_yellow",
+    "file": "incident_ring_settled_over_yellow.rgb",
+    "description": "incident ring settled dim over yellow",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": true
+        }
+      }
+    ]
+  },
+  {
+    "name": "furled_dashes_on_over_race_idle",
+    "file": "furled_dashes_on_over_race_idle.rgb",
+    "description": "furled dash ring blink on-phase over race idle",
+    "sample_frame": 40,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": true,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "strip_sector2_settled",
+    "file": "strip_sector2_settled.rgb",
+    "description": "sector strip: S2 active settled, others dim",
+    "sample_frame": 400,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [2],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "strip_sector13_urgent_off",
+    "file": "strip_sector13_urgent_off.rgb",
+    "description": "sector strip: S1+S3 active, urgent off-phase",
+    "sample_frame": 13,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Urgent",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [1, 3],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "fade_mid_yellow_clear",
+    "file": "fade_mid_yellow_clear.rgb",
+    "description": "yellow cleared, fade-out mid-way (age 7)",
+    "sample_frame": 407,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "Yellow",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      },
+      {
+        "frame": 400,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "race_idle_static_ticks",
+    "file": "race_idle_static_ticks.rgb",
+    "description": "race idle: four static grey ticks",
+    "sample_frame": 100,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Racing",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  },
+  {
+    "name": "session_idle_flankers_peak",
+    "file": "session_idle_flankers_peak.rgb",
+    "description": "session idle: violet flankers, left peak",
+    "sample_frame": 60,
+    "script": [
+      {
+        "frame": 0,
+        "state": {
+          "flag": "None",
+          "tier": "Ambient",
+          "black_flag": false,
+          "black_detail": "None",
+          "meatball": false,
+          "session": "Unknown",
+          "caution": "None",
+          "sectors": [],
+          "start_phase": "Off",
+          "start_lights_lit": 0,
+          "time_penalty_seconds": 0,
+          "countdown_laps": 0,
+          "furled": false,
+          "incident_warning": false
+        }
+      }
+    ]
+  }
+]

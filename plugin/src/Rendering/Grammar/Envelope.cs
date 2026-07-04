@@ -48,6 +48,9 @@ namespace Uniflag.Rendering.Grammar
 
         /// <summary>FadeOut only (field slot): the tier the departed field ran at.</summary>
         public Tier PriorTier;
+
+        /// <summary>FadeOut only (board slot): the departed board's value payload.</summary>
+        public byte PriorValue;
     }
 
     /// <summary>Envelopes for all three slots.</summary>
@@ -85,10 +88,12 @@ namespace Uniflag.Rendering.Grammar
         {
             public byte LastKind;
             public Tier LastTier;
+            public byte LastValue;
             public bool Fading;
             public uint FadeStart;
             public byte FadeKind;
             public Tier FadeTier;
+            public byte FadeValue;
         }
 
         private readonly Cond[] _field = new Cond[FieldKinds];
@@ -129,9 +134,9 @@ namespace Uniflag.Rendering.Grammar
 
             return new Envelopes
             {
-                Field = ComputeSlot(_field, (byte)comp.Field, comp.FieldTier, ref _fieldFade, frame),
-                Board = ComputeSlot(_board, (byte)comp.Board, Tier.Ambient, ref _boardFade, frame),
-                Frame = ComputeSlot(_frame, (byte)comp.Frame, Tier.Ambient, ref _frameFade, frame),
+                Field = ComputeSlot(_field, (byte)comp.Field, comp.FieldTier, 0, ref _fieldFade, frame),
+                Board = ComputeSlot(_board, (byte)comp.Board, Tier.Ambient, comp.BoardValue, ref _boardFade, frame),
+                Frame = ComputeSlot(_frame, (byte)comp.Frame, Tier.Ambient, 0, ref _frameFade, frame),
             };
         }
 
@@ -284,13 +289,14 @@ namespace Uniflag.Rendering.Grammar
             }
         }
 
-        private static SlotEnvelope ComputeSlot(Cond[] conds, byte visibleKind, Tier visibleTier, ref FadeState fade, uint frame)
+        private static SlotEnvelope ComputeSlot(Cond[] conds, byte visibleKind, Tier visibleTier, byte visibleValue, ref FadeState fade, uint frame)
         {
             if (visibleKind != 0)
             {
                 fade.Fading = false;
                 fade.LastKind = visibleKind;
                 fade.LastTier = visibleTier;
+                fade.LastValue = visibleValue;
                 uint age = unchecked(frame - conds[visibleKind].Epoch);
                 EnvelopePhase phase = age < FlashFrames ? EnvelopePhase.Flash
                     : age < WindowFrames ? EnvelopePhase.Attention
@@ -312,6 +318,7 @@ namespace Uniflag.Rendering.Grammar
                 fade.FadeStart = frame;
                 fade.FadeKind = fade.LastKind;
                 fade.FadeTier = fade.LastTier;
+                fade.FadeValue = fade.LastValue;
                 fade.LastKind = 0;
             }
 
@@ -326,6 +333,7 @@ namespace Uniflag.Rendering.Grammar
                         Age = fadeAge,
                         PriorKind = fade.FadeKind,
                         PriorTier = fade.FadeTier,
+                        PriorValue = fade.FadeValue,
                     };
                 }
                 fade.Fading = false;

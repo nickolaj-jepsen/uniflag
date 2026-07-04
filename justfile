@@ -110,11 +110,13 @@ golden-regen:
 # visual review) via the PluginGoldenDumper xunit tool — a separate corpus
 # with its own regen path; it never touches the frozen ported-parity set.
 
-# Regenerate golden fixtures incl. the C#-authored testdata/frames-plugin corpus.
+# Regenerate golden fixtures incl. the C#-authored testdata/frames-plugin and
+# testdata/frames-grammar corpora (each behind its own opt-in env var).
 [windows]
 golden-regen:
     cargo test -p proto --test golden_vectors -- --ignored regen
     $env:UNIFLAG_REGEN_PLUGIN_GOLDENS = '1'; dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}" --filter "FullyQualifiedName~PluginGoldenDumper"
+    $env:UNIFLAG_REGEN_GRAMMAR_GOLDENS = '1'; dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}" --filter "FullyQualifiedName~GrammarGoldenDumper"
 
 # Build the SimHub plugin (override the SimHub location with $env:UNIFLAG_SIMHUB_DIR).
 [windows]
