@@ -236,8 +236,8 @@ change them together.
   above), `SessionTypeName`, and `GameData.GamePaused`. No raw data — per-sim
   refinements (waves, VSC/SC, sector yellows) layer on in M10 via game-keyed
   adapters that run after the generic one and override its result.
-- **Flag priority** when several are set (parity with the v1 NCalc formula that
-  shipped in `simhub/uniflag.shsds`):
+- **Flag priority** when several are set (parity with the v1 Custom Serial
+  NCalc formula, retired at M11 — see git history):
   **Yellow > Blue > Black > White > Checkered > Green > Orange.**
   The unified layer never surfaces a red flag, so the generic adapter never emits
   one either.

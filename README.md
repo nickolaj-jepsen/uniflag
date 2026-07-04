@@ -3,8 +3,16 @@
 
 # uniflag
 
-A sim-racing flag-display for the Pimoroni Cosmic Unicorn (32×32 RGB matrix,
-RP2040 / Pico W). Driven by [SimHub] over USB CDC.
+A sim-racing flag display for the Pimoroni Cosmic Unicorn (32×32 RGB
+matrix, RP2040 / Pico W), driven by a native [SimHub] plugin.
+
+The plugin owns all state and rendering: it reads flag telemetry from
+the running sim, renders 32×32 frames at 60 fps, and streams them over
+USB (binary protocol, COBS-framed, CRC-checked) to the panel — which is
+a dumb framebuffer device. The same frames also feed a browser-rendered
+virtual panel served at `http://127.0.0.1:8972/`, usable standalone or
+as a DashStudio in-game overlay, so you get a flag display even without
+the hardware.
 
 > Targets the **original** Cosmic Unicorn (RP2040 + Pico W). The newer
 > Pico-2-W revision is not supported.
@@ -13,16 +21,26 @@ RP2040 / Pico W). Driven by [SimHub] over USB CDC.
 
 ## Repo layout
 
-- `firmware/` — embedded firmware (Rust + embassy-rs, RP2040)
-- `proto/` — wire-protocol types shared between firmware and the host tools
-- `plugin/` — SimHub plugin (C#, .NET Framework 4.8 — v2 work in progress)
-- `cli/` — host-side bring-up CLI (`uniflag-cli`): test-pattern streamer and
-  protocol diagnostic for the panel
-- `simhub/` — SimHub-side "Custom serial device" profile + setup notes
-- `docs/` — external references: Cosmic Unicorn hardware, SimHub plugin / properties
+- `proto/` — the frozen v2 binary wire protocol (Rust, `no_std`):
+  packet layer, COBS framing, CRC-16, shared USB/geometry constants
+- `plugin/` — the SimHub plugin (C#, .NET Framework 4.8): renderer,
+  game adapters, USB device connection, web overlay server, settings UI
+- `firmware/` — embedded firmware (Rust + embassy-rs, RP2040): receives
+  frames over USB CDC and puts them on the panel
+- `cli/` — host-side bring-up CLI (`uniflag-cli`): test-pattern streamer
+  and protocol diagnostic for the panel
+- `overlay/` — the browser virtual-panel page + the DashStudio dash file
+- `simhub/` — end-user plugin install / setup / troubleshooting guide
+- `testdata/` — frozen golden fixtures: cross-language protocol byte
+  vectors and golden frames (the Rust and C# suites both verify against
+  them), plus C#-only adapter timeline scripts
+- `docs/` — protocol + effects specifications, SimHub and Cosmic Unicorn
+  references ([index](docs/README.md))
 - `justfile` — task runner (see below)
 
 ## Toolchain
+
+Rust side (proto, cli, firmware):
 
 ```bash
 nix develop      # devShell with rustup, elf2uf2-rs
@@ -31,25 +49,31 @@ nix develop      # devShell with rustup, elf2uf2-rs
 Without Nix: install rustup, add the `thumbv6m-none-eabi` target, and
 install `elf2uf2-rs` from cargo.
 
+Plugin side (Windows): .NET Framework 4.8 developer pack plus a SimHub
+install for the reference assemblies (`SimHub.Plugins.dll` etc. —
+never redistributed). The build defaults to
+`C:\Program Files (x86)\SimHub`; override with
+`$env:UNIFLAG_SIMHUB_DIR`.
+
 ## Common tasks
 
 All driven through [`just`](https://github.com/casey/just); run `just`
 with no arguments to list them.
 
-| Command          | What it does                                                              |
-|------------------|---------------------------------------------------------------------------|
-| `just fmt`       | `cargo fmt --all`                                                         |
-| `just fmt-check` | `cargo fmt --all -- --check` (CI gate)                                    |
-| `just clippy`    | clippy on host crates *and* firmware (different target), `-D warnings`    |
-| `just test`      | `cargo test` on host crates only (firmware is `no_std`, `test = false`)   |
-| `just build`     | release build of the firmware ELF                                         |
-| `just img`       | build, then convert ELF → UF2 at `target/uniflag.uf2`                     |
-| `just flash`     | full pipeline: build → UF2 → wait for `RPI-RP2` mount → copy → fix serial |
-| `just cli`       | run `uniflag-cli` against the device's serial port                        |
-
-The host crates (`proto`, `uniflag-render`, `uniflag-cli`) are the
-workspace default-members; the firmware is excluded so a bare
-`cargo check` from the root doesn't try to cross-compile.
+| Command              | What it does                                                              |
+|----------------------|---------------------------------------------------------------------------|
+| `just fmt`           | `cargo fmt --all`                                                         |
+| `just fmt-check`     | `cargo fmt --all -- --check` (CI gate)                                    |
+| `just clippy`        | clippy on host crates *and* firmware (different target), `-D warnings`    |
+| `just test`          | `cargo test` on host crates only (firmware is `no_std`, `test = false`)   |
+| `just build`         | release build of the firmware ELF                                         |
+| `just img`           | build, then convert ELF → UF2 at `target/uniflag.uf2`                     |
+| `just flash`         | full pipeline: build → UF2 → wait for `RPI-RP2` mount → copy → fix serial |
+| `just cli`           | run `uniflag-cli` against the device's serial port                        |
+| `just plugin-build`  | build the SimHub plugin DLL (Windows)                                     |
+| `just plugin-test`   | run the plugin test suite (Windows)                                       |
+| `just overlay-serve` | serve the overlay page from disk for iteration outside SimHub            |
+| `just golden-regen`  | regenerate the *regenerable* golden fixtures — deliberate commits only    |
 
 ## Flashing
 
@@ -58,22 +82,23 @@ workspace default-members; the firmware is excluded so a bare
 2. `just flash` — builds the firmware, converts to UF2, waits for the
    mount, copies, and waits for the serial device to come back.
 
-The mount path and serial device in the `justfile` are Linux-flavoured
-(`/run/media/$USER/RPI-RP2`, `/dev/ttyACM0`); on other OSes either edit
-the `justfile` or run the steps by hand (`elf2uf2-rs` → drag-and-drop
-the UF2).
+The default mount path and serial device in the `justfile` are
+Linux-flavoured; on Windows override them first, e.g.
+`$env:UNIFLAG_SERIAL = 'COM5'; $env:UNIFLAG_MOUNT = 'D:\'`.
 
 ## SimHub setup
 
-See [`simhub/README.md`](simhub/README.md) for the end-user setup
-(profile import, NCalc formula, troubleshooting). The panel can also be
-driven without SimHub via the bundled `uniflag-cli` test-pattern
-streamer.
+See [`simhub/README.md`](simhub/README.md) for the end-user guide:
+installing the plugin DLL, panel auto-discovery, brightness, the web
+overlay, and troubleshooting. The panel can also be driven without
+SimHub via the bundled `uniflag-cli` test-pattern streamer.
 
-## External references
+## Specifications and references
 
-Cosmic Unicorn hardware / PIO and the SimHub plugin / property
-catalogue live under [`docs/`](docs/README.md).
+The binary wire protocol is specified in
+[`docs/protocol.md`](docs/protocol.md), the flag-effects contract in
+[`docs/effects-spec.md`](docs/effects-spec.md); Cosmic Unicorn hardware
+/ PIO and SimHub references live under [`docs/`](docs/README.md).
 
 ## License
 

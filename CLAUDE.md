@@ -4,18 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`uniflag` is a sim-racing flag display for the **original** Pimoroni Cosmic Unicorn (RP2040 + Pico W; the newer Pico-2-W / RP2350 revision is **not** supported). Firmware is Rust + embassy-rs; it consumes a small ASCII line protocol over USB-CDC, typically driven by SimHub's built-in Custom Serial Devices plugin.
+`uniflag` is a sim-racing flag display for the **original** Pimoroni Cosmic Unicorn (RP2040 + Pico W; the newer Pico-2-W / RP2350 revision is **not** supported). A native SimHub plugin (C#) owns all state and rendering; the firmware (Rust + embassy-rs) is a framebuffer device that receives complete RGB888 frames over USB-CDC via a frozen binary protocol. A browser/overlay virtual panel renders the same frames without hardware.
 
 ## Workspace layout
 
-- `proto/` — wire-protocol types (`no_std`, allocation-free), shared by firmware, render, and cli.
-- `render/` — `uniflag-render`, host-testable rendering primitives (`anim`, `effects`, `surface::Surface`, `BrightnessController`). `no_std`, depends only on `proto`. Snapshot tests in `render/tests/` use `insta` against an in-memory `MockSurface` (defined in `tests/common/mod.rs`).
-- `firmware/` — embedded firmware (`thumbv6m-none-eabi`, embassy-rs). Implements `Surface` for the hardware `Display` and runs the embassy task in `runtime.rs` that ties signals/timers/persistence to `uniflag_render::effects::paint`. Excluded from workspace `default-members` so a bare `cargo check` from the root doesn't try to cross-compile.
-- `cli/` — `uniflag-cli`, binary-protocol test-pattern streamer and firmware diagnostic tool (stream/loopback/emit).
-- `simhub/` — end-user SimHub profile + setup notes.
-- `docs/` — external references (Cosmic Unicorn hardware/PIO, SimHub plugin/property catalogue).
+- `proto/` — the frozen v2 binary wire protocol (`no_std`, allocation-free): `packet` (typed packets + `PROTOCOL_VERSION`, `USB_VID`/`USB_PID`, panel geometry), `cobs`, `crc`. Golden-vector conformance tests in `proto/tests/golden_vectors.rs` pin the bytes under `testdata/proto/`.
+- `firmware/` — embedded firmware (`thumbv6m-none-eabi`, embassy-rs): blits streamed frames, paints the local fallback/test screens, reports button events. Excluded from workspace `default-members` so a bare `cargo check` from the root doesn't try to cross-compile.
+- `cli/` — `uniflag-cli`, host-side test-pattern streamer and protocol diagnostic (stream/loopback/emit modes). Conformance tests pin its emitted bytes against `testdata/proto/`.
+- `plugin/` — the SimHub plugin (C#, .NET Framework 4.8): `plugin/src/` (Rendering, Adapters, Device, Protocol, Web, settings UI) + `plugin/tests/` (xunit). Built via `plugin/UniflagPlugin.sln`; needs SimHub's reference DLLs (see Common commands).
+- `overlay/` — the browser virtual-panel page (`index.html`, embedded into the plugin assembly at build time) + the DashStudio dash under `overlay/dash/`.
+- `simhub/` — end-user plugin install / setup / troubleshooting guide.
+- `testdata/` — the frozen cross-language golden fixtures (see Golden fixtures below). Top-level so the C# tests reach it by relative path.
+- `docs/` — protocol + effects specifications, SimHub / Cosmic Unicorn references, historical v2 plan ([index](docs/README.md)).
 
-The host crates (`proto`, `uniflag-render`, `uniflag-cli`) are workspace `default-members`. To touch the firmware crate from the root, use `--manifest-path firmware/Cargo.toml` or `cd firmware && cargo ...`.
+The Rust host crates (`proto`, `uniflag-cli`) are workspace `default-members`. To touch the firmware crate from the root, use `--manifest-path firmware/Cargo.toml` or `cd firmware && cargo ...`.
 
 ## Common commands
 
@@ -25,59 +27,62 @@ All wrapped by `just` (run `just` to list). The justfile works on both Linux and
 |---------|-----------|
 | `just fmt` / `just fmt-check` | `cargo fmt --all` (the latter is the CI gate). |
 | `just clippy` | clippy on host crates **and** firmware separately (different target). `-D warnings`. |
-| `just test` | `cargo test -p proto -p uniflag-render -p uniflag-cli`. Firmware has `test = false` (it's `no_std`). |
-| `just build` | release build of the firmware ELF. |
-| `just img` | build, then convert ELF → UF2 at `target/uniflag.uf2`. |
-| `just flash` | full pipeline: build → UF2 → wait for `RPI-RP2` mount (hold BOOTSEL) → copy → wait for serial. |
+| `just test` | `cargo test -p proto -p uniflag-cli --all-targets`. Firmware has `test = false` (it's `no_std`). |
+| `just build` / `just img` | release firmware ELF / ELF → UF2 at `target/uniflag.uf2`. |
+| `just flash` | build → UF2 → wait for `RPI-RP2` mount (hold BOOTSEL) → copy → wait for serial. |
 | `just cli` | run `uniflag-cli` against the device's serial port (streams a test pattern by default). |
+| `just plugin-build` / `just plugin-test` | build / test the SimHub plugin (Windows only; `dotnet` against `plugin/UniflagPlugin.sln`). |
+| `just overlay-serve` | serve `overlay/` over http:// for page iteration outside SimHub. |
+| `just golden-regen` | regenerate the *regenerable* fixtures only — see Golden fixtures. Deliberate, reviewed commits only. |
 
-Run a single host test: `cargo test -p proto -- parse_canonical_line` (or `-p uniflag-cli`).
+Run a single host test: `cargo test -p proto -- hello` (or `-p uniflag-cli`). Single plugin test: `dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir=..." --filter "FullyQualifiedName~GoldenFrameTests"`.
 
-CI mirrors `just fmt-check`, `just clippy` (both legs), and `just test` — keep them green.
+The plugin build resolves SimHub's proprietary reference assemblies (`SimHub.Plugins.dll` etc.) from `$env:UNIFLAG_SIMHUB_DIR` (default `C:\Program Files (x86)\SimHub`). They are never committed or redistributed. Reference SimHub version: 9.11.21 (`docs/simhub-plugin-api.md`).
 
-Toolchain: stable rustc with `thumbv6m-none-eabi` (pinned in `rust-toolchain.toml`). `nix develop` provides rustup and `elf2uf2-rs`; without Nix install those manually.
+CI mirrors `just fmt-check`, `just clippy` (both legs), and `just test` — keep them green. The Windows plugin job is isolated and non-gating by design (installer flakiness must never red the Rust pipeline).
+
+Toolchain: stable rustc with `thumbv6m-none-eabi` (pinned in `rust-toolchain.toml`); `nix develop` provides rustup and `elf2uf2-rs`. Plugin side: .NET Framework 4.8 developer pack + a SimHub install (Windows).
 
 ## Architecture
 
-### Wire protocol (`proto/src/lib.rs`)
+### Wire protocol (`proto/`)
 
-ASCII, semicolon-separated `key=value` fields, terminated with `\n` (parser also accepts `\r\n`). `no_std`, no allocation, ≤ `MAX_LINE_LEN` (48) bytes. Fields:
+Binary, COBS-framed, CRC-16/CCITT-FALSE, one trailing `0x00` delimiter per packet. Five packet types: Hello / HelloAck (handshake carrying `PROTOCOL_VERSION`, firmware version, panel size), Frame (3072 B RGB888, row-major), Brightness, ButtonEvent. The full layout lives in `docs/protocol.md`; `proto/src/packet.rs` is the Rust source of truth, mirrored by hand in C# under `plugin/src/Protocol/`.
 
-| Key | Values | Meaning |
-|-----|--------|---------|
-| `F` | `N Y B K W R G C O` | flag (none / yellow / blue / black / white / red / green / chequered / orange) |
-| `B` | `0 1 2` | wave level (none / single / double) |
-| `S` | `pre-race racing paused post-race replay unknown` | session state |
-| `C` | `N V S` | caution (none / VSC / Safety Car) — orthogonal to `F` |
-| `Z` | `(empty) 1 2 3 12 13 23 123` | sector mask — ascending unique digits, packed in low 3 bits |
-
-**Forward-compat invariants** — preserve these when extending:
-- Unknown keys are silently ignored.
-- Unknown values for a known key return `ParseError::BadValue`.
-- The line protocol is the single source of truth between firmware and any host. Tests in `proto` round-trip every flag/session/wave/caution/sector combination — extend them when adding values.
+**Frozen as of M6** — any wire-visible change bumps `PROTOCOL_VERSION`, changes both codecs *and* the prose *and* regenerates `testdata/proto/` in one reviewed commit. Forward-compat posture: unknown packet types ignored; bad CRC / wrong length dropped silently; receivers resync at the next `0x00`. The USB identity (`USB_VID`/`USB_PID` in `proto`, mirrored in `plugin/src/Device/DeviceDiscovery.cs`) is single-sourced — the plugin accepts both the test PID `0x0001` and the registered `0xF1A6` during the pid.codes transition (`docs/v2-tracking.md`).
 
 ### Firmware (`firmware/src/`)
 
-Embassy executor with three concurrent jobs spawned from `main`:
+Embassy executor; three spawned tasks plus three futures joined in `main` (`join3` dodges `'static` gymnastics on `Receiver`/`Sender`/`UsbDevice`):
 
-1. **`runtime_task`** (`runtime.rs`) — owns the `Display` and the persisted brightness. 60 fps animation loop; calls `uniflag_render::effects::paint` to recompute the whole panel from current `proto::State` + frame counter every tick. Per-flag base layers + overlays + precedence rules are documented at the top of `runtime.rs` (red beats caution beats per-flag base; sector band overlays unless red; "disconnected" is the boot/idle blank state when no host updates arrive within `CONNECT_TIMEOUT`). Brightness/sleep/persist policy is delegated to `uniflag_render::BrightnessController`.
-2. **`buttons::run`** (`buttons.rs`) — polls the three brightness buttons (GPIO 21/26/27, active-low) and pushes `uniflag_render::brightness::Action` events into a channel.
-3. **`watchdog_feed`** — feeds the RP2040 watchdog every 2 s (8 s timeout, just under the RP2040 errata-E1 ceiling). The panic handler also relies on this for recovery — on panic it spins, the feed task stops, and the chip resets within `WATCHDOG_TIMEOUT`.
+1. **`runtime::run`** (`runtime.rs`) — owns the `Display`. Select loop: streamed Frame → blit + `present().await`; Brightness → applied on next blit (never to local screens — they always paint full-brightness so a stale sleep value can't hide them); long press → toggle the local test screen; 16 ms tick → advance the local frame counter and repaint whichever local screen is active. No decodable Frame for `CONNECT_TIMEOUT` (1.5 s) → the §7a fallback screen (`screens.rs`), also the boot state.
+2. **`buttons::run`** (`buttons.rs`) — debounces the three buttons (GPIO 21/26/27, active-low), classifies short/long on release, queues `ButtonEvent`s for TX (only while a handshaken host is live). Button *policy* is host-side; the firmware only reports.
+3. **`watchdog_feed`** — feeds the RP2040 watchdog every 2 s (8 s timeout). The panic handler relies on it: on panic the firmware spins, the feed stops, the chip resets.
 
-Two more futures are awaited in `main` directly (rather than spawned as tasks) to dodge `'static` lifetime gymnastics on `Receiver` / `UsbDevice`: `run_usb` and `cdc_rx_loop`.
+Plus `run_usb`, `cdc_rx_loop` (COBS-accumulate → parse → dispatch: Frame to a zero-copy two-slot channel, Brightness to a signal, Hello answered with HelloAck on `TX_CHANNEL`), and `cdc_tx_loop`.
 
-State plumbing is one-way:
-- `cdc_rx_loop` parses incoming lines and `signal()`s `STATE_SIGNAL` (a `Signal<CriticalSectionRawMutex, proto::State>`).
-- The runtime task `wait()`s on `STATE_SIGNAL` and on the brightness channel; both racing against a frame-tick timer.
-- Brightness is debounced (`BrightnessController::SAVE_DEBOUNCE_MS = 2000`) before being persisted.
+**Display driver** (`display.rs`) — the Cosmic Unicorn is **not** HUB75: column shift-registers + 4-to-16 row decoder, one PIO SM with a self-chaining DMA pair, double-buffered bitstreams, per-pixel 14-bit-BCM gamma. See `docs/cosmic-unicorn-hardware.md` / `docs/cosmic-unicorn-pio.md`.
 
-**Display driver** (`display.rs`) — the Cosmic Unicorn is **not** HUB75. A custom column shift-register topology with 4-to-16 row decoder, driven by a single PIO state machine with a self-chaining DMA pair. Two SRAM bitstreams (front/back) double-buffer; `present()` atomically retargets the DMA chain at the just-painted buffer and waits for the swap. Per-pixel BCM (binary code modulation) splits 14-bit gamma-corrected intensity across 14 BCD frames; full bitstream is 16128 B. See `docs/cosmic-unicorn-hardware.md` and `docs/cosmic-unicorn-pio.md` for the wire-level details.
+The firmware deliberately does **not** render effects and does not link any render code — the fallback/test screens in `screens.rs` implement `docs/effects-spec.md` §7a bit-exactly with embedded literals. The device stores no settings; brightness persists host-side in the plugin.
 
-**Persistent storage** (`storage.rs`) — the last 4 KB QSPI flash sector is reserved for settings (currently just brightness). Reservation is by linker-script: `firmware/memory.x` shrinks the `FLASH` region by `0x1000`, and `STORAGE_OFFSET` points at the carved sector. Erase + write blocks XIP for ~25 ms — debounce writes; the watchdog feed cadence is sized for it. Keep the `memory.x` reservation and `STORAGE_OFFSET` in lockstep.
+### Plugin (`plugin/src/`)
 
-### CLI (`cli/src/`)
+- **Rendering** — the renderer core: `RendererLoop` runs a dedicated thread ticking the **60 fps internal frame counter** all ported animation math assumes, painting via `Effects.Paint` (live game state) or `IdleEffects.PaintConnectedIdle` (stream alive, no game), publishing 3072-byte frames to registered `IFrameSink`s. Sinks *sample* that clock (USB at 30 fps by parity decimation, web overlay at 30 fps, WPF preview at display cadence) — never rebase the counter to a sink rate; that would halve every strobe rate. The thread runs only while ≥ 1 sink is registered. `Rendering/` must stay WPF-free (loadable from plain xunit).
+- **Adapters** — telemetry → `RenderState`: `GenericAdapter` (unified `Flag_*` properties, priority + session mapping documented in `docs/simhub-flag-properties.md`) with the iRacing raw-telemetry refiner layered after it (waves, VSC/SC, penalties). One reused snapshot, immutable pipeline — no avoidable allocation on the 60 Hz SimHub data thread.
+- **Device** — `DeviceConnectionManager`: VID/PID discovery (manual COM override bypasses the filter but never the handshake), Hello/HelloAck validation (protocol-version / panel-size mismatch → *Refused* with message, never silent), 30 fps frame streaming, reconnects; `BrightnessPolicy` owns the slider + device-button policy and persists into SimHub settings.
+- **Web** — `OverlayWebServer`: localhost-only (`127.0.0.1:8972`), hand-rolled HTTP + WebSocket, newest-frame-wins per client. Contracts in `docs/web-overlay.md`.
+- `UniflagPlugin.cs` wires it together (SimHub `IPlugin`/`IDataPlugin`/`IWPFSettingsV2`); the settings tab shows device status, brightness, port override, live preview, overlay status.
 
-Speaks the v2 binary protocol (`proto::packet`). Three modes: stream (default — Hello/HelloAck handshake, then COBS-framed Frame packets at a monotonic-deadline-paced 30 fps, printing inbound ButtonEvents), loopback (decodes its own emitted byte stream in-process, no serial), and emit (writes exactly one encoded wire packet and exits, for golden byte-diff verification). Output goes to a serial port (`--port`) or stdout (`--no-port`); all human status goes to stderr. Testable logic (patterns, pacing, RX decode, wire builders) lives in `cli/src/lib.rs` modules; conformance tests in `cli/tests/` pin the emitted bytes against `testdata/proto/`.
+### Golden fixtures (`testdata/`) — the cross-language contract
+
+Both the Rust and C# suites consume the same files; **neither side ever generates its own fixtures**; regeneration only via `just golden-regen` in deliberate, reviewed commits. `.gitattributes` marks `testdata/**` `-text`.
+
+- `testdata/proto/` — byte vectors for every packet (pre- and post-COBS) plus negative vectors; prose spec `docs/protocol.md`. Regenerable (`golden-regen` proto leg) — but the bytes are the frozen contract, so a regen that changes anything is a protocol change.
+- `testdata/frames/` — the **ported-parity** corpus: 40 raw RGB888 frames + `manifest.json` pinning `(state, frame, flag_age, connected)` tuples; prose spec `docs/effects-spec.md`. **Permanently frozen at M11**: the Rust dumper died with `render/`, so this corpus is unregenerable *by design*. Never rewrite these bytes; the manifest is the ledger (`plugin/tests/GoldenFrameTests.cs` derives one test per entry).
+- `testdata/frames-plugin/` — the **C#-authored** corpus (M10 penalty effects), separate from the ported-parity set, with its own regen path (`PluginGoldenDumper`, the `[windows]` `golden-regen` leg, gated on `UNIFLAG_REGEN_PLUGIN_GOLDENS`).
+- `testdata/timelines/` — `RenderState` scenario scripts (JSON) replayed through the adapter pipeline by `plugin/tests/TimelineReplayTests.cs`. C#-only (the one non-cross-language subdir) and hand-authored, with no `golden-regen` leg: the two existing files are M7 transcriptions of retired v1 sim scenarios and are frozen (they pin that transcription); new scenarios are added as *new* files in reviewed commits.
+
+`Effects.Paint` is pinned byte-for-byte by the frozen corpus — new rendering behaviour goes in new code paths (`IdleEffects`, penalty painters), never into `Paint`'s existing branches.
 
 ## Conventions
 
@@ -86,5 +91,7 @@ Speaks the v2 binary protocol (`proto::packet`). Three modes: stream (default �
 - The `pio` / `pio-proc` versions must match the version `embassy-rp` re-exports (currently 0.3) — bumping one without the other breaks `Common::load_program`.
 - No on-device logging or debugger support: firmware doesn't pull in `defmt` / `defmt-rtt` / `panic-probe`, and there's no `probe-rs` runner. Errors are silently swallowed; panic spins until the watchdog resets. Don't reintroduce these without a reason — the maintainer doesn't own a debugger.
 - Dev profile uses `opt-level = 1` because async generators inflate badly at `0`. Don't change without a reason.
-- The `simhub/uniflag.shsds` profile is an opaque GUI export — author it through SimHub on Windows and copy the file in, don't hand-edit. The `.shsds` JSON format is undocumented and changes between SimHub versions.
-- SimHub does **not** auto-append a line terminator; any NCalc formula must end with `'\r\n'` or the firmware never sees a complete line. This is the single most common SimHub-side failure — keep the warning prominent in `simhub/README.md`.
+- `testdata/**` is immutable outside `just golden-regen`: never edit fixtures by hand, never let a test write them (regen paths are env-var-gated), and treat any diff under `testdata/frames/` as a bug — that corpus has no regen path anymore. The one sanctioned hand-authored path is adding *new* scenario files under `testdata/timelines/` (see Golden fixtures).
+- The wire protocol is frozen: extending it means bumping `PROTOCOL_VERSION`, updating `proto` + the C# mirror + `docs/protocol.md` + `testdata/proto/` together, in one commit.
+- Plugin sources carry `SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception` headers (see `LICENSE-EXCEPTION`); keep them on new `plugin/` files.
+- v1 history: the ASCII line protocol, the `render/` crate, and the SimHub Custom Serial device profile were retired at M11 — they live in git history only. Old comments citing `render/src/*.rs` paths refer to that history (`docs/effects-spec.md` explains the convention).

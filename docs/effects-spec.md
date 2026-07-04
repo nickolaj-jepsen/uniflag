@@ -2,6 +2,12 @@
 
 Executable-spec companion for the C# renderer port (v2-plan milestone M3, step 3).
 
+> **M11 note.** The `render/` crate was deleted at M11; every `render/…`
+> file:line citation below refers to git history (the pre-M11 tree). The
+> ported-parity golden corpus in `testdata/frames/` is **permanently frozen**
+> — its dumper died with the crate, so it is unregenerable by design — and
+> remains the arbiter. This spec is frozen with it.
+
 **Authority order.** The Rust code in `render/src/effects.rs` + `render/src/anim.rs`
 and the golden frames in `testdata/frames/` are the spec source; this document is a
 faithful transcription of that code, written so the C# port can reproduce every

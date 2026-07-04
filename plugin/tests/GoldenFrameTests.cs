@@ -129,8 +129,9 @@ namespace Uniflag.Tests
         [Fact]
         public void ManifestPinsTheFullFrozenCorpus()
         {
-            // The ledger (render/src/scenarios.rs) currently holds 40 entries;
-            // the corpus is append-only, so fewer means a broken checkout.
+            // The corpus froze permanently at M11 with exactly 40 entries
+            // (the manifest is the ledger; the Rust dumper is gone), so any
+            // other count means a broken checkout.
             Assert.Equal(40, Scenarios.Value.Count);
             foreach (GoldenScenario scenario in Scenarios.Value)
             {

@@ -4,12 +4,12 @@
 // testdata/frames-plugin/ (docs/v2-plan.md M10 step 3, cross-cutting
 // "two-corpus" policy). This corpus is deliberately separate from the
 // ported-parity set at testdata/frames/: that one was produced by the Rust
-// dumper and freezes at M11; this one pins the M10 penalty effects, is
-// produced by the C# dumper in PluginGoldenDumper.cs (the [windows] leg of
-// `just golden-regen`), and stays regenerable — its baselines are pending
-// maintainer visual review in the WPF preview, and regeneration keeps
-// revision cheap. Names are unique lowercase_snake and the table is
-// append-only, mirroring render/src/scenarios.rs discipline.
+// dumper and froze permanently at M11; this one pins the M10 penalty
+// effects, is produced by the C# dumper in PluginGoldenDumper.cs (the
+// [windows] leg of `just golden-regen`), and stays regenerable — its
+// baselines are pending maintainer visual review in the WPF preview, and
+// regeneration keeps revision cheap. Names are unique lowercase_snake and
+// the table is append-only, mirroring the retired Rust ledger's discipline.
 
 using System;
 using System.Collections.Generic;

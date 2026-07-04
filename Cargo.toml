@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["proto", "render", "firmware", "cli"]
+members = ["proto", "firmware", "cli"]
 
 # Default to building only the host-side crates so workspace-wide cargo
 # commands don't try to cross-compile firmware to thumbv6m without a target
 # arg. Use `cd firmware && cargo ...` (or `cargo ... -p uniflag-firmware
 # --target thumbv6m-none-eabi`) for the firmware crate.
-default-members = ["proto", "render", "cli"]
+default-members = ["proto", "cli"]
 
 [workspace.package]
 edition = "2021"

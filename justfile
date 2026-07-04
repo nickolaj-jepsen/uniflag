@@ -30,12 +30,12 @@ fmt-check:
 
 # Mirror CI: clippy on host crates, then on firmware (different target).
 clippy:
-    cargo clippy -p proto -p uniflag-render -p uniflag-cli --all-targets -- -D warnings
+    cargo clippy -p proto -p uniflag-cli --all-targets -- -D warnings
     cargo clippy --all-targets --manifest-path firmware/Cargo.toml --target thumbv6m-none-eabi -- -D warnings
 
 # Tests on host crates only (firmware is no_std, `test = false`).
 test:
-    cargo test -p proto -p uniflag-render -p uniflag-cli --all-targets
+    cargo test -p proto -p uniflag-cli --all-targets
 
 # Build the firmware ELF (release).
 build:
@@ -94,23 +94,25 @@ cli *ARGS: chmod-serial
 overlay-serve:
     python -m http.server 8000 --directory overlay
 
-# Regenerate the cross-language golden fixtures (testdata/frames, testdata/proto).
+# Regenerate the regenerable golden fixtures (testdata/proto byte vectors).
 # Only ever run this deliberately, in a reviewed commit — the fixtures are the
 # frozen contract both the Rust and C# suites must match byte-exactly.
+#
+# The ported-parity frame corpus (testdata/frames/) is NOT regenerated here:
+# its Rust dumper was deleted with render/ at M11 and the corpus is permanently
+# frozen — unregenerable by design. Never rewrite those bytes.
 [unix]
 golden-regen:
-    cargo run -p uniflag-render --example dump_golden
     cargo test -p proto --test golden_vectors -- --ignored regen
 
 # The [windows] leg additionally regenerates the C#-AUTHORED corpus at
 # testdata/frames-plugin/ (M10 penalty effects; baselines pending maintainer
 # visual review) via the PluginGoldenDumper xunit tool — a separate corpus
-# with its own regen path; it never touches the ported-parity set.
+# with its own regen path; it never touches the frozen ported-parity set.
 
 # Regenerate golden fixtures incl. the C#-authored testdata/frames-plugin corpus.
 [windows]
 golden-regen:
-    cargo run -p uniflag-render --example dump_golden
     cargo test -p proto --test golden_vectors -- --ignored regen
     $env:UNIFLAG_REGEN_PLUGIN_GOLDENS = '1'; dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}" --filter "FullyQualifiedName~PluginGoldenDumper"
 
