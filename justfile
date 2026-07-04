@@ -97,9 +97,22 @@ overlay-serve:
 # Regenerate the cross-language golden fixtures (testdata/frames, testdata/proto).
 # Only ever run this deliberately, in a reviewed commit — the fixtures are the
 # frozen contract both the Rust and C# suites must match byte-exactly.
+[unix]
 golden-regen:
     cargo run -p uniflag-render --example dump_golden
     cargo test -p proto --test golden_vectors -- --ignored regen
+
+# The [windows] leg additionally regenerates the C#-AUTHORED corpus at
+# testdata/frames-plugin/ (M10 penalty effects; baselines pending maintainer
+# visual review) via the PluginGoldenDumper xunit tool — a separate corpus
+# with its own regen path; it never touches the ported-parity set.
+
+# Regenerate golden fixtures incl. the C#-authored testdata/frames-plugin corpus.
+[windows]
+golden-regen:
+    cargo run -p uniflag-render --example dump_golden
+    cargo test -p proto --test golden_vectors -- --ignored regen
+    $env:UNIFLAG_REGEN_PLUGIN_GOLDENS = '1'; dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}" --filter "FullyQualifiedName~PluginGoldenDumper"
 
 # Build the SimHub plugin (override the SimHub location with $env:UNIFLAG_SIMHUB_DIR).
 [windows]

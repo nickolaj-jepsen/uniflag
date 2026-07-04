@@ -112,6 +112,62 @@ JSON.net-serializable POCOs.
 - Custom properties/actions/events: `this.AttachDelegate(name, func)`,
   `this.AddAction(...)`, `this.AddEvent(...)` — same extensions class.
 
+## Game-specific raw data via `GetRawDataObject()` (M10 research)
+
+Everything verified against SimHub 9.11.21 by reflection + IL inspection.
+
+- `StatusDataBase.GetRawDataObject()` is the abstract seam to a game's raw
+  data. The concrete `StatusData<T>` implements it as a plain field read of
+  `Raw` (`T`) plus a `box` that is a no-op for class-typed raws — **no
+  allocation, trivially cheap per tick**.
+- Raw types live in per-game reader assemblies. There is **no
+  `iRacingReader.dll`** — the iRacing reader lives in **`ICarsReader.dll`**
+  under the `IRacingReader` namespace (assembly name and namespace differ).
+  `IRacingReader.IRacingManager` extends
+  `GameManagerBase<DataSampleEx, IDisposable, DataSampleStorage>`, so for
+  iRacing `GetRawDataObject()` returns an **`IRacingReader.DataSampleEx`**.
+- `DataSampleEx` exposes (public properties): `SessionData`
+  (`iRacingSDK.SessionData`, the parsed session YAML), `CurrentSessionInfo`,
+  `AllSessionData`, `Telemetry` (`iRacingSDK.Telemetry`), `GearRatios`,
+  `SessionDataDict`.
+- **`iRacingSDK.Telemetry` derives from `Dictionary<string, object>`** with
+  typed convenience getters on top. The typed `SessionFlags` getter is
+  IL-verified as `(SessionFlags)(int)this["SessionFlags"]` — i.e. the
+  dictionary entry is **boxed `Int32`** (the top start-light bits make it
+  negative; reinterpret unchecked to `uint`). Dictionary keys are whatever
+  telemetry variables the sim exports that session — names like
+  `PlayerCarTowTime` exist at runtime even though no typed getter covers
+  them.
+- `Telemetry.UnderPaceCar` getter (IL-verified): `CarIdxTrackSurface[0] == 3`
+  — car index 0 is the pace car; 3 = on track.
+- The uniflag extractor (`GameDataExtractor.ExtractIRacingRaw`) therefore
+  reads raw data **reflectively**: one cached `PropertyInfo` for
+  `DataSampleEx.Telemetry` (cache keyed on the raw object's exact `Type`,
+  re-resolved on change), then casts the value to
+  `IDictionary<string, object>` (BCL interface — no proprietary reference
+  needed) and `TryGetValue("SessionFlags")`. Per-tick cost at 60 Hz: one
+  field read, one `PropertyInfo.GetValue` invocation (~hundreds of ns), one
+  dictionary lookup; zero per-tick allocation. Null-safe at every layer —
+  shape drift in a future SimHub degrades to "no raw data", never a throw
+  (SimHub throttles plugins whose `DataUpdate` throws). Note the one
+  reflective call whose failure mode is a throw rather than a null:
+  `Type.GetProperty("Telemetry")` raises `AmbiguousMatchException` if a
+  future raw type shadows `Telemetry` with a different property type, so
+  the extractor guards it and caches null like every other drift shape.
+- **Do NOT add compile-time references** to `ICarsReader.dll` or
+  `iRacingSDK.dll`: CI stages only the four pinned reference DLLs
+  (SimHub.Plugins, GameReaderCommon, log4net, SimHub.Logging), and the raw
+  shapes are per-game anyway. Reflection + BCL interfaces is the supported
+  pattern.
+- **Game identity**: `GameData.GameName` for iRacing is `"IRacing"` — the
+  same per-game code that names the `PluginsData\IRacing` settings folder
+  on a live install. NCalc's `SessionFlagsDetails.Is<bit>` layer is a
+  SimHub-side `EnumExposer<SessionFlags>` attached by the reader under
+  `Telemetry.SessionFlagsDetails`; it exists for formulas only — typed
+  plugins read the mask directly (see
+  `docs/simhub-flag-properties.md`, iRacing section, for the verified bit
+  table and the unified `GD_Flag_*` derivation).
+
 ## Referencing SimHub DLLs
 
 The DLLs are proprietary: never committed, never shipped. Projects

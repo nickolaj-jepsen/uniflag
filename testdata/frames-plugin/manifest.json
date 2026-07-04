@@ -1,0 +1,382 @@
+[
+  {
+    "name": "slowdown_sev1_static",
+    "file": "slowdown_sev1_static.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 1,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true,
+    "description": "slowdown severity 1: white SLOW + static orange digit 1; pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "slowdown_sev2_blink_on",
+    "file": "slowdown_sev2_blink_on.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 2,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 10,
+    "flag_age": 100,
+    "connected": true,
+    "description": "slowdown severity 2, digit 2 in the 2 Hz on-phase (10 < 18); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "slowdown_sev2_blink_off",
+    "file": "slowdown_sev2_blink_off.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 2,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 20,
+    "flag_age": 100,
+    "connected": true,
+    "description": "slowdown severity 2, digit blanked in the 2 Hz off-phase (20 >= 18); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "slowdown_sev3_blink_on",
+    "file": "slowdown_sev3_blink_on.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 3,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 5,
+    "flag_age": 100,
+    "connected": true,
+    "description": "slowdown severity 3, digit 3 in the 4 Hz on-phase (5 < 9); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "slowdown_sev3_blink_off",
+    "file": "slowdown_sev3_blink_off.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 3,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 12,
+    "flag_age": 100,
+    "connected": true,
+    "description": "slowdown severity 3, digit blanked in the 4 Hz off-phase (12 >= 9); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "meatball_breathe_start",
+    "file": "meatball_breathe_start.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": true,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true,
+    "description": "meatball disc at the breathe start (envelope 128, m 217); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "meatball_breathe_peak",
+    "file": "meatball_breathe_peak.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": true,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 15,
+    "flag_age": 100,
+    "connected": true,
+    "description": "meatball disc at the breathe peak (envelope 255, m 255 — full orange); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "meatball_breathe_trough",
+    "file": "meatball_breathe_trough.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": true,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 45,
+    "flag_age": 100,
+    "connected": true,
+    "description": "meatball disc at the breathe trough (envelope 1, m 180); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "meatball_with_sector_band",
+    "file": "meatball_with_sector_band.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [2],
+      "slowdown": 0,
+      "meatball": true,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true,
+    "description": "sector band S2 overlays the meatball board (bottom rows, on-phase); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "black_drive_through",
+    "file": "black_drive_through.rgb",
+    "state": {
+      "flag": "Black",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "DriveThrough",
+      "furled": false
+    },
+    "frame": 25,
+    "flag_age": 100,
+    "connected": true,
+    "description": "black flag X at breathe peak with the white DT marker; pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "black_stop_and_go",
+    "file": "black_stop_and_go.rgb",
+    "state": {
+      "flag": "Black",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "StopAndGo",
+      "furled": false
+    },
+    "frame": 25,
+    "flag_age": 100,
+    "connected": true,
+    "description": "black flag X at breathe peak with the white SG marker; pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "black_drive_through_x_trough",
+    "file": "black_drive_through_x_trough.rgb",
+    "state": {
+      "flag": "Black",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "DriveThrough",
+      "furled": false
+    },
+    "frame": 75,
+    "flag_age": 100,
+    "connected": true,
+    "description": "X envelope at 0 (frame 75): only the DT marker is visible; pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "furled_over_race_idle_on",
+    "file": "furled_over_race_idle_on.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": true
+    },
+    "frame": 10,
+    "flag_age": 100,
+    "connected": true,
+    "description": "furled tile blinked on over the race-idle marker; pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "furled_over_race_idle_off",
+    "file": "furled_over_race_idle_off.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": true
+    },
+    "frame": 20,
+    "flag_age": 100,
+    "connected": true,
+    "description": "furled off-phase: base race-idle marker only (accent leaves no residue); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "furled_over_yellow_static",
+    "file": "furled_over_yellow_static.rgb",
+    "state": {
+      "flag": "Yellow",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": true
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true,
+    "description": "furled tile over the static-yellow cloth wave (bright base legibility); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "furled_over_safety_car_board",
+    "file": "furled_over_safety_car_board.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "SafetyCar",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": true
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true,
+    "description": "furled tile over the SC board (accent wins the top border pixels); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "precedence_red_suppresses_penalties",
+    "file": "precedence_red_suppresses_penalties.rgb",
+    "state": {
+      "flag": "Red",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [1, 2, 3],
+      "slowdown": 3,
+      "meatball": true,
+      "black_detail": "None",
+      "furled": true
+    },
+    "frame": 100,
+    "flag_age": 100,
+    "connected": true,
+    "description": "red beats every penalty and suppresses both overlays (pure post-onset red); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "precedence_caution_beats_slowdown",
+    "file": "precedence_caution_beats_slowdown.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "SafetyCar",
+      "sectors": [],
+      "slowdown": 3,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true,
+    "description": "SC board over a pending severity-3 slowdown (caution outranks penalties); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "precedence_slowdown_beats_meatball",
+    "file": "precedence_slowdown_beats_meatball.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 2,
+      "meatball": true,
+      "black_detail": "None",
+      "furled": false
+    },
+    "frame": 10,
+    "flag_age": 100,
+    "connected": true,
+    "description": "slowdown board wins over a simultaneous meatball; pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "precedence_meatball_beats_black",
+    "file": "precedence_meatball_beats_black.rgb",
+    "state": {
+      "flag": "Black",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": true,
+      "black_detail": "DriveThrough",
+      "furled": false
+    },
+    "frame": 25,
+    "flag_age": 100,
+    "connected": true,
+    "description": "meatball board wins over the black-flag base (DT detail deferred); pending maintainer visual review (WPF preview)"
+  }
+]

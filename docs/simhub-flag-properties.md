@@ -77,23 +77,69 @@ Useful raw fields:
 | Property                                                  | Meaning |
 |-----------------------------------------------------------|---------|
 | `DataCorePlugin.GameRawData.Telemetry.SessionFlags`       | Bitmask of all current flags |
+| `DataCorePlugin.GameRawData.Telemetry.SessionFlagsDetails.Is<flag>` | Per-bit booleans (NCalc convenience — see below) |
+| `DataCorePlugin.GameRawData.Telemetry.UnderPaceCar`       | Pace car on track (typed getter: `CarIdxTrackSurface[0] == 3`; car index 0 is always the pace car) |
 | `DataCorePlugin.GameRawData.Telemetry.PlayerCarTowTime`   | Tow-truck recovery state (proxy for damage) |
 
-The `SessionFlags` bits are documented by iRacing as `irsdk_Flags` — `Checkered`,
-`White`, `Green`, `Yellow`, `Red`, `Blue`, `Debris`, `Crossed`, `YellowWaving`,
-`OneLapToGreen`, `GreenHeld`, `TenToGo`, `FiveToGo`, `RandomWaving`, `Caution`,
-`CautionWaving`, plus per-driver flags like `Black`, `Disqualify`, `Servicible`,
-`Furled`, `Repair`. SimHub usually surfaces these via the unified `Flag_*` props but
-the bitmask is there if we need precise behaviour (e.g. distinguishing displayed
-yellow vs waved yellow).
+**`irsdk_Flags` bit values — VERIFIED at M10** against the `iRacingSDK.dll`
+that ships *inside* SimHub 9.11.21 (the assembly SimHub's own iRacing reader
+consumes; enum `iRacingSDK.SessionFlags`), not transcribed from prose — this
+doc once carried an inverted `mGamePhase` claim, so bits get verified against
+executable artifacts now:
 
-Caution detection (salvaged from the v1 serial-profile research): the `Caution` bit
-in `SessionFlags` is **`0x4000`** — bit-test it in NCalc as
-`([...SessionFlags] & 0x4000) > 0`. The physical safety car is exposed separately as
-the **`SafetyCarActive`** property (`[DataCorePlugin.GameData.SafetyCarActive]`).
-Note that `SafetyCarActive` lives in the name-based property bag only — it is *not*
-a typed `StatusDataBase` member (verified by reflection, SimHub 9.x), so a C# plugin
-can only reach it via the property bag or via iRacing raw telemetry.
+| Bit | Name | Bit | Name |
+|------------|----------------|------------|----------------|
+| `0x00000001` | checkered    | `0x00002000` | randomWaving |
+| `0x00000002` | white        | `0x00004000` | **caution** |
+| `0x00000004` | green        | `0x00008000` | cautionWaving |
+| `0x00000008` | yellow       | `0x00010000` | black (per-driver) |
+| `0x00000010` | red          | `0x00020000` | disqualify |
+| `0x00000020` | blue         | `0x00040000` | servicible |
+| `0x00000040` | debris       | `0x00080000` | furled (warning) |
+| `0x00000080` | crossed      | `0x00100000` | repair (meatball) |
+| `0x00000100` | yellowWaving | `0x10000000` | startHidden |
+| `0x00000200` | oneLapToGreen| `0x20000000` | startReady |
+| `0x00000400` | greenHeld    | `0x40000000` | startSet |
+| `0x00000800` | tenToGo      | `0x80000000` | startGo |
+| `0x00001000` | fiveToGo     |              |              |
+
+**How SimHub's unified layer derives `Flag_*` for iRacing** (IL-verified at
+M10 against `IRacingReader.IRacingManager.GD_Flag_*` in `ICarsReader.dll`):
+`Flag_Yellow` ⇐ `yellow | yellowWaving | caution | cautionWaving` (so a
+full-course caution *also* reads as unified yellow); `Flag_Orange` ⇐
+`repair` (the meatball!); `Flag_Black` ⇐ `black` only (disqualify is
+dropped); `Flag_Blue` ⇐ `blue && !green` — **not** a 1:1 mirror: a set
+`green` bit suppresses unified blue (SimHub's deliberate handling of the
+spurious start-window blues from issue
+[#436](https://github.com/SHWotever/SimHub/issues/436));
+`Flag_White/Green/Checkered` mirror their single bits (`greenHeld` is
+dropped). The unified layer never surfaces `red`, `furled`, `disqualify`
+or the start lights.
+
+`SessionFlagsDetails` is a SimHub NCalc-side extension: the iRacing reader
+attaches a `GameReaderCommon.EnumExposer<SessionFlags>` under
+`Telemetry.SessionFlagsDetails`, exposing one boolean per enum value named
+`Is<value>` with the *lowercase* bit name — e.g.
+`[DataCorePlugin.GameRawData.Telemetry.SessionFlagsDetails.Isfurled]`.
+Third-party plugins (e.g. ATSR Hub) drive their iRacing "slow down" alerts
+from exactly that `Isfurled` property, with client-side state on top.
+
+Caution detection: bit-test `Caution` (**`0x4000`**) in NCalc as
+`([...SessionFlags] & 0x4000) > 0`. **Correction (M10):** the v1-era claim
+that iRacing exposes a **`SafetyCarActive`** property was wrong — a binary
+sweep of every assembly in SimHub 9.11.21 finds the `SafetyCarActive` name
+in `RfactorReader.dll` **only** (it's an rFactor-family property bag entry).
+For iRacing, detect the physical pace car via `UnderPaceCar` /
+`CarIdxTrackSurface[0]`, or treat the `caution`/`cautionWaving` bits as
+"pace car deployed" (iRacing's full-course caution *is* a pace car; the sim
+has no VSC concept).
+
+**Penalty telemetry limits (verified at M10):** iRacing exports **no graded
+slow-down meter** (the on-screen SLOW DOWN bar isn't in telemetry — the
+closest signal is the `furled` bit) and **no drive-through vs stop-and-go
+distinction** (only the single `black` bit). Don't invent either from
+prose; the plugin's penalty model keeps those dimensions defaulted for
+iRacing (see "iRacing adapter mapping" below).
 
 ### rFactor 2 / Le Mans Ultimate
 
@@ -164,7 +210,7 @@ double-waved flag. To recover that, fall back to raw data:
 
 | Sim              | VSC | SC | How to detect                                                               |
 |------------------|-----|----|-----------------------------------------------------------------------------|
-| iRacing          | ✓   | ✓  | `SessionFlags` bitmask for `Caution` / `CautionWaving`; `SafetyCarActive` for SC |
+| iRacing          | —   | ✓  | `SessionFlags` bitmask for `Caution` / `CautionWaving` (a full-course caution is a deployed pace car; no VSC concept); pace car on track via `UnderPaceCar`. (`SafetyCarActive` is an rFactor-family property, not iRacing — corrected at M10.) |
 | F1 (Codemasters) | ✓   | ✓  | `m_safetyCarStatus` raw enum (0=none, 1=full SC, 2=VSC, 3=formation lap)    |
 | ACC              | —   | —  | No first-class VSC / SC concept exposed.                                    |
 | rF2 / LMU        | ✓   | ✓  | `mGamePhase` = 6 covers both FCY and a deployed SC (5 = green flag); tell them apart via `mYellowFlagState` / pace-car fields — verify per install. |
@@ -213,6 +259,44 @@ change them together.
   running the adapter) unless `GameRunning && !GameInMenu && NewData != null`.
   A paused game still counts as live — it renders as the *Paused* session, not as
   connected-idle.
+
+## iRacing adapter mapping (plugin, M10)
+
+How the iRacing raw-telemetry refiner (`plugin/src/Adapters/IRacingAdapter.cs`)
+layers over the generic result. It matches `GameData.GameName == "IRacing"`
+(ordinal case-insensitive; the code that also names the `PluginsData\IRacing`
+settings folder) and only ever *refines* — if the raw SessionFlags mask is
+unavailable for a tick, the generic result stands untouched. Doc and code state
+the same contract — change them together.
+
+- **Red** (`0x10`) → `Flag.Red` (raw-only; the unified layer never carries red),
+  wave forced to none.
+- **Caution** (`0x4000 | 0x8000`) → the **SC board** (`Caution.SafetyCar`).
+  iRacing's full-course caution is a deployed pace car and the sim has no VSC,
+  so the SC board is always the right board.
+- **Yellow wave refinement**: when the generic flag is yellow, the wave becomes
+  *Single* iff `yellowWaving | cautionWaving` is set, else *None* — raw kills
+  the generic "yellow is always Single" guess for displayed-only yellows.
+  iRacing has no double-waved concept, so *Double* never appears.
+- **Conservative enrichment** (only when the generic flag is *None*):
+  `disqualify` → black flag; `greenHeld` → green. Never re-ranks a flag the
+  unified layer already chose — the generic priority order is the contract.
+- **Penalties** (host-only `RenderState` dimensions, never on the wire):
+  `repair` (`0x100000`) → meatball board (the unified layer maps the same bit
+  to `Flag_Orange`; the meatball board outranks the orange base by precedence);
+  `furled` (`0x80000`) → furled warning accent. **Slowdown severity and
+  DT-vs-SG stay defaulted** — no iRacing telemetry source exists (see the
+  penalty-telemetry-limits note above).
+- **Not touched**: checkered/white/green/black are single bits the unified
+  layer already carries 1:1; blue stands as the unified layer derives it —
+  `blue && !green`, so on a simultaneous blue+green tick the panel shows
+  green. The adapter deliberately does **not** restore blue from raw during
+  that overlap: SimHub suppresses it on purpose (issue
+  [#436](https://github.com/SHWotever/SimHub/issues/436), spurious blues
+  around starts), and green is the flag that matters in that window; session
+  mapping stays generic;
+  `startGo`/`oneLapToGreen`/`tenToGo`/`fiveToGo` are recognized but unmapped
+  (candidates for future refinement, deliberately not guessed at).
 
 ## Property-layer gotchas
 

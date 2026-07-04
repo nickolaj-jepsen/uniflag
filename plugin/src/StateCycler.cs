@@ -173,9 +173,11 @@ namespace Uniflag
         /// <summary>
         /// The deterministic tour: both no-flag idle layers (ready orb,
         /// race idle), every flag at every wave level, both caution boards,
-        /// every non-empty sector mask over the race-idle base, and one
+        /// every non-empty sector mask over the race-idle base, one
         /// double-waved yellow with all sectors (the 4 Hz band over a
-        /// strobing base). Pure — two calls yield identical sequences.
+        /// strobing base), and the M10 penalty suite (slowdown severities
+        /// 1-3, meatball, DT/SG black-flag details, furled accent over dark
+        /// and bright bases). Pure — two calls yield identical sequences.
         /// </summary>
         public static IReadOnlyList<RenderState> BuildSequence()
         {
@@ -216,6 +218,19 @@ namespace Uniflag
             // 4 Hz sector band over a double-waved yellow strobe.
             sequence.Add(Make(Flag.Yellow, WaveLevel.Double, Session.Racing, Caution.None, SectorSet.FromBits(0b111)));
 
+            // M10 penalty suite — every severity, both black-flag details,
+            // the meatball board, and the furled accent over both a dark
+            // base (race idle) and a bright one (static yellow). This is
+            // the WPF-preview review path for the C#-authored corpus.
+            sequence.Add(MakePenalty(slowdown: 1));
+            sequence.Add(MakePenalty(slowdown: 2));
+            sequence.Add(MakePenalty(slowdown: 3));
+            sequence.Add(MakePenalty(meatball: true));
+            sequence.Add(MakePenalty(flag: Flag.Black, blackDetail: BlackFlagDetail.DriveThrough));
+            sequence.Add(MakePenalty(flag: Flag.Black, blackDetail: BlackFlagDetail.StopAndGo));
+            sequence.Add(MakePenalty(furled: true));
+            sequence.Add(MakePenalty(flag: Flag.Yellow, furled: true));
+
             return sequence;
         }
 
@@ -230,6 +245,25 @@ namespace Uniflag
                 Caution = caution,
                 Sectors = sectors,
             };
+        }
+
+        /// <summary>
+        /// A penalty-suite tour step: <see cref="Session.Racing"/> base with
+        /// the given penalty dimensions (everything else default).
+        /// </summary>
+        private static RenderState MakePenalty(
+            Flag flag = Flag.None,
+            byte slowdown = 0,
+            bool meatball = false,
+            BlackFlagDetail blackDetail = BlackFlagDetail.None,
+            bool furled = false)
+        {
+            RenderState state = Make(flag, WaveLevel.None, Session.Racing, Caution.None, SectorSet.Empty);
+            state.Slowdown = slowdown;
+            state.Meatball = meatball;
+            state.BlackDetail = blackDetail;
+            state.Furled = furled;
+            return state;
         }
     }
 }

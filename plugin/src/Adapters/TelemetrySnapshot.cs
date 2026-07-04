@@ -12,10 +12,13 @@ namespace Uniflag.Adapters
     /// <c>GameData</c>. Field selection is pinned by reflection against
     /// GameReaderCommon.dll (SimHub 9.x): the unified <c>Flag_*</c>
     /// properties are <c>int</c> 0/1 on <c>StatusDataBase</c> (converted to
-    /// bools here); <c>SafetyCarActive</c> is <b>not</b> a typed member of
-    /// <c>StatusDataBase</c> (it only exists in the property bag, populated
-    /// by the iRacing reader) so it cannot be captured until the M10 raw
-    /// adapter reads game-specific data.
+    /// bools here). The M10 raw layer adds the iRacing SessionFlags bitmask,
+    /// read out of <c>StatusDataBase.GetRawDataObject()</c> only while the
+    /// running game is iRacing. (M4's note that <c>SafetyCarActive</c> comes
+    /// from the iRacing reader was wrong — a binary sweep of every SimHub
+    /// 9.11.21 assembly finds it in RfactorReader.dll only; the M10 research
+    /// in docs/simhub-flag-properties.md corrects it. iRacing's pace car is
+    /// detected from raw data instead.)
     /// </summary>
     public sealed class TelemetrySnapshot
     {
@@ -57,6 +60,24 @@ namespace Uniflag.Adapters
 
         /// <summary>Unified <c>Flag_Orange</c>.</summary>
         public bool FlagOrange { get; set; }
+
+        /// <summary>
+        /// Whether <see cref="RawSessionFlags"/> holds a live value this
+        /// tick. Only ever true while the running game is iRacing and the
+        /// raw-data object exposed the expected
+        /// <c>DataSampleEx.Telemetry["SessionFlags"]</c> shape — any missing
+        /// or unexpected layer leaves this false, never throws.
+        /// </summary>
+        public bool HasRawSessionFlags { get; set; }
+
+        /// <summary>
+        /// iRacing <c>irsdk_Flags</c> SessionFlags bitmask, raw from
+        /// <c>GetRawDataObject()</c>. Bit values are pinned in
+        /// <see cref="IRacingAdapter"/> (verified against the iRacingSDK.dll
+        /// shipped inside SimHub 9.11.21). Meaningless unless
+        /// <see cref="HasRawSessionFlags"/> is true.
+        /// </summary>
+        public uint RawSessionFlags { get; set; }
 
         /// <summary>
         /// The no-game predicate (docs/effects-spec.md §7b trigger): a live

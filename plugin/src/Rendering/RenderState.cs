@@ -52,6 +52,22 @@ namespace Uniflag.Rendering
     }
 
     /// <summary>
+    /// Black-flag detail (M10 penalty suite, host-only): which service the
+    /// black flag orders. <see cref="None"/> renders the plain golden-frozen
+    /// black-flag X; the other two add a DT / SG text marker. No current
+    /// adapter can populate this from telemetry (iRacing's SessionFlags has
+    /// a single <c>black</c> bit — verified against the iRacing SDK shipped
+    /// with SimHub 9.11.21); the dimension exists for sims that do expose
+    /// the distinction (e.g. the Codemasters F1 UDP penalty events).
+    /// </summary>
+    public enum BlackFlagDetail
+    {
+        None,
+        DriveThrough,
+        StopAndGo,
+    }
+
+    /// <summary>
     /// Set of flagged sectors 1..=3, mirroring <c>proto::SectorMask</c>
     /// (sector n is bit n-1 of the low 3 bits).
     /// </summary>
@@ -96,7 +112,12 @@ namespace Uniflag.Rendering
 
     /// <summary>
     /// Everything <see cref="Effects.Paint"/> needs besides the frame
-    /// counter — the C# mirror of <c>proto::State</c>.
+    /// counter. The first five fields are the C# mirror of
+    /// <c>proto::State</c>; the M10 penalty dimensions below them are
+    /// host-only and never cross the wire (the v2 protocol carries rendered
+    /// frames). Every penalty default means "none", so any state built
+    /// without touching them renders byte-identically to the pre-M10
+    /// renderer — the 40 ported-parity goldens pin this.
     /// </summary>
     public struct RenderState
     {
@@ -107,8 +128,36 @@ namespace Uniflag.Rendering
         public SectorSet Sectors;
 
         /// <summary>
+        /// Slow-down alert severity, 0 (none) to 3 (most urgent); values
+        /// above 3 render as 3. Named for the iRacing "SLOW DOWN" penalty,
+        /// but graded so richer sources can scale it. iRacing telemetry
+        /// exposes no graded slow-down meter (verified — see
+        /// docs/simhub-flag-properties.md), so today only the preview tour
+        /// and future adapters set it.
+        /// </summary>
+        public byte Slowdown;
+
+        /// <summary>
+        /// Meatball / mechanical black flag (iRacing SessionFlags
+        /// <c>repair</c> bit): mandatory pit for repairs. Renders as its own
+        /// board, visually distinct from the orange quadrant effect.
+        /// </summary>
+        public bool Meatball;
+
+        /// <summary>Black-flag service detail; only consumed when <see cref="Flag"/> is <see cref="Flag.Black"/>.</summary>
+        public BlackFlagDetail BlackDetail;
+
+        /// <summary>
+        /// Furled black/white warning (iRacing SessionFlags <c>furled</c>
+        /// bit): a warning accent overlaid on the base layer, not a full
+        /// board.
+        /// </summary>
+        public bool Furled;
+
+        /// <summary>
         /// Mirror of Rust <c>State::default()</c>: no flag, no wave, session
-        /// unknown, no caution, no sectors.
+        /// unknown, no caution, no sectors — and no penalty state, keeping
+        /// every M10 code path unreachable by default.
         /// </summary>
         public static RenderState Default => new RenderState
         {
@@ -117,6 +166,10 @@ namespace Uniflag.Rendering
             Session = Session.Unknown,
             Caution = Caution.None,
             Sectors = SectorSet.Empty,
+            Slowdown = 0,
+            Meatball = false,
+            BlackDetail = BlackFlagDetail.None,
+            Furled = false,
         };
     }
 }

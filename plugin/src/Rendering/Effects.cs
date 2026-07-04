@@ -5,6 +5,12 @@
 // corpus under testdata/frames/ pins every effect exactly, so any deviation
 // from the Rust arithmetic (division rounding, wrapping, saturation) is a
 // conformance failure, not a style choice.
+//
+// M10 adds the C#-authored penalty suite (slowdown board, meatball board,
+// DT/SG black-flag markers, furled warning accent), pinned by its own
+// clearly separated corpus under testdata/frames-plugin/. Every penalty
+// code path is unreachable while RenderState's penalty fields hold their
+// defaults, so the two corpora never contend over the same tuples.
 
 using System;
 
@@ -37,56 +43,11 @@ namespace Uniflag.Rendering
         private static readonly int[] SegmentLo = { 0, 11, 22 };
         private static readonly int[] SegmentHi = { 9, 20, 31 };
 
-        // Caution-board glyphs: 7 columns × 11 rows, bit 6 = leftmost column
-        // (effects.rs:28-77).
-        private const int GlyphW = 7;
-        private const int GlyphH = 11;
+        // Caution-board geometry (effects.rs:30-32). The 7×11 glyph bitmaps
+        // and the letter-row placement math moved verbatim into Font7x11 /
+        // TextEngine at M10 — same bytes, same integer divisions; the 40
+        // ported-parity goldens pin the migration bit-for-bit.
         private const int CautionBorder = 2;
-
-        private static readonly byte[] GlyphS =
-        {
-            0b0111110, // .#####.
-            0b1100011, // ##...##
-            0b1100000, // ##.....
-            0b1100000, // ##.....
-            0b0111110, // .#####.
-            0b0000011, // .....##
-            0b0000011, // .....##
-            0b0000011, // .....##
-            0b1100011, // ##...##
-            0b1100011, // ##...##
-            0b0111110, // .#####.
-        };
-
-        private static readonly byte[] GlyphC =
-        {
-            0b0111110, // .#####.
-            0b1100011, // ##...##
-            0b1100000, // ##.....
-            0b1100000, // ##.....
-            0b1100000, // ##.....
-            0b1100000, // ##.....
-            0b1100000, // ##.....
-            0b1100000, // ##.....
-            0b1100000, // ##.....
-            0b1100011, // ##...##
-            0b0111110, // .#####.
-        };
-
-        private static readonly byte[] GlyphV =
-        {
-            0b1100011, // ##...##
-            0b1100011, // ##...##
-            0b1100011, // ##...##
-            0b1100011, // ##...##
-            0b0110110, // .##.##.
-            0b0110110, // .##.##.
-            0b0110110, // .##.##.
-            0b0011100, // ..###..
-            0b0011100, // ..###..
-            0b0011100, // ..###..
-            0b0001000, // ...#...
-        };
 
         /// <summary>
         /// Recompute the whole panel (mirror of <c>effects::paint</c>,
@@ -111,6 +72,12 @@ namespace Uniflag.Rendering
                 case RenderLayer.SafetyCarBoard:
                     PaintSafetyCar(s, frame);
                     break;
+                case RenderLayer.SlowdownBoard:
+                    PaintSlowdown(s, state.Slowdown, frame);
+                    break;
+                case RenderLayer.MeatballBoard:
+                    PaintMeatball(s, frame);
+                    break;
                 case RenderLayer.YellowFlag:
                     PaintYellow(s, state.Wave, frame);
                     break;
@@ -124,7 +91,7 @@ namespace Uniflag.Rendering
                     PaintWhite(s, state.Wave, frame);
                     break;
                 case RenderLayer.BlackFlag:
-                    PaintBlackFlag(s, frame);
+                    PaintBlackFlag(s, frame, state.BlackDetail);
                     break;
                 case RenderLayer.OrangeFlag:
                     PaintOrange(s, state.Wave, frame);
@@ -142,6 +109,13 @@ namespace Uniflag.Rendering
             if (Precedence.SectorBandVisible(state, connected))
             {
                 PaintSectorBand(s, state.Sectors, state.Wave, frame);
+            }
+            if (Precedence.FurledAccentVisible(state, connected))
+            {
+                // Painted last: the accent (rows 0..6) and the sector band
+                // (rows 30..31) are disjoint, so order between the two
+                // overlays is cosmetic — but both sit over the base layer.
+                PaintFurledAccent(s, frame);
             }
         }
 
@@ -323,8 +297,12 @@ namespace Uniflag.Rendering
             });
         }
 
-        /// <summary>Black flag (effects.rs:352-373, spec §5.6).</summary>
-        private static void PaintBlackFlag(FrameBuffer s, uint frame)
+        /// <summary>
+        /// Black flag (effects.rs:352-373, spec §5.6), plus the M10 DT/SG
+        /// service marker. <paramref name="detail"/> == None reproduces the
+        /// golden-frozen X byte-for-byte; the marker arms are additive.
+        /// </summary>
+        private static void PaintBlackFlag(FrameBuffer s, uint frame, BlackFlagDetail detail)
         {
             // Solid black with a pulsing white "X" across both diagonals.
             const uint Period = 100; // 0.6 Hz at 60 fps
@@ -337,6 +315,119 @@ namespace Uniflag.Rendering
                 bool onAnti = Math.Abs(x + y - Anti) <= 1;
                 return onMain || onAnti ? new Rgb(m, m, m) : Black;
             });
+            if (detail == BlackFlagDetail.None)
+            {
+                return;
+            }
+            // Centred two-letter service marker: a black plate (1-px margin
+            // around the 15×11 marker row → x 7..23, y 9..21) blanks the X
+            // arms behind the letters so DT/SG stay legible at the X's
+            // brightness peak, then solid white glyphs. Same centring math
+            // as the caution boards: 2 glyphs, gap 1 → 15 px, xLeft 8,
+            // yTop 10.
+            int plateLeft = TextEngine.CenterRowX(2, 1) - 1;
+            int plateTop = TextEngine.CenterRowY() - 1;
+            int plateRight = plateLeft + TextEngine.MeasureRow(2, 1) + 1;
+            int plateBottom = plateTop + Font7x11.GlyphHeight + 1;
+            for (int y = plateTop; y <= plateBottom; y++)
+            {
+                for (int x = plateLeft; x <= plateRight; x++)
+                {
+                    s.SetPixel(x, y, Black);
+                }
+            }
+            byte[][] marker = detail == BlackFlagDetail.DriveThrough
+                ? new[] { Font7x11.D, Font7x11.T }
+                : new[] { Font7x11.S, Font7x11.G };
+            TextEngine.DrawCenteredRow(s, marker, 1, White);
+        }
+
+        // ---------------------------------------------------------------
+        // M10 penalty boards and accent (C#-authored; pinned by the
+        // testdata/frames-plugin/ corpus, pending maintainer visual review —
+        // regenerate via the [windows] leg of `just golden-regen`).
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Slow-down penalty board: black background, white "SLOW", and an
+        /// orange severity digit below it. Severity paces the urgency: the
+        /// digit is static at 1, blinks 2 Hz at 2 and 4 Hz at 3 (severities
+        /// above 3 clamp to 3). The word row is 4 glyphs, gap 1 → 31 px,
+        /// xLeft 0; the digit is centred (xLeft 12).
+        /// </summary>
+        private static void PaintSlowdown(FrameBuffer s, byte severity, uint frame)
+        {
+            Fill(s, Black);
+            int sev = severity > 3 ? 3 : severity; // dispatch guarantees >= 1
+            byte[][] word = { Font7x11.S, Font7x11.L, Font7x11.O, Font7x11.W };
+            const int WordGap = 1;
+            const int WordTop = 4;
+            TextEngine.DrawRow(s, word, WordGap, TextEngine.CenterRowX(word.Length, WordGap), WordTop, White);
+
+            const int DigitTop = 17;
+            uint strobeHz = sev == 3 ? 4u : sev == 2 ? 2u : 0u;
+            if (strobeHz == 0 || Anim.Strobe60(frame, strobeHz))
+            {
+                byte[] digit = sev == 3 ? Font7x11.Three : sev == 2 ? Font7x11.Two : Font7x11.One;
+                TextEngine.DrawGlyph(s, digit, TextEngine.CenterRowX(1, 0), DigitTop, Orange);
+            }
+        }
+
+        /// <summary>
+        /// Meatball / mandatory-repair board: the real signal is a black
+        /// flag with an orange disc, so this paints a filled orange circle
+        /// (real-pixel radius ≤ 9.5, centred between pixels like the ready
+        /// orb) breathing 180..255 at 1 Hz on black. Deliberately a disc —
+        /// the orange flag's rotating quadrants must stay visually distinct.
+        /// </summary>
+        private static void PaintMeatball(FrameBuffer s, uint frame)
+        {
+            const uint Period = 60; // 1 Hz at 60 fps
+            byte envelope = Anim.Breathe(frame, Period);
+            byte m = (byte)(180 + envelope * 75 / 255);
+            Rgb disc = Anim.ScaleRgb(Orange, m);
+            FillWith(s, (x, y) =>
+            {
+                // Half-pixel units (spec §5.11 geometry): radius 9.5 px →
+                // d² ≤ 19² = 361 in half-pixel units².
+                int dx2 = 2 * x - (Width - 1);
+                int dy2 = 2 * y - (Height - 1);
+                return dx2 * dx2 + dy2 * dy2 <= 361 ? disc : Black;
+            });
+        }
+
+        /// <summary>
+        /// Furled black/white warning accent: a 10×7 diagonally split
+        /// black/white tile with a 1-px white frame at top-centre
+        /// (x 11..20, y 0..6), blinking at 2 Hz (18/30 duty — off-phase
+        /// leaves the base layer untouched). An accent, not a board: the
+        /// base keeps telling its story underneath.
+        /// </summary>
+        private static void PaintFurledAccent(FrameBuffer s, uint frame)
+        {
+            if (!Anim.Strobe60(frame, 2))
+            {
+                return;
+            }
+            const int Left = 11;
+            const int Top = 0;
+            const int TileW = 10;
+            const int TileH = 7;
+            for (int y = Top; y < Top + TileH; y++)
+            {
+                for (int x = Left; x < Left + TileW; x++)
+                {
+                    bool onFrame = x == Left || x == Left + TileW - 1
+                        || y == Top || y == Top + TileH - 1;
+                    // Interior 8×5: white in the upper-right triangle —
+                    // 5*(x - 12) >= 8*(y - 1) puts the diagonal corner to
+                    // corner in integer math.
+                    Rgb c = onFrame || 5 * (x - (Left + 1)) >= 8 * (y - (Top + 1))
+                        ? White
+                        : Black;
+                    s.SetPixel(x, y, c);
+                }
+            }
         }
 
         // ---------------------------------------------------------------
@@ -390,15 +481,18 @@ namespace Uniflag.Rendering
 
         /// <summary>VSC board (effects.rs:375-379, spec §5.9).</summary>
         private static void PaintVsc(FrameBuffer s, uint frame) =>
-            PaintCautionBoard(s, frame, new[] { GlyphV, GlyphS, GlyphC }, 1);
+            PaintCautionBoard(s, frame, new[] { Font7x11.V, Font7x11.S, Font7x11.C }, 1);
 
         /// <summary>Safety-car board (effects.rs:381-385, spec §5.9).</summary>
         private static void PaintSafetyCar(FrameBuffer s, uint frame) =>
-            PaintCautionBoard(s, frame, new[] { GlyphS, GlyphC }, 4);
+            PaintCautionBoard(s, frame, new[] { Font7x11.S, Font7x11.C }, 4);
 
         /// <summary>
         /// Digiflag board: white letters on black, breathing yellow border
-        /// (effects.rs:390-418).
+        /// (effects.rs:390-418). The letter row renders through the M10
+        /// text engine — <see cref="TextEngine.DrawCenteredRow"/> is the
+        /// same placement math (same truncating divisions), so the boards
+        /// stay byte-identical to the frozen goldens.
         /// </summary>
         private static void PaintCautionBoard(FrameBuffer s, uint frame, byte[][] glyphs, int gap)
         {
@@ -420,35 +514,8 @@ namespace Uniflag.Rendering
                 return onBorder ? border : Black;
             });
 
-            // Centred letter row.
-            int n = glyphs.Length;
-            int totalW = n * GlyphW + (n - 1) * gap;
-            int xLeft = (Width - totalW) / 2;
-            int yTop = (Height - GlyphH) / 2;
-            for (int i = 0; i < n; i++)
-            {
-                int ox = xLeft + i * (GlyphW + gap);
-                DrawGlyph(s, glyphs[i], ox, yTop, White);
-            }
-        }
-
-        /// <summary>
-        /// Stamp a 7×11 1-bpp glyph at (ox, oy). Bit 6 of each row is the
-        /// leftmost column; only set bits are painted (effects.rs:422-430).
-        /// </summary>
-        private static void DrawGlyph(FrameBuffer s, byte[] glyph, int ox, int oy, Rgb color)
-        {
-            for (int row = 0; row < glyph.Length; row++)
-            {
-                byte bits = glyph[row];
-                for (int col = 0; col < GlyphW; col++)
-                {
-                    if (((bits >> (6 - col)) & 1) != 0)
-                    {
-                        s.SetPixel(ox + col, oy + row, color);
-                    }
-                }
-            }
+            // Centred letter row (golden-frozen placement).
+            TextEngine.DrawCenteredRow(s, glyphs, gap, White);
         }
 
         // ---------------------------------------------------------------

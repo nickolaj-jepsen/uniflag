@@ -56,9 +56,11 @@ namespace Uniflag
         internal BrightnessPolicy Brightness { get; private set; }
 
         // Telemetry path (M4): one reused snapshot + an immutable pipeline —
-        // zero avoidable allocation on the 60 Hz update thread.
+        // zero avoidable allocation on the 60 Hz update thread. M10 layers
+        // the iRacing raw-telemetry refiner after the generic baseline; it
+        // only ever runs when GameData.GameName is iRacing.
         private readonly TelemetrySnapshot _snapshot = new TelemetrySnapshot();
-        private readonly AdapterPipeline _adapters = new AdapterPipeline();
+        private readonly AdapterPipeline _adapters = new AdapterPipeline(new IRacingAdapter());
 
         public void Init(PluginManager pluginManager)
         {
