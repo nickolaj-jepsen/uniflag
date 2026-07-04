@@ -1,19 +1,18 @@
-//! Firmware-local screens: the fallback heartbeat and the button-test
-//! pattern.
+//! Firmware-local screens: the fallback "roaming ember" and the
+//! button-test pattern.
 //!
 //! Everything here paints through [`Display::set_pixel`]. The firmware
-//! deliberately does **not** link `uniflag-render` — what it needs is
-//! embedded here instead:
+//! deliberately renders no effects and links no render code — what it
+//! needs is embedded here instead:
 //!
-//! - The fallback screen implements docs/effects-spec.md §7a **bit-exactly**,
-//!   with the heartbeat colour embedded as a literal (the spec forbids
-//!   deriving it at runtime).
+//! - The fallback screen implements docs/flag-grammar.md §7 state (a)
+//!   **bit-exactly**: LUT-free integer math, with the ember hue and the
+//!   brightness-scale idiom embedded as literals/locals (the grammar
+//!   forbids deriving them from shared render code).
 //! - The glyph row-bitmap encoding (one byte per row, MSB side = leftmost
-//!   column) is copied from the render crate's caution glyphs
-//!   (`render/src/effects.rs:28-77`, `GLYPH_S`/`GLYPH_C`/`GLYPH_V`). Those
-//!   are the *only* glyphs the render crate has, and at 7×11 they are far
-//!   too wide to fit a version string on a 32-px panel — so the 3×5 font
-//!   below is firmware-original data in that same format, not a copy.
+//!   column) follows the plugin's caution-glyph format; at 7×11 those are
+//!   far too wide to fit a version string on a 32-px panel — so the 3×5
+//!   font below is firmware-original data in that same format, not a copy.
 
 use crate::display::{Display, HEIGHT, WIDTH};
 
@@ -28,28 +27,59 @@ const RED: Rgb = (255, 0, 0);
 const GREEN: Rgb = (0, 255, 0);
 const BLUE: Rgb = (0, 0, 255);
 
-/// Heartbeat colour of the fallback screen. docs/effects-spec.md §7a
-/// derives it once as `scale_rgb(ORANGE (255, 90, 0), 40)` = (40, 14, 0)
-/// but requires the firmware to embed the **literal** result — deriving
-/// it at runtime would need the render crate's primitives.
-const FALLBACK_AMBER: Rgb = (40, 14, 0);
+/// Base hue of the fallback ember (docs/flag-grammar.md §7: amber — a hue
+/// absent from the flag vocabulary). Brightness comes from the per-pixel
+/// multipliers below; the peak channel is 24/255, peripherally silent.
+const EMBER_AMBER: Rgb = (255, 120, 8);
 
 // =============================================================================
 // Screens
 // =============================================================================
 
-/// Section-7a firmware fallback: device powered, no host stream. Also the
-/// boot state before any traffic.
+/// Scale a colour by an 8-bit brightness multiplier: per channel
+/// `(c * (m + 1)) >> 8` — the plugin renderer's `ScaleRgb` idiom, embedded.
+fn scale(c: Rgb, m: u32) -> Rgb {
+    let s = |ch: u8| ((ch as u32 * (m + 1)) >> 8) as u8;
+    (s(c.0), s(c.1), s(c.2))
+}
+
+/// Firmware fallback (docs/flag-grammar.md §7 state (a)): device powered,
+/// no host stream. Also the boot state before any traffic.
 ///
-/// Every pixel black except (0, 0), which blinks [`FALLBACK_AMBER`] when
-/// `frame % 120 < 6` — lit 100 ms every 2.0 s at the 60 fps free-running
-/// counter. Distinct from race-idle's static grey corners and the
-/// plugin's connected-idle blue breathe (docs/effects-spec.md §7).
+/// A single dim amber ember glides along the bottom margin (rows 29–30,
+/// columns 11–21, inset off the panel edge): an 8 s triangle round trip
+/// between columns 12.0 and 19.0 in 1/16-px steps, rendered as a two-cell
+/// linear crossfade with 9-level shoulders and a 6-level halo above — a
+/// soft roaming glow ("searching for the host") with constant total
+/// luminance, no blink. Distinct from every plugin idle by position, hue
+/// and motion class.
 pub fn paint_fallback(d: &mut Display, frame: u32) {
     fill(d, BLACK);
-    if frame % 120 < 6 {
-        dot(d, 0, 0, FALLBACK_AMBER);
-    }
+
+    let t = frame % 480;
+    let u = if t < 240 { t } else { 479 - t };
+    let pos16 = 192 + u * 112 / 239; // column 12.0..=19.0 in 1/16-px units
+    let x0 = (pos16 >> 4) as i32;
+    let fr = (pos16 & 15) * 17; // exact 0..=255 (15 * 17 == 255)
+
+    // Core row: peak 24 sliding across two cells, shoulders at 9.
+    dot(d, x0 - 1, 30, scale(EMBER_AMBER, 9 * (255 - fr) / 255));
+    dot(
+        d,
+        x0,
+        30,
+        scale(EMBER_AMBER, (24 * (255 - fr) + 9 * fr) / 255),
+    );
+    dot(
+        d,
+        x0 + 1,
+        30,
+        scale(EMBER_AMBER, (9 * (255 - fr) + 24 * fr) / 255),
+    );
+    dot(d, x0 + 2, 30, scale(EMBER_AMBER, 9 * fr / 255));
+    // Halo row above, at 6.
+    dot(d, x0, 29, scale(EMBER_AMBER, 6 * (255 - fr) / 255));
+    dot(d, x0 + 1, 29, scale(EMBER_AMBER, 6 * fr / 255));
 }
 
 /// Local test screen, toggled by a long press: four white corner markers

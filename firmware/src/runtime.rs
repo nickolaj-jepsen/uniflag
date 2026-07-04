@@ -55,7 +55,7 @@ pub async fn run(
     test_toggle: &'static TestToggleChannel,
 ) -> ! {
     // Free-running frame counter for the local screens. Only advanced by
-    // the ticker, so the fallback heartbeat keeps its 2 s period no
+    // the ticker, so the fallback ember keeps its 8 s glide period no
     // matter what else is going on.
     let mut frame: u32 = 0;
     // `None` until the first frame arrives — boot shows the fallback
@@ -68,8 +68,9 @@ pub async fn run(
     let mut test_mode = false;
     let mut ticker = Ticker::every(FRAME_TICK);
 
-    // Boot state: the section-7a fallback (frame 0 is inside the blink's
-    // on-phase, so power-up shows the heartbeat dot immediately).
+    // Boot state: the fallback roaming ember (docs/flag-grammar.md §7a);
+    // frame 0 lights the ember core at full envelope, so power-up shows
+    // life immediately.
     screens::paint_fallback(&mut display, frame);
     display.present().await;
 
