@@ -5,13 +5,26 @@
         <TextBlock Text="Device" FontWeight="Bold" />
         <TextBlock x:Name="DeviceStatusText"
                    Text="No device connected"
+                   TextWrapping="Wrap"
                    Margin="0,4,0,0" />
+        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+            <TextBlock Text="Manual COM port:" VerticalAlignment="Center" />
+            <TextBox x:Name="ManualPortTextBox" Width="90" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <Button x:Name="ApplyPortButton" Content="Apply" Margin="8,0,0,0" Padding="10,1" Click="OnApplyPortOverride" />
+        </StackPanel>
+        <TextBlock Text="Leave empty for automatic discovery by USB id. A manual port skips the id filter but still has to answer the handshake."
+                   FontStyle="Italic" TextWrapping="Wrap" Margin="0,2,0,0" />
 
         <TextBlock Text="Brightness" FontWeight="Bold" Margin="0,16,0,0" />
-        <Slider x:Name="BrightnessSlider"
-                Minimum="0" Maximum="255" Value="80"
-                IsEnabled="False"
-                Margin="0,4,0,0" />
+        <DockPanel Margin="0,4,0,0">
+            <TextBlock x:Name="BrightnessValueText"
+                       DockPanel.Dock="Right" Width="30"
+                       TextAlignment="Right" VerticalAlignment="Center"
+                       Text="80" />
+            <Slider x:Name="BrightnessSlider"
+                    Minimum="0" Maximum="255" Value="80"
+                    ValueChanged="OnBrightnessSliderChanged" />
+        </DockPanel>
 
         <TextBlock Text="Preview" FontWeight="Bold" Margin="0,16,0,0" />
         <Border Width="128" Height="128"

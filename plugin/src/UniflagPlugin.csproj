@@ -18,6 +18,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Internal test seams (registry key parsing, correlation tie-breaks) are unit
+         tested without touching the real registry or serial ports. -->
+    <InternalsVisibleTo Include="UniflagPlugin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- overlay/index.html is the single source of the overlay page: OverlayWebServer
          serves this embedded copy at GET /, and `just overlay-serve` serves the same
          file from disk for iteration. LogicalName is pinned — it is the manifest name

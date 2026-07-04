@@ -4,48 +4,96 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using Uniflag.Device;
 using Uniflag.Rendering;
 using Uniflag.Web;
 
 namespace Uniflag
 {
     /// <summary>
-    /// Settings tab: device status placeholder and disabled brightness
-    /// slider (wired in M9), the live 32×32 renderer preview with its debug
-    /// state-cycler (M3), and the web overlay server status line (M5, M9
-    /// expands it). The preview sink and the status poll run only between
-    /// Loaded and Unloaded, so the renderer loop and the timer are idle
-    /// while the tab is not visible.
+    /// Settings tab v1 (M9): device status block (port, connection state,
+    /// firmware + protocol version, panel size, or the refuse-with-message
+    /// text), the brightness slider driving the shared
+    /// <see cref="BrightnessPolicy"/>, the manual COM-port override, the
+    /// live 32×32 renderer preview with its debug state-cycler (M3), and
+    /// the web overlay server status line (M5). The preview sink and the
+    /// 1 Hz status poll run only between Loaded and Unloaded, so the
+    /// renderer loop and the timer are idle while the tab is not visible.
+    /// All status updates happen on the UI thread — the timer is a
+    /// <see cref="DispatcherTimer"/> and the device/web servers expose
+    /// lock-free snapshots.
     /// </summary>
     public partial class SettingsControl : UserControl
     {
         private readonly RendererLoop _renderer;
         private readonly OverlayWebServer _webServer;
+        private readonly DeviceConnectionManager _device;
+        private readonly BrightnessPolicy _brightness;
+        private readonly UniflagSettings _settings;
         private readonly WpfPreviewSink _previewSink;
         private readonly StateCycler _cycler;
-        private readonly DispatcherTimer _webStatusTimer;
+        private readonly DispatcherTimer _statusTimer;
         private bool _active;
+
+        // Guards the slider feedback loop: true while the status poll is
+        // pushing the policy's value into the slider, so ValueChanged does
+        // not echo it back into the policy.
+        private bool _syncingSlider;
 
         /// <summary>Designer/stub constructor: static tab, no live content.</summary>
         public SettingsControl()
-            : this(null, null)
+            : this(null, null, null, null, null)
         {
         }
 
-        public SettingsControl(RendererLoop renderer, OverlayWebServer webServer)
+        public SettingsControl(
+            RendererLoop renderer,
+            OverlayWebServer webServer,
+            DeviceConnectionManager device,
+            BrightnessPolicy brightness,
+            UniflagSettings settings)
         {
             InitializeComponent();
             _renderer = renderer;
             _webServer = webServer;
+            _device = device;
+            _brightness = brightness;
+            _settings = settings;
 
             if (_webServer != null)
             {
                 WebOverlayStatusText.Text = _webServer.StatusText;
-                // Polled, not evented: the server exposes no change
-                // notifications (M9 may add them) and 1 Hz is plenty for a
-                // status line that only ticks while the tab is visible.
-                _webStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                _webStatusTimer.Tick += OnWebStatusTick;
+            }
+            if (_device != null)
+            {
+                DeviceStatusText.Text = _device.Status.StatusText;
+            }
+            if (_brightness != null)
+            {
+                SyncSliderFromPolicy();
+            }
+            else
+            {
+                BrightnessSlider.IsEnabled = false;
+            }
+            if (_settings != null)
+            {
+                ManualPortTextBox.Text = _settings.ManualPortOverride ?? string.Empty;
+            }
+            else
+            {
+                ManualPortTextBox.IsEnabled = false;
+                ApplyPortButton.IsEnabled = false;
+            }
+
+            if (_webServer != null || _device != null || _brightness != null)
+            {
+                // Polled, not evented: the servers expose no change
+                // notifications and 1 Hz is plenty for status lines that
+                // only tick while the tab is visible. Ticks run on the
+                // dispatcher, so every UI touch is already marshalled.
+                _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _statusTimer.Tick += OnStatusTick;
             }
 
             if (_renderer != null)
@@ -59,7 +107,7 @@ namespace Uniflag
                 CycleStatesCheckBox.IsEnabled = false;
             }
 
-            if (_renderer != null || _webServer != null)
+            if (_renderer != null || _statusTimer != null)
             {
                 Loaded += OnLoaded;
                 Unloaded += OnUnloaded;
@@ -90,10 +138,10 @@ namespace Uniflag
                     _cycler.Start();
                 }
             }
-            if (_webStatusTimer != null)
+            if (_statusTimer != null)
             {
-                OnWebStatusTick(null, null); // fresh text now, not in a second
-                _webStatusTimer.Start();
+                OnStatusTick(null, null); // fresh text now, not in a second
+                _statusTimer.Start();
             }
         }
 
@@ -109,7 +157,7 @@ namespace Uniflag
                 return;
             }
             _active = false;
-            _webStatusTimer?.Stop();
+            _statusTimer?.Stop();
             if (_renderer != null)
             {
                 _cycler.Stop();
@@ -117,9 +165,72 @@ namespace Uniflag
             }
         }
 
-        private void OnWebStatusTick(object sender, EventArgs e)
+        private void OnStatusTick(object sender, EventArgs e)
         {
-            WebOverlayStatusText.Text = _webServer.StatusText;
+            if (_webServer != null)
+            {
+                WebOverlayStatusText.Text = _webServer.StatusText;
+            }
+            if (_device != null)
+            {
+                DeviceStatusText.Text = _device.Status.StatusText;
+            }
+            // Device buttons move the policy while the tab is open: reflect
+            // that into the slider, but never mid-drag (the user's hand
+            // wins) and never as a feedback echo into the policy.
+            if (_brightness != null && !BrightnessSlider.IsMouseCaptureWithin)
+            {
+                SyncSliderFromPolicy();
+            }
+        }
+
+        private void SyncSliderFromPolicy()
+        {
+            byte current = _brightness.Current;
+            if ((byte)Math.Round(BrightnessSlider.Value) == current)
+            {
+                return;
+            }
+            _syncingSlider = true;
+            try
+            {
+                BrightnessSlider.Value = current;
+            }
+            finally
+            {
+                _syncingSlider = false;
+            }
+        }
+
+        private void OnBrightnessSliderChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            var rounded = (byte)Math.Round(e.NewValue);
+            if (BrightnessValueText != null)
+            {
+                // Fires during InitializeComponent (Value="80" in XAML)
+                // before sibling fields are assigned — hence the null check.
+                BrightnessValueText.Text = rounded.ToString();
+            }
+            if (_brightness == null || _syncingSlider)
+            {
+                return;
+            }
+            // Direct set: the policy raises Changed once per effective
+            // change; the plugin persists it and the connection manager's
+            // depth-one slot coalesces the packet sends during a drag.
+            _brightness.SetDirect(rounded);
+        }
+
+        private void OnApplyPortOverride(object sender, RoutedEventArgs e)
+        {
+            if (_device == null || _settings == null)
+            {
+                return;
+            }
+            string trimmed = (ManualPortTextBox.Text ?? string.Empty).Trim();
+            ManualPortTextBox.Text = trimmed;
+            _settings.ManualPortOverride = trimmed; // SimHub persists at End
+            _device.ManualPortOverride = trimmed;   // empty = auto-discovery
         }
 
         private void OnCycleStatesToggled(object sender, RoutedEventArgs e)
