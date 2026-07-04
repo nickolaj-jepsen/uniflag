@@ -1,10 +1,12 @@
 # uniflag flag grammar — the second-generation signal language
 
-**Status: adopted design constitution (2026-07-04).** This document is the
-outcome of a full redesign interview and supersedes the *visual language* of
-`docs/effects-spec.md`. The old spec remains normative for the legacy renderer
-until the cutover commit (§12 phase 1c), after which it is historical — kept,
-like the v1 `render/` crate docs, as the record of a retired system.
+**Status: adopted design constitution (2026-07-04); phases 1a–1e
+implemented.** This document is the outcome of a full redesign interview and
+is the normative spec for the live renderer: the Grammar renderer shipped,
+the firmware fallback is the roaming ember, and the legacy painters and
+corpora were retired (docs/effects-spec.md is historical, like the v1
+`render/` crate docs). Phases 2–3 (§12 — the LMU and F1 adapters, each gated
+on a live-verification session) remain open.
 
 Codename **Grammar**: the C# implementation lives in
 `plugin/src/Rendering/Grammar/` (`Uniflag.Rendering.Grammar` namespace), its

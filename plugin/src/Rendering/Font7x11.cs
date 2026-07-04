@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The 7×11 pixel font (spec §5.9). S, C and V are golden-frozen through the
-// VSC/SC caution boards in testdata/frames/, so they must never change. The
-// rest are the digits and letters the penalty suite needs (SLOW, DT, SG,
-// severity 1-3), drawn in the same style: 2-px strokes, rounded caps, bit 6
-// = leftmost column, one byte per row.
+// The 7×11 pixel font, carried over from the ported renderer and now pinned
+// through the Grammar boards by testdata/frames-grammar/. All glyphs share
+// one style: 2-px strokes, rounded caps, bit 6 = leftmost column, one byte
+// per row.
 
 namespace Uniflag.Rendering
 {
@@ -20,8 +19,8 @@ namespace Uniflag.Rendering
         public const int GlyphHeight = 11;
 
         // ---------------------------------------------------------------
-        // Golden-frozen caution-board glyphs. Any change here breaks the 40
-        // ported-parity goldens; fix the caller, never these tables.
+        // Caution-board glyphs (S/C/V), carried over verbatim from the
+        // ported renderer; pinned by the Grammar corpus.
         // ---------------------------------------------------------------
 
         /// <summary>S (caution boards, docs/effects-spec.md §5.9).</summary>
@@ -73,7 +72,9 @@ namespace Uniflag.Rendering
         };
 
         // ---------------------------------------------------------------
-        // Penalty-suite glyphs — pinned by the testdata/frames-plugin/ corpus.
+        // Letter glyphs from the retired penalty suite. D/G/T live on in the
+        // Grammar boards (DT/SG/DQ); L/O/W are currently unused but kept —
+        // they exercise the text engine's row layout in tests.
         // ---------------------------------------------------------------
 
         /// <summary>D (drive-through marker).</summary>

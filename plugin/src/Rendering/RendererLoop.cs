@@ -2,7 +2,7 @@
 //
 // The one-renderer→N-sinks core: a dedicated background thread ticks the
 // 60 fps internal frame counter that all animation math assumes
-// (docs/effects-spec.md §1), paints the whole panel into a back buffer,
+// (docs/flag-grammar.md §4), paints the whole panel into a back buffer,
 // publishes the completed 3072-byte RGB888 frame, and hands it to every
 // registered IFrameSink. Sinks sample this clock; the counter is never
 // rebased to a sink's rate (30 fps USB, the overlay's measured fps, WPF's
@@ -73,8 +73,8 @@ namespace Uniflag.Rendering
     public sealed class RendererLoop : IDisposable
     {
         /// <summary>
-        /// The internal animation tick rate. Fixed by the ported effects
-        /// math (docs/effects-spec.md §1) — never derive it from a sink.
+        /// The internal animation tick rate. Fixed by the Grammar animation
+        /// math (docs/flag-grammar.md §4) — never derive it from a sink.
         /// </summary>
         public const int TargetFps = 60;
 

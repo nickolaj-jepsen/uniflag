@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Minimal JSON reader for the machine-generated golden manifests under
-// testdata/ (frames/ was written by the Rust dumper retired at M11;
-// frames-plugin/ by PluginGoldenDumper). Deliberately tiny and strict:
-// objects, arrays, strings, integer numbers, booleans and null — exactly
-// the grammar the dumpers emit. Test-only; keeps the test project free of
-// new NuGet dependencies.
+// Minimal JSON reader for the machine-authored fixtures under testdata/
+// (today: the timeline scripts). Deliberately tiny and strict: objects,
+// arrays, strings, integer numbers, booleans and null — exactly the grammar
+// the fixtures use. Test-only; keeps the test project free of new NuGet
+// dependencies.
 
 using System;
 using System.Collections.Generic;

@@ -95,27 +95,19 @@ overlay-serve:
     python -m http.server 8000 --directory overlay
 
 # Regenerate the regenerable golden fixtures (testdata/proto byte vectors).
-# Only ever run this deliberately, in a reviewed commit — the fixtures are the
-# frozen contract both the Rust and C# suites must match byte-exactly.
-#
-# The ported-parity frame corpus (testdata/frames/) is NOT regenerated here:
-# its Rust dumper was deleted with render/ at M11 and the corpus is permanently
-# frozen — unregenerable by design. Never rewrite those bytes.
+# Only ever run this deliberately, in a reviewed commit — the proto vectors
+# are the frozen wire contract both the Rust and C# suites must match
+# byte-exactly.
 [unix]
 golden-regen:
     cargo test -p proto --test golden_vectors -- --ignored regen
 
-# The [windows] leg additionally regenerates the C#-AUTHORED corpus at
-# testdata/frames-plugin/ (M10 penalty effects; baselines pending maintainer
-# visual review) via the PluginGoldenDumper xunit tool — a separate corpus
-# with its own regen path; it never touches the frozen ported-parity set.
-
-# Regenerate golden fixtures incl. the C#-authored testdata/frames-plugin and
-# testdata/frames-grammar corpora (each behind its own opt-in env var).
+# The [windows] leg additionally regenerates the Grammar renderer's
+# conformance corpus at testdata/frames-grammar/ (docs/flag-grammar.md §11)
+# via the env-gated GrammarGoldenDumper xunit tool.
 [windows]
 golden-regen:
     cargo test -p proto --test golden_vectors -- --ignored regen
-    $env:UNIFLAG_REGEN_PLUGIN_GOLDENS = '1'; dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}" --filter "FullyQualifiedName~PluginGoldenDumper"
     $env:UNIFLAG_REGEN_GRAMMAR_GOLDENS = '1'; dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}" --filter "FullyQualifiedName~GrammarGoldenDumper"
 
 # Build the SimHub plugin (override the SimHub location with $env:UNIFLAG_SIMHUB_DIR).

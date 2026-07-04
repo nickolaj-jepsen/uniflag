@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Integer-only animation primitives (docs/effects-spec.md §2). Must stay
-// float-free and every division truncates (u32/u16 semantics) so the golden
-// frames in testdata/frames/ reproduce byte-exactly.
+// Integer-only animation primitives, originally ported per
+// docs/effects-spec.md §2 and now the Grammar renderer's primitive library
+// (docs/flag-grammar.md §4/§6). Must stay float-free and every division
+// truncates (u32/u16 semantics) so the golden frames in
+// testdata/frames-grammar/ reproduce byte-exactly.
 
 using System;
 

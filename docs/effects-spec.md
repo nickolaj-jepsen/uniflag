@@ -2,11 +2,12 @@
 
 Executable-spec companion for the C# renderer port.
 
-> **Superseded at the flag-grammar cutover.** The live renderer now follows
-> **docs/flag-grammar.md** (the second-generation signal language); this
-> document remains normative only for the retired legacy painters and their
-> corpora until phase 1e deletes them, after which it is historical — kept,
-> like the v1 `render/` docs, as the record of the ported system.
+> **Historical.** The live renderer follows **docs/flag-grammar.md** (the
+> second-generation signal language). The ported legacy painters and their
+> corpora (`testdata/frames/`, `testdata/frames-plugin/`) that this document
+> specified were retired at the flag-grammar cutover — they live in git
+> history only, and this document is kept, like the v1 `render/` docs, as
+> the record of that system.
 
 > **M11 note.** The `render/` crate was deleted at M11; every `render/…`
 > file:line citation below refers to git history (the pre-M11 tree). The

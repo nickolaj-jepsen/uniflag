@@ -31,13 +31,14 @@ namespace Uniflag.Tests
         [Fact]
         public void CenteringMatchesTheFrozenBoardPlacement()
         {
-            // Spec §5.9: VSC x_left = 4, SC x_left = 7, y_top = 10 — and the
-            // truncating division biases odd leftovers one pixel left.
+            // Centring math with the truncating division biasing odd
+            // leftovers one pixel left (three glyphs gap 1 → x 4; two
+            // glyphs gap 4 → x 7; glyph row → y 10).
             Assert.Equal(4, TextEngine.CenterRowX(3, 1));
             Assert.Equal(7, TextEngine.CenterRowX(2, 4));
             Assert.Equal(10, TextEngine.CenterRowY());
-            // Penalty placements pinned by the frames-plugin corpus:
-            // SLOW at x 0, DT/SG at x 8, the severity digit at x 12.
+            // Wider and narrower rows: four glyphs gap 1 → x 0, two glyphs
+            // gap 1 → x 8, one bare glyph → x 12.
             Assert.Equal(0, TextEngine.CenterRowX(4, 1));
             Assert.Equal(8, TextEngine.CenterRowX(2, 1));
             Assert.Equal(12, TextEngine.CenterRowX(1, 0));

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// 32×32 RGB888 paint target (docs/effects-spec.md §1). Byte layout matches
-// the golden-frame format exactly: row-major, pixel (x, y) at byte offset
+// 32×32 RGB888 paint target. Byte layout matches the golden-frame format
+// (testdata/frames-grammar/) exactly: row-major, pixel (x, y) at byte offset
 // (y * 32 + x) * 3, channel order R, G, B — 3072 bytes total.
 
 namespace Uniflag.Rendering

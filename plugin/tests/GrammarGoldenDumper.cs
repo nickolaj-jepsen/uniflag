@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // Regeneration tool for the Grammar golden corpus (testdata/frames-grammar/).
-// Mirrors PluginGoldenDumper: opt-in via UNIFLAG_REGEN_GRAMMAR_GOLDENS so a
+// Opt-in via UNIFLAG_REGEN_GRAMMAR_GOLDENS so a
 // plain test run can never rewrite fixtures; run via the [windows]
 // `just golden-regen` leg, in deliberate reviewed commits only.
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Layout + stamping helpers for the 7×11 pixel font. The VSC/SC caution
-// boards render through these helpers and MUST stay byte-identical to the
-// frozen goldens in testdata/frames/ (integer division everywhere; do not
-// "improve" the rounding).
+// Layout + stamping helpers for the 7×11 pixel font. The Grammar boards
+// render through these helpers and are pinned by the goldens in
+// testdata/frames-grammar/ (integer division everywhere; do not "improve"
+// the rounding).
 
 namespace Uniflag.Rendering
 {
