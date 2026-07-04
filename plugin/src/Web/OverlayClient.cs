@@ -91,8 +91,8 @@ namespace Uniflag.Web
             }
             catch (SemaphoreFullException)
             {
-                // _hasPending makes this unreachable; guarded anyway so the
-                // render thread can never be taken down from here.
+                // _hasPending makes this unreachable; guarded so the render
+                // thread can never be taken down from here.
             }
         }
 
@@ -105,9 +105,8 @@ namespace Uniflag.Web
             Task receive = ReceiveLoopAsync();
             Task send = SendLoopAsync();
             await Task.WhenAll(receive, send).ConfigureAwait(false);
-            // Both users of the token have exited; disposing unhooks the
-            // linked registration so long-lived servers don't accumulate one
-            // per connection ever served.
+            // Dispose unhooks the linked-token registration so a long-lived
+            // server doesn't accumulate one per connection ever served.
             _cts.Dispose();
         }
 
@@ -122,8 +121,8 @@ namespace Uniflag.Web
             {
                 return;
             }
-            try { _tcp.Close(); } catch { /* already dead */ }
-            try { _cts.Cancel(); } catch (ObjectDisposedException) { /* pumps already exited */ }
+            try { _tcp.Close(); } catch { }
+            try { _cts.Cancel(); } catch (ObjectDisposedException) { }
             _onGone(this);
         }
 
@@ -152,8 +151,7 @@ namespace Uniflag.Web
             }
             catch
             {
-                // Cancelled or the socket died under the write — either way
-                // this client is done.
+                // Cancelled or the socket died under the write — this client is done.
             }
             finally
             {

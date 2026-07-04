@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Web overlay server tests (docs/v2-plan.md M5): frame delivery to a real
-// ClientWebSocket, graceful bind failure, the loopback-only binding, the
-// sink registration refcount (first client registers, last disconnect
-// unregisters), the embedded page's single-source contract, and port
-// rebindability after Stop (SimHub cycles End/Init at every game change).
+// Web overlay server tests: frame delivery to a real ClientWebSocket,
+// graceful bind failure, the loopback-only binding, the sink registration
+// refcount (first client registers, last disconnect unregisters), the
+// embedded page's single-source contract, and port rebindability after
+// Stop (SimHub cycles End/Init at every game change).
 //
 // CI-safe by construction: every test binds an ephemeral port (Start(0)),
 // and the server's raw TcpListener needs no http.sys URL ACL, so nothing

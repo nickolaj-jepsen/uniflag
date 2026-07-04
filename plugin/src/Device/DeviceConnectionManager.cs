@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The USB device connection manager (docs/v2-plan.md M9): a background
-// worker that owns the serial port exclusively and walks
+// The USB device connection manager: a background worker that owns the
+// serial port exclusively and walks
 //
 //   scan → open (retry-on-open with backoff) → handshake → Brightness →
 //   streaming → (yank/fault) → back to scan
 //
 // per docs/protocol.md §Handshake. It doubles as the USB frame sink: it
-// registers itself with the renderer (via IFrameSinkHost, the M5 seam)
-// while — and only while — the streaming state holds, so the renderer runs
-// whenever the panel is attached and the connected-idle marker streams with
-// no game running (plan step 5: all three idle states live).
+// registers itself with the renderer (via IFrameSinkHost) while — and only
+// while — the streaming state holds, so the renderer runs whenever the panel
+// is attached and the connected-idle marker streams with no game running.
 //
 // Threading: all device I/O happens on two dedicated background threads —
 // the connection worker (lifecycle + TX pump) and a per-session RX pump.
@@ -86,7 +85,7 @@ namespace Uniflag.Device
         private DeviceStatus _status =
             new DeviceStatus(DeviceConnectionState.Stopped, null, null, null, null, null, null);
 
-        /// <param name="host">Renderer sink registration seam (M5 pattern).</param>
+        /// <param name="host">Renderer sink registration seam.</param>
         /// <param name="enumerator">Platform port enumeration (scan loop only).</param>
         /// <param name="factory">Serial connection factory.</param>
         /// <param name="brightness">The shared brightness policy; its changes are forwarded as Brightness packets.</param>
@@ -202,8 +201,7 @@ namespace Uniflag.Device
         /// forwarding even tick indices only — parity sampling locked to the
         /// renderer clock, no second timer to drift against, and honest
         /// under skipped ticks (a skipped even tick is simply absent, never
-        /// substituted); the same policy OverlayWebServer.OnFrame proved in
-        /// M5. Never blocks: one bounded buffer copy behind a short lock.
+        /// substituted). Never blocks: one bounded buffer copy behind a short lock.
         /// </summary>
         public void OnFrame(byte[] rgb888, long frameIndex)
         {

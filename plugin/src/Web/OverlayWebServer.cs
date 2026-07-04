@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The production web overlay host (docs/v2-plan.md M5): a localhost-only TCP
+// The production web overlay host: a localhost-only TCP
 // listener that serves the LED-dot overlay page (embedded assembly resource,
 // single-sourced from overlay/index.html) on GET / and broadcasts the
 // renderer's raw 3072-byte RGB888 frames on /ws.
@@ -50,26 +50,21 @@ namespace Uniflag.Web
         public const int DefaultPort = 8972;
 
         /// <summary>
-        /// Broadcast rate: the M2a-measured overlay target
-        /// (docs/web-overlay.md verdict). Sampled off the renderer's 60 fps
-        /// clock by even-tick decimation in <see cref="OnFrame"/>.
+        /// Broadcast rate (docs/web-overlay.md). Sampled off the renderer's
+        /// 60 fps clock by even-tick decimation in <see cref="OnFrame"/>.
         /// </summary>
         public const int BroadcastFps = RendererLoop.TargetFps / 2;
 
         /// <summary>
-        /// Manifest resource name of the embedded overlay page — the
-        /// LogicalName pinned in UniflagPlugin.csproj, single-sourced from
-        /// overlay/index.html.
+        /// Manifest resource name of the embedded overlay page; must match the
+        /// LogicalName pinned in UniflagPlugin.csproj.
         /// </summary>
         public const string PageResourceName = "Uniflag.Web.index.html";
 
         private const int MaxRequestHeaderBytes = 16 * 1024;
-        // A client that cannot deliver its request headers (or accept a
-        // response) within this bound is not a browser on localhost. For
-        // header reads this is one deadline across the whole request — a
-        // per-read bound would reset on every byte, letting a drip-feed
-        // (slowloris) client pin a socket and worker indefinitely. Writes
-        // are bounded individually.
+        // One deadline across the whole request for header reads: a per-read
+        // bound would reset on every byte, letting a drip-feed (slowloris)
+        // client pin a socket and worker indefinitely. Writes bounded individually.
         private const int HttpIoTimeoutMs = 5000;
         private const string WebSocketMagic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -180,7 +175,7 @@ namespace Uniflag.Web
             {
                 if (_listener != null)
                 {
-                    return; // already running
+                    return;
                 }
                 var listener = new TcpListener(IPAddress.Loopback, port);
                 try
@@ -191,7 +186,7 @@ namespace Uniflag.Web
                 {
                     // SocketException (port taken) or SecurityException.
                     _status = "Bind failed on 127.0.0.1:" + port + ": " + ex.Message;
-                    try { listener.Stop(); } catch { /* best-effort teardown */ }
+                    try { listener.Stop(); } catch { }
                     return;
                 }
                 lock (_clientsGate)
@@ -202,7 +197,7 @@ namespace Uniflag.Web
                 _cts = new CancellationTokenSource();
                 CancellationToken ct = _cts.Token;
                 _acceptTask = Task.Run(() => AcceptLoopAsync(listener, ct));
-                _status = null; // running: StatusText composes URL + client count
+                _status = null;
             }
         }
 
@@ -242,12 +237,12 @@ namespace Uniflag.Web
                 _clientSnapshot = Array.Empty<OverlayClient>();
             }
 
-            try { cts.Cancel(); } catch { /* already disposed */ }
+            try { cts.Cancel(); } catch { }
             try { listener.Stop(); } catch { /* aborts the pending accept */ }
 
             foreach (KeyValuePair<TcpClient, byte> pending in _pendingConnections)
             {
-                try { pending.Key.Close(); } catch { /* handler cleans up */ }
+                try { pending.Key.Close(); } catch { }
             }
             foreach (OverlayClient client in clients)
             {
@@ -265,7 +260,7 @@ namespace Uniflag.Web
 
             if (acceptTask != null)
             {
-                try { acceptTask.Wait(3000); } catch { /* loop swallows its own errors */ }
+                try { acceptTask.Wait(3000); } catch { }
             }
             try { cts.Dispose(); } catch { }
             _status = "Stopped";
@@ -349,7 +344,7 @@ namespace Uniflag.Web
                 ParsedRequest request = await ReadRequestAsync(stream, ct).ConfigureAwait(false);
                 if (request == null)
                 {
-                    return; // malformed, oversized or timed out — just close
+                    return;
                 }
                 if (request.Method != "GET")
                 {
@@ -387,8 +382,7 @@ namespace Uniflag.Web
             }
             catch
             {
-                // One broken connection must never take the server (or
-                // SimHub) down.
+                // One broken connection must never take the server (or SimHub) down.
             }
             finally
             {
@@ -510,7 +504,7 @@ namespace Uniflag.Web
             {
                 if (used == buffer.Length)
                 {
-                    return null; // oversized header block
+                    return null;
                 }
                 int remainingMs = HttpIoTimeoutMs - (int)deadline.ElapsedMilliseconds;
                 if (remainingMs <= 0)

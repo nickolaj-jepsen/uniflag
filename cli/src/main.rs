@@ -43,8 +43,7 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 /// Serial timeout while streaming: frame writes are ~3 KB bursts and a
 /// briefly backpressuring device shouldn't kill the session.
 const STREAM_TIMEOUT: Duration = Duration::from_secs(1);
-/// Serial timeout during the handshake wait (short, so the read loop
-/// checks the handshake deadline often).
+/// Short serial read timeout during handshake so the loop rechecks its deadline often.
 const HANDSHAKE_POLL: Duration = Duration::from_millis(100);
 /// Cadence of the periodic stream status line on stderr.
 const REPORT_EVERY: Duration = Duration::from_secs(5);
@@ -266,8 +265,8 @@ fn run_stream(cli: &Cli, args: &StreamArgs) -> Result<()> {
     let run_started = Instant::now();
     let mut sink = open_sink(cli, STREAM_TIMEOUT)?;
     loop {
-        // Handshake refusals (protocol mismatch, no HelloAck) are
-        // deliberate stops, not link flaps — never retried.
+        // Handshake refusals (protocol mismatch, no HelloAck) propagate as
+        // errors — deliberate stops, not link flaps, so never retried.
         start_session(&mut sink, args)?;
         match stream_frames(&mut sink, args, fps, run_started)? {
             SessionOutcome::Finished => return Ok(()),
@@ -405,10 +404,8 @@ fn stream_frames(
     }
 }
 
-/// Drain whatever inbound bytes are waiting (never blocks the pacing
-/// loop) and report them: ButtonEvents are the payload, a mid-stream
-/// HelloAck means the device rebooted, drops mean line corruption.
-/// Unknown packet types are ignored silently (forward compat).
+/// Drain and report whatever inbound bytes are waiting, without ever
+/// blocking the pacing loop.
 fn poll_inbound(sink: &mut Sink, decoder: &mut Decoder) -> Result<()> {
     let Sink::Serial(port) = sink else {
         return Ok(());
@@ -514,7 +511,6 @@ fn run_loopback(args: &LoopbackArgs) -> Result<()> {
 // Emit mode
 // =============================================================================
 
-/// Encode exactly one packet, write it to the sink, exit.
 fn run_emit(cli: &Cli, packet: &EmitPacket) -> Result<()> {
     let (bytes, what) = match packet {
         EmitPacket::Hello => (wire::hello()?, "Hello".to_string()),

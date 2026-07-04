@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Penalty-suite unit tests (M10 step 2/3): the extended precedence ladder,
-// the default-means-none invariant (every new code path unreachable when
-// the penalty fields hold their defaults — the 40 ported-parity goldens
-// prove the byte level; these tests prove the dispatch level), the furled
-// accent visibility rules, and painter-level sanity the frames-plugin
-// corpus then pins byte-exactly.
+// Penalty-suite unit tests: the extended precedence ladder, the
+// default-means-none invariant (every new code path unreachable when the
+// penalty fields hold their defaults — the 40 ported-parity goldens prove
+// the byte level; these tests prove the dispatch level), the furled accent
+// visibility rules, and painter-level sanity the frames-plugin corpus then
+// pins byte-exactly.
 
 using Uniflag.Rendering;
 using Xunit;
@@ -36,9 +36,9 @@ namespace Uniflag.Tests
         [Fact]
         public void DefaultPenaltyStateNeverReachesThePenaltyLayers()
         {
-            // Sweep the pre-M10 vocabulary: with default penalty fields the
-            // dispatch must never pick a penalty layer, keeping every new
-            // code path unreachable for existing states.
+            // With default penalty fields the dispatch must never pick a
+            // penalty layer, keeping every new code path unreachable for
+            // existing flag/caution states.
             foreach (Flag flag in (Flag[])System.Enum.GetValues(typeof(Flag)))
             {
                 foreach (Caution caution in (Caution[])System.Enum.GetValues(typeof(Caution)))

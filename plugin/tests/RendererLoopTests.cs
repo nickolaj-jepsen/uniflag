@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Renderer-loop unit tests (docs/v2-plan.md M3 step 6): frame-index
-// monotonicity, sink isolation (one broken sink must not kill the loop),
-// the sink-refcounted lifecycle, the published-frame pull contract, and the
-// M4 input arbitration (normal vs override channel, connected-idle mode).
-// Pure Uniflag.Rendering — no WPF, no SimHub assemblies.
+// Renderer-loop unit tests: frame-index monotonicity, sink isolation (one
+// broken sink must not kill the loop), the sink-refcounted lifecycle, the
+// published-frame pull contract, and the input arbitration (normal vs
+// override channel, connected-idle mode). Pure Uniflag.Rendering — no WPF,
+// no SimHub assemblies.
 
 using System;
 using System.Collections.Generic;
@@ -171,12 +171,9 @@ namespace Uniflag.Tests
             Assert.All(dest, b => Assert.Equal((byte)0, b));
         }
 
-        // -------------------------------------------------------------------
-        // M4 input arbitration. The frame predicates below hold at EVERY
-        // frame index (static cloth-wave fills never strobe dark; the idle
-        // marker's breathe never leaves its range), so no animation timing
-        // is pinned.
-        // -------------------------------------------------------------------
+        // Input arbitration. The frame predicates below hold at EVERY frame
+        // index (static cloth-wave fills never strobe dark; the idle marker's
+        // breathe never leaves its range), so no animation timing is pinned.
 
         private static RenderState LiveFlag(Flag flag)
         {

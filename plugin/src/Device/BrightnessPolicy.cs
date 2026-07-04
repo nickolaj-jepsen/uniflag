@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Host-side brightness policy (docs/v2-plan.md M9 step 4). The retired v1
-// firmware controller — render/src/brightness.rs::BrightnessController — is
-// the behaviour spec: STEP/SLEEP constants, saturating steps, the
-// remembered-awake level, and the wake-to-at-least-STEP rule are ported
-// 1:1. What does NOT carry over is the flash-persistence debounce
-// (SAVE_DEBOUNCE_MS): in v2 the value lives in SimHub's settings store,
-// where a property write costs nothing — SimHub saves the file at End.
+// Host-side brightness policy. Behaviour ported 1:1 from the retired v1
+// BrightnessController (render/src/brightness.rs): STEP/SLEEP constants,
+// saturating steps, remembered-awake level, wake-to-at-least-STEP rule.
+// The flash-persistence debounce does NOT carry over: the value lives in
+// SimHub's settings store, where a property write costs nothing.
 
 using System;
 using Uniflag.Protocol;
@@ -25,17 +23,10 @@ namespace Uniflag.Device
     /// </summary>
     public sealed class BrightnessPolicy
     {
-        /// <summary>
-        /// Step per brightness-up/down short press — ~5 % of the 0..=255
-        /// range. Mirrors <c>BrightnessController::STEP</c>
-        /// (render/src/brightness.rs).
-        /// </summary>
+        /// <summary>Step per brightness-up/down short press — ~5 % of the 0..=255 range.</summary>
         public const byte Step = 12;
 
-        /// <summary>
-        /// The dim level the sleep button drops to when awake. Mirrors
-        /// <c>BrightnessController::SLEEP</c> (render/src/brightness.rs).
-        /// </summary>
+        /// <summary>The dim level the sleep button drops to when awake.</summary>
         public const byte SleepValue = 6;
 
         private readonly object _gate = new object();
@@ -43,8 +34,7 @@ namespace Uniflag.Device
 
         // What to restore to when waking from sleep. Updated on every
         // awake-state change (step or slider) so the wake level always
-        // tracks the user's last preferred bright value — mirrors
-        // BrightnessController::last_awake.
+        // tracks the user's last preferred bright value.
         private byte _lastAwake;
 
         /// <summary>
@@ -96,9 +86,7 @@ namespace Uniflag.Device
                 _current = value;
                 if (changed)
                 {
-                    // Raised under the lock: see the Changed doc — delivery
-                    // order must match mutation order or racing inputs can
-                    // pin subscribers to a stale value.
+                    // Raised under the lock — see the Changed doc.
                     RaiseChanged(value);
                 }
             }
@@ -129,8 +117,7 @@ namespace Uniflag.Device
                 switch (assigned.Value)
                 {
                     case Button.BrightnessUp:
-                        // Saturating add; last_awake tracks the result even
-                        // when saturated (mirrors apply() in brightness.rs).
+                        // last_awake tracks the result even when saturated.
                         next = (byte)Math.Min(byte.MaxValue, _current + Step);
                         _lastAwake = next;
                         break;
@@ -148,7 +135,6 @@ namespace Uniflag.Device
                         }
                         else
                         {
-                            // Awake → remember this value and dim.
                             _lastAwake = _current;
                             next = SleepValue;
                         }

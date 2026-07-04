@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// 32×32 RGB888 paint target — the C# mirror of the `Surface` contract in
-// render/src/surface.rs (docs/effects-spec.md §1). Byte layout matches the
-// golden-frame format exactly: row-major, pixel (x, y) at byte offset
+// 32×32 RGB888 paint target (docs/effects-spec.md §1). Byte layout matches
+// the golden-frame format exactly: row-major, pixel (x, y) at byte offset
 // (y * 32 + x) * 3, channel order R, G, B — 3072 bytes total.
 
 namespace Uniflag.Rendering
@@ -19,15 +18,13 @@ namespace Uniflag.Rendering
         public const int Width = 32;
         public const int Height = 32;
 
-        /// <summary>Total byte length: 32 * 32 * 3.</summary>
         public const int ByteLength = Width * Height * 3;
 
         private readonly byte[] _pixels = new byte[ByteLength];
 
         /// <summary>
-        /// The backing store, in golden-frame layout. Exposed directly so
-        /// sinks can stream it without a copy; treat as read-only outside
-        /// the renderer.
+        /// Backing store in golden-frame layout. Exposed directly for
+        /// zero-copy streaming; treat as read-only outside the renderer.
         /// </summary>
         public byte[] Pixels => _pixels;
 
@@ -49,8 +46,7 @@ namespace Uniflag.Rendering
 
         /// <summary>
         /// Read one pixel. Out-of-range coordinates return black, matching
-        /// the silently-ignored writes (mirrors the test-side contract of
-        /// <c>render/tests/common/mod.rs</c>).
+        /// the silently-ignored writes.
         /// </summary>
         public Rgb GetPixel(int x, int y)
         {

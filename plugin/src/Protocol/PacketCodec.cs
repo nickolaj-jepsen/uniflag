@@ -43,18 +43,17 @@ namespace Uniflag.Protocol
     /// <c>0x00</c> delimiter. A <i>known</i> type with a wrong-length
     /// payload is also dropped (<see cref="ProtocolErrorKind.BadLength"/>).
     ///
-    /// Payload schemas are frozen as of M6: the Rust <c>proto::packet</c>
-    /// module is the source of truth, mirrored in prose by
-    /// <c>docs/protocol.md</c> and in bytes by the golden vectors under
-    /// <c>testdata/proto/</c>. Any wire-visible change bumps
-    /// <see cref="ProtocolVersion"/>.
+    /// Payload schemas are frozen: the Rust <c>proto::packet</c> module is
+    /// the source of truth, mirrored in prose by <c>docs/protocol.md</c> and
+    /// in bytes by the golden vectors under <c>testdata/proto/</c>. Any
+    /// wire-visible change bumps <see cref="ProtocolVersion"/>.
     /// </summary>
     public static class PacketCodec
     {
         /// <summary>
         /// Protocol version carried in the Hello / HelloAck handshake. The
         /// plugin requires exact equality and refuses to drive the device on
-        /// mismatch — bump on any wire-visible change after the M6 freeze.
+        /// mismatch — bump on any wire-visible change.
         /// </summary>
         public const byte ProtocolVersion = 1;
 
@@ -230,8 +229,6 @@ namespace Uniflag.Protocol
                     return new ButtonEventPacket(payload[0], payload[1]);
 
                 default:
-                    // Forward compat: pass unassigned types through parsing;
-                    // ignoring them is the caller's job.
                     return new UnknownPacket(type, payload);
             }
         }

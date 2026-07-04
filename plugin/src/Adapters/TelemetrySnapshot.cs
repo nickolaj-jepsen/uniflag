@@ -12,13 +12,12 @@ namespace Uniflag.Adapters
     /// <c>GameData</c>. Field selection is pinned by reflection against
     /// GameReaderCommon.dll (SimHub 9.x): the unified <c>Flag_*</c>
     /// properties are <c>int</c> 0/1 on <c>StatusDataBase</c> (converted to
-    /// bools here). The M10 raw layer adds the iRacing SessionFlags bitmask,
-    /// read out of <c>StatusDataBase.GetRawDataObject()</c> only while the
-    /// running game is iRacing. (M4's note that <c>SafetyCarActive</c> comes
-    /// from the iRacing reader was wrong — a binary sweep of every SimHub
-    /// 9.11.21 assembly finds it in RfactorReader.dll only; the M10 research
-    /// in docs/simhub-flag-properties.md corrects it. iRacing's pace car is
-    /// detected from raw data instead.)
+    /// bools here). The raw layer adds the iRacing SessionFlags bitmask, read
+    /// out of <c>StatusDataBase.GetRawDataObject()</c> only while the running
+    /// game is iRacing. (<c>SafetyCarActive</c> is NOT an iRacing-reader
+    /// field — a binary sweep of every SimHub 9.11.21 assembly finds it in
+    /// RfactorReader.dll only, per docs/simhub-flag-properties.md; iRacing's
+    /// pace car is detected from raw data instead.)
     /// </summary>
     public sealed class TelemetrySnapshot
     {

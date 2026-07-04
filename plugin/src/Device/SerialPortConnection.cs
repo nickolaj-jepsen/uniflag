@@ -50,7 +50,6 @@ namespace Uniflag.Device
         {
             try
             {
-                // SerialPort.Read returns as soon as >= 1 byte is available.
                 return _port.Read(buffer, offset, count);
             }
             catch (TimeoutException)

@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // Inbound decode pipeline: a 0x00-delimited COBS byte stream in, typed
-// packets out — the C# analogue of cli/src/rx.rs::Decoder, built on the
-// frozen Uniflag.Protocol codec. Mirrors the receiver posture of
-// docs/protocol.md §Framing: malformed COBS, bad CRCs, wrong-length known
-// types, and oversized accumulations are dropped silently and the decoder
-// realigns at the next delimiter; back-to-back delimiters are no-ops;
-// CRC-valid packets with unassigned type bytes surface as UnknownPacket so
-// callers can ignore them explicitly (forward compat).
+// packets out. Receiver posture (docs/protocol.md §Framing): malformed
+// COBS, bad CRCs, wrong-length known types, and oversized accumulations are
+// dropped silently and the decoder realigns at the next delimiter;
+// back-to-back delimiters are no-ops; CRC-valid packets with unassigned
+// type bytes surface as UnknownPacket so callers can ignore them (forward
+// compat).
 
 using System.Collections.Generic;
 using Uniflag.Protocol;
@@ -58,7 +57,6 @@ namespace Uniflag.Device
                     {
                         DecodeSegment(packets);
                     }
-                    // Empty delimiter-to-delimiter spans are no-ops.
                     _pendingLength = 0;
                     _overflowed = false;
                 }

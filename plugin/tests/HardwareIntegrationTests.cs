@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// OPT-IN hardware integration test (M9). Gated on the UNIFLAG_DEVICE_PORT
+// OPT-IN hardware integration test. Gated on the UNIFLAG_DEVICE_PORT
 // environment variable: unset (the CI / default case) every test here is
 // SKIPPED and no serial port is ever touched. Set it to the device's port
 // (e.g. UNIFLAG_DEVICE_PORT=COM5) on a box with a flashed panel attached —

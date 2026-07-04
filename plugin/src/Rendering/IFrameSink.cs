@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The consumer side of the one-renderer→N-sinks interface
-// (docs/v2-plan.md M3 step 6). Sinks sample the renderer's 60 fps internal
-// clock — they never own a clock of their own for animation purposes
-// ("Renderer clock discipline", docs/v2-plan.md).
+// The consumer side of the one-renderer→N-sinks interface. Sinks sample the
+// renderer's 60 fps internal clock — they never own a clock of their own for
+// animation purposes.
 
 namespace Uniflag.Rendering
 {

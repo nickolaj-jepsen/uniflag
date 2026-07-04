@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The C# DUMPER for the C#-authored golden corpus (docs/v2-plan.md M10
-// step 3) — the named regen tool wired into the [windows] leg of
-// `just golden-regen`. OPT-IN like the hardware test: gated on the
-// UNIFLAG_REGEN_PLUGIN_GOLDENS environment variable so a normal test run
+// The C# DUMPER for the C#-authored golden corpus — the named regen tool
+// wired into the [windows] leg of `just golden-regen`. OPT-IN like the
+// hardware test: gated on the UNIFLAG_REGEN_PLUGIN_GOLDENS environment
+// variable so a normal test run
 // never mutates fixtures (regeneration only ever happens deliberately, in
 // reviewed commits — the two-corpus policy). It never touches
 // testdata/frames/ (the ported-parity set): only testdata/frames-plugin/.

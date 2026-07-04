@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Connection manager lifecycle tests (M9) against injected fakes — no real
+// Connection manager lifecycle tests against injected fakes — no real
 // serial ports, CI-safe. Covers: the scan → open (retry-on-open) →
 // handshake → Brightness → streaming walk; the Brightness re-send on every
 // (re)connect; pre-ack ButtonEvent isolation; refuse-with-message on

@@ -3,9 +3,8 @@
 // Plugin connected-idle painter — docs/effects-spec.md §7b, implemented
 // bit-exactly with the §2 primitives. Deliberately a separate class from
 // Effects: the golden corpus (testdata/frames/) pins Effects.Paint
-// byte-for-byte, so no new code path may enter it. This pattern is
-// C#-authored (never existed in the Rust renderer) and is pinned by its own
-// unit tests instead.
+// byte-for-byte, so no new code path may enter it. Pinned by its own unit
+// tests instead.
 
 namespace Uniflag.Rendering
 {

@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // The scenario ledger for the C#-AUTHORED golden corpus at
-// testdata/frames-plugin/ (docs/v2-plan.md M10 step 3, cross-cutting
-// "two-corpus" policy). This corpus is deliberately separate from the
+// testdata/frames-plugin/. This corpus is deliberately separate from the
 // ported-parity set at testdata/frames/: that one was produced by the Rust
-// dumper and froze permanently at M11; this one pins the M10 penalty
-// effects, is produced by the C# dumper in PluginGoldenDumper.cs (the
-// [windows] leg of `just golden-regen`), and stays regenerable — its
+// dumper and is permanently frozen (no regen path); this one pins the
+// penalty effects, is produced by the C# dumper in PluginGoldenDumper.cs
+// (the [windows] leg of `just golden-regen`), and stays regenerable — its
 // baselines are pending maintainer visual review in the WPF preview, and
 // regeneration keeps revision cheap. Names are unique lowercase_snake and
-// the table is append-only, mirroring the retired Rust ledger's discipline.
+// the table is append-only.
 
 using System;
 using System.Collections.Generic;
@@ -57,7 +56,6 @@ namespace Uniflag.Tests
             public string Description { get; }
         }
 
-        /// <summary>Absolute path of <c>testdata/frames-plugin/</c>.</summary>
         internal static string CorpusDir =>
             Path.Combine(RepoPaths.RepoRoot, "testdata", "frames-plugin");
 

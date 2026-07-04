@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Adapter integration tests (docs/v2-plan.md M10 step 4): replay the two
-// M7-transcribed scenario timelines under testdata/timelines/ through the
-// adapter pipeline, and replay SYNTHETIC iRacing SessionFlags sequences
-// through the generic+iRacing layers.
+// Adapter integration tests: replay the two transcribed scenario timelines
+// under testdata/timelines/ through the adapter pipeline, and replay
+// SYNTHETIC iRacing SessionFlags sequences through the generic+iRacing
+// layers.
 //
 // The timeline fixtures are game-agnostic RenderState scripts, so they run
 // through the GENERIC pipeline only: each step is projected onto a
@@ -227,9 +227,9 @@ namespace Uniflag.Tests
     }
 
     /// <summary>
-    /// SYNTHETIC iRacing sequences through generic+iRacing (M10 step 4).
-    /// Masks are hand-built from the verified irsdk_Flags bit layout —
-    /// documented as synthetic, not captured telemetry.
+    /// SYNTHETIC iRacing sequences through generic+iRacing. Masks are
+    /// hand-built from the verified irsdk_Flags bit layout — synthetic, not
+    /// captured telemetry.
     /// </summary>
     public class IRacingSyntheticSequenceTests
     {

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // Golden-frame suite for the C#-AUTHORED corpus at testdata/frames-plugin/
-// (docs/v2-plan.md M10 step 3) — the M10 penalty effects pinned byte-exactly,
-// in the same style as GoldenFrameTests: iterate the manifest, render each
+// — the penalty effects pinned byte-exactly, in the same style as
+// GoldenFrameTests: iterate the manifest, render each
 // (state, frame, flag_age, connected) tuple, compare all 3072 bytes. Two
 // corpus-policy differences from the ported-parity suite: this corpus IS
 // regenerable (via PluginGoldenDumper, the [windows] leg of
@@ -81,7 +81,7 @@ namespace Uniflag.Tests
                     Session = ParseEnum<Session>(stateObj["session"]),
                     Caution = ParseEnum<Caution>(stateObj["caution"]),
                     Sectors = sectors,
-                    // The M10 extension fields — required in this corpus's
+                    // Penalty extension fields — required in this corpus's
                     // manifest (unlike the frozen frames manifest, which
                     // predates them and never carries penalty state).
                     Slowdown = checked((byte)(long)stateObj["slowdown"]),

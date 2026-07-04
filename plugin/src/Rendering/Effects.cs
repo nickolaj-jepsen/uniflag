@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Per-flag paint functions, ported byte-for-byte from render/src/effects.rs
-// against docs/effects-spec.md. Everything is integer math: the golden
-// corpus under testdata/frames/ pins every effect exactly, so any deviation
-// from the Rust arithmetic (division rounding, wrapping, saturation) is a
-// conformance failure, not a style choice.
+// Per-flag paint functions against docs/effects-spec.md. Everything is
+// integer math: the golden corpus under testdata/frames/ pins every effect
+// exactly, so any deviation in division rounding, wrapping or saturation is
+// a conformance failure, not a style choice.
 //
-// M10 adds the C#-authored penalty suite (slowdown board, meatball board,
-// DT/SG black-flag markers, furled warning accent), pinned by its own
-// clearly separated corpus under testdata/frames-plugin/. Every penalty
-// code path is unreachable while RenderState's penalty fields hold their
-// defaults, so the two corpora never contend over the same tuples.
+// The penalty suite (slowdown board, meatball board, DT/SG black-flag
+// markers, furled warning accent) is pinned by its own separate corpus
+// under testdata/frames-plugin/. Every penalty code path is unreachable
+// while RenderState's penalty fields hold their defaults, so the two
+// corpora never contend over the same tuples.
 
 using System;
 
@@ -26,7 +25,6 @@ namespace Uniflag.Rendering
         private const int Width = FrameBuffer.Width;
         private const int Height = FrameBuffer.Height;
 
-        // Palette (effects.rs:12-21).
         private static readonly Rgb Black = new Rgb(0, 0, 0);
         private static readonly Rgb Yellow = new Rgb(255, 220, 0);
         private static readonly Rgb Blue = new Rgb(0, 64, 255);
@@ -39,21 +37,17 @@ namespace Uniflag.Rendering
         private const int SectorBandHeight = 2;
 
         // Three 10-px sector segments with 1-px gaps at cols 10 and 21;
-        // inclusive ranges S1 0..=9, S2 11..=20, S3 22..=31 (effects.rs:26).
+        // inclusive ranges S1 0..=9, S2 11..=20, S3 22..=31.
         private static readonly int[] SegmentLo = { 0, 11, 22 };
         private static readonly int[] SegmentHi = { 9, 20, 31 };
 
-        // Caution-board geometry (effects.rs:30-32). The 7×11 glyph bitmaps
-        // and the letter-row placement math moved verbatim into Font7x11 /
-        // TextEngine at M10 — same bytes, same integer divisions; the 40
-        // ported-parity goldens pin the migration bit-for-bit.
+        // Caution-board geometry: 2-px border width.
         private const int CautionBorder = 2;
 
         /// <summary>
-        /// Recompute the whole panel (mirror of <c>effects::paint</c>,
-        /// effects.rs:79-112). <paramref name="frame"/> is the 60 fps tick
-        /// counter; <paramref name="flagAge"/> is frames since the flag last
-        /// changed (consumed by red onset, green onset and the ready orb).
+        /// Recompute the whole panel. <paramref name="frame"/> is the 60 fps
+        /// tick counter; <paramref name="flagAge"/> is frames since the flag
+        /// last changed (consumed by red onset, green onset and the ready orb).
         /// </summary>
         public static void Paint(FrameBuffer s, RenderState state, uint frame, uint flagAge, bool connected)
         {
@@ -61,8 +55,7 @@ namespace Uniflag.Rendering
             {
                 case RenderLayer.Disconnected:
                     Fill(s, Black);
-                    // No overlays — mirror of the early return at effects.rs:80-84.
-                    return;
+                    return; // no overlays
                 case RenderLayer.RedFlag:
                     PaintRed(s, state.Wave, frame, flagAge);
                     break;
@@ -123,7 +116,7 @@ namespace Uniflag.Rendering
         // Per-flag base layers.
         // ---------------------------------------------------------------
 
-        /// <summary>Yellow (effects.rs:114-153, spec §5.1).</summary>
+        /// <summary>Yellow (spec §5.1).</summary>
         private static void PaintYellow(FrameBuffer s, WaveLevel wave, uint frame)
         {
             switch (wave)
@@ -152,7 +145,7 @@ namespace Uniflag.Rendering
             }
         }
 
-        /// <summary>Red (effects.rs:155-183, spec §5.2).</summary>
+        /// <summary>Red (spec §5.2).</summary>
         private static void PaintRed(FrameBuffer s, WaveLevel wave, uint frame, uint flagAge)
         {
             // Sharp white onset flash for 4 frames, regardless of wave level.
@@ -179,7 +172,7 @@ namespace Uniflag.Rendering
             PaintWithWave(s, Red, frame, 150, 255);
         }
 
-        /// <summary>Blue (effects.rs:185-208, spec §5.3).</summary>
+        /// <summary>Blue (spec §5.3).</summary>
         private static void PaintBlue(FrameBuffer s, WaveLevel wave, uint frame)
         {
             // Cloth-wave overlay; under wave levels, an additional brighter
@@ -209,7 +202,7 @@ namespace Uniflag.Rendering
             });
         }
 
-        /// <summary>Green (effects.rs:210-241, spec §5.4).</summary>
+        /// <summary>Green (spec §5.4).</summary>
         private static void PaintGreen(FrameBuffer s, WaveLevel wave, uint frame, uint flagAge)
         {
             // Onset: sweep a bright band L→R once over 30 frames, ignoring
@@ -242,7 +235,7 @@ namespace Uniflag.Rendering
             PaintWithWave(s, Green, frame, 220, 255);
         }
 
-        /// <summary>White (effects.rs:243-254, spec §5.5).</summary>
+        /// <summary>White (spec §5.5).</summary>
         private static void PaintWhite(FrameBuffer s, WaveLevel wave, uint frame)
         {
             uint strobeHz = wave switch
@@ -259,7 +252,7 @@ namespace Uniflag.Rendering
             PaintWithWave(s, White, frame, 220, 255);
         }
 
-        /// <summary>Orange / meatball (effects.rs:256-283, spec §5.7).</summary>
+        /// <summary>Orange / meatball (spec §5.7).</summary>
         private static void PaintOrange(FrameBuffer s, WaveLevel wave, uint frame)
         {
             // Rotating quartered black/orange; two adjacent quadrants lit,
@@ -282,7 +275,7 @@ namespace Uniflag.Rendering
             });
         }
 
-        /// <summary>Checkered (effects.rs:285-301, spec §5.8).</summary>
+        /// <summary>Checkered (spec §5.8).</summary>
         private static void PaintCheckered(FrameBuffer s, uint frame)
         {
             // 4×4 tiles scrolling diagonally at 1 px / 8 frames. div_euclid
@@ -298,9 +291,9 @@ namespace Uniflag.Rendering
         }
 
         /// <summary>
-        /// Black flag (effects.rs:352-373, spec §5.6), plus the M10 DT/SG
-        /// service marker. <paramref name="detail"/> == None reproduces the
-        /// golden-frozen X byte-for-byte; the marker arms are additive.
+        /// Black flag (spec §5.6), plus the DT/SG service marker.
+        /// <paramref name="detail"/> == None reproduces the golden-frozen X
+        /// byte-for-byte; the marker arms are additive.
         /// </summary>
         private static void PaintBlackFlag(FrameBuffer s, uint frame, BlackFlagDetail detail)
         {
@@ -343,9 +336,8 @@ namespace Uniflag.Rendering
         }
 
         // ---------------------------------------------------------------
-        // M10 penalty boards and accent (C#-authored; pinned by the
-        // testdata/frames-plugin/ corpus, pending maintainer visual review —
-        // regenerate via the [windows] leg of `just golden-regen`).
+        // Penalty boards and accent (pinned by the testdata/frames-plugin/
+        // corpus; regenerate via the [windows] leg of `just golden-regen`).
         // ---------------------------------------------------------------
 
         /// <summary>
@@ -434,7 +426,7 @@ namespace Uniflag.Rendering
         // Session idle.
         // ---------------------------------------------------------------
 
-        /// <summary>Race-idle alive marker (effects.rs:303-319, spec §5.10).</summary>
+        /// <summary>Race-idle alive marker (spec §5.10).</summary>
         private static void PaintRaceIdle(FrameBuffer s, uint frame)
         {
             Fill(s, Black);
@@ -450,7 +442,7 @@ namespace Uniflag.Rendering
             s.SetPixel(MaxX, MaxY, pulseM, pulseM, pulseM);
         }
 
-        /// <summary>Ready orb with 300-frame fallback (effects.rs:321-350, spec §5.11).</summary>
+        /// <summary>Ready orb with 300-frame fallback (spec §5.11).</summary>
         private static void PaintReady(FrameBuffer s, uint frame, uint flagAge)
         {
             const uint OrbDurationFrames = 300; // 5 s at 60 fps
@@ -479,20 +471,19 @@ namespace Uniflag.Rendering
         // Caution boards.
         // ---------------------------------------------------------------
 
-        /// <summary>VSC board (effects.rs:375-379, spec §5.9).</summary>
+        /// <summary>VSC board (spec §5.9).</summary>
         private static void PaintVsc(FrameBuffer s, uint frame) =>
             PaintCautionBoard(s, frame, new[] { Font7x11.V, Font7x11.S, Font7x11.C }, 1);
 
-        /// <summary>Safety-car board (effects.rs:381-385, spec §5.9).</summary>
+        /// <summary>Safety-car board (spec §5.9).</summary>
         private static void PaintSafetyCar(FrameBuffer s, uint frame) =>
             PaintCautionBoard(s, frame, new[] { Font7x11.S, Font7x11.C }, 4);
 
         /// <summary>
-        /// Digiflag board: white letters on black, breathing yellow border
-        /// (effects.rs:390-418). The letter row renders through the M10
-        /// text engine — <see cref="TextEngine.DrawCenteredRow"/> is the
-        /// same placement math (same truncating divisions), so the boards
-        /// stay byte-identical to the frozen goldens.
+        /// Digiflag board: white letters on black, breathing yellow border.
+        /// The letter row renders through <see cref="TextEngine.DrawCenteredRow"/>,
+        /// whose placement math (same truncating divisions) keeps the boards
+        /// byte-identical to the frozen goldens.
         /// </summary>
         private static void PaintCautionBoard(FrameBuffer s, uint frame, byte[][] glyphs, int gap)
         {
@@ -504,7 +495,6 @@ namespace Uniflag.Rendering
             byte m = (byte)(sum > 255 ? 255 : sum);
             Rgb border = Anim.ScaleRgb(Yellow, m);
 
-            // Black background + yellow border, all in one panel-sweep.
             FillWith(s, (x, y) =>
             {
                 bool onBorder = x < CautionBorder
@@ -523,9 +513,9 @@ namespace Uniflag.Rendering
         // ---------------------------------------------------------------
 
         /// <summary>
-        /// Bottom-edge overlay, painted after (over) the base layer
-        /// (effects.rs:432-464, spec §6). Gap columns 10 and 21 are never
-        /// written — the base layer shows through.
+        /// Bottom-edge overlay, painted after (over) the base layer (spec §6).
+        /// Gap columns 10 and 21 are never written — the base layer shows
+        /// through.
         /// </summary>
         private static void PaintSectorBand(FrameBuffer s, SectorSet mask, WaveLevel wave, uint frame)
         {
@@ -561,7 +551,7 @@ namespace Uniflag.Rendering
         }
 
         // ---------------------------------------------------------------
-        // Fill helpers (mirrors of Surface::fill / fill_with, surface.rs:24-45).
+        // Fill helpers.
         // ---------------------------------------------------------------
 
         private static void Fill(FrameBuffer s, Rgb color)
@@ -586,10 +576,7 @@ namespace Uniflag.Rendering
             }
         }
 
-        /// <summary>
-        /// Fill every pixel with <c>ScaleRgb(base, WaveMult(x, y, frame, lo, hi))</c>
-        /// (effects.rs:466-471).
-        /// </summary>
+        /// <summary>Fill every pixel with the cloth-wave-modulated base colour.</summary>
         private static void PaintWithWave(FrameBuffer s, Rgb baseColor, uint frame, byte loMult, byte hiMult)
         {
             FillWith(s, (x, y) => Anim.ScaleRgb(baseColor, Anim.WaveMult(x, y, frame, loMult, hiMult)));

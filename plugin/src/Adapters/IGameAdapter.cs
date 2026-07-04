@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The layering seam of the adapter architecture (docs/v2-plan.md M4 step 2):
-// AdapterPipeline runs every matching adapter in order over the same
-// RenderState, so a game-specific adapter (M10's iRacing raw-telemetry
-// adapter, keyed on GameName) can sit after the generic one and override or
-// refine whatever the unified Flag_* mapping produced.
+// The layering seam of the adapter architecture: AdapterPipeline runs every
+// matching adapter in order over the same RenderState, so a game-specific
+// adapter (the iRacing raw-telemetry adapter, keyed on GameName) can sit
+// after the generic one and override or refine whatever the unified Flag_*
+// mapping produced.
 
 using Uniflag.Rendering;
 

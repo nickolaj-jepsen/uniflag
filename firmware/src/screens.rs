@@ -2,8 +2,8 @@
 //! pattern.
 //!
 //! Everything here paints through [`Display::set_pixel`]. The firmware
-//! deliberately does **not** link `uniflag-render` (docs/v2-plan.md M8
-//! steps 4/6) — what it needs is embedded here instead:
+//! deliberately does **not** link `uniflag-render` — what it needs is
+//! embedded here instead:
 //!
 //! - The fallback screen implements docs/effects-spec.md §7a **bit-exactly**,
 //!   with the heartbeat colour embedded as a literal (the spec forbids
@@ -17,7 +17,7 @@
 
 use crate::display::{Display, HEIGHT, WIDTH};
 
-/// RGB triple, the same shape `uniflag_render::Rgb` had.
+/// RGB triple.
 pub type Rgb = (u8, u8, u8);
 
 const BLACK: Rgb = (0, 0, 0);
@@ -102,9 +102,8 @@ pub fn dot(d: &mut Display, x: i32, y: i32, c: Rgb) {
 // Minimal pixel font: digits, 'v', '.'
 // =============================================================================
 
-// Encoding matches the render crate's caution glyphs
-// (render/src/effects.rs:28-33): one byte per glyph row, leftmost column
-// on the MSB side — here bit 2 = column 0 for the 3-wide glyphs.
+// One byte per glyph row, leftmost column on the MSB side — here bit 2 =
+// column 0 for the 3-wide glyphs.
 
 const FONT_W: i32 = 3;
 

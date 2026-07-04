@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The web server's seam onto renderer sink registration (docs/v2-plan.md M5
-// "lifecycle tied to sink activation"): OverlayWebServer registers itself as
-// a frame sink only while at least one WebSocket client is connected, so the
-// render thread runs only when someone is actually watching. The interface
-// exists so tests can observe the add/remove refcount without a real render
-// thread; production always goes through RendererSinkHost.
+// The web server's seam onto renderer sink registration: OverlayWebServer
+// registers itself as a frame sink only while at least one WebSocket client
+// is connected, so the render thread runs only when someone is actually
+// watching. The interface exists so tests can observe the add/remove refcount
+// without a real render thread; production always goes through RendererSinkHost.
 
 using System;
 using Uniflag.Rendering;

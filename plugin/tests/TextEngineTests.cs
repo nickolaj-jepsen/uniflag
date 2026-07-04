@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Text-engine unit tests (M10 step 1): the layout math must reproduce the
+// Text-engine unit tests: the layout math must reproduce the
 // caution-board placement constants of docs/effects-spec.md §5.9 exactly
 // (the 40 ported-parity goldens are the byte-level referee for the VSC/SC
 // migration; these tests pin the arithmetic at the unit level so a

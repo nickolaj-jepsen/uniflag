@@ -232,8 +232,6 @@ namespace Uniflag.Protocol
         {
             if (FwVersion.Length > PacketCodec.MaxFwVersionLength)
             {
-                // Encoder-side cap only, mirroring the Rust encoder; parsers
-                // accept any length the framing allows.
                 throw new ProtocolException(
                     ProtocolErrorKind.BadLength,
                     $"fw_version exceeds the encoder cap of {PacketCodec.MaxFwVersionLength} bytes");

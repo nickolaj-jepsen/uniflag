@@ -25,40 +25,37 @@ namespace Uniflag
         internal UniflagSettings Settings { get; private set; }
 
         /// <summary>
-        /// The 60 fps rendering core (M3). Created in Init, disposed in End;
-        /// its thread only runs while at least one sink is registered (the
-        /// settings tab's preview, the web overlay while a browser/dash
+        /// The 60 fps rendering core. Its thread only runs while at least one
+        /// sink is registered (settings-tab preview, web overlay while a
         /// client is connected, or the USB device while attached).
         /// </summary>
         internal RendererLoop Renderer { get; private set; }
 
         /// <summary>
-        /// The web overlay host (M5): serves the LED-dot page and the frame
-        /// WebSocket on http://127.0.0.1:8972/. Started in Init — a bind
-        /// failure becomes a settings-tab status, never a crash — and
-        /// stopped in End (SimHub rebuilds plugins at every game change, so
-        /// the port must come back cleanly).
+        /// Serves the LED-dot page and frame WebSocket on
+        /// http://127.0.0.1:8972/. A bind failure becomes a settings-tab
+        /// status, never a crash; stopped in End so the port comes back
+        /// cleanly (SimHub rebuilds plugins at every game change).
         /// </summary>
         internal OverlayWebServer WebServer { get; private set; }
 
         /// <summary>
-        /// The USB device connection (M9): discovery, handshake, the 30 fps
-        /// frame stream, and reconnects — all on background workers. Stopped
-        /// in End so the COM port is released before SimHub re-Inits.
+        /// USB device connection: discovery, handshake, 30 fps frame stream,
+        /// reconnects — all on background workers. Stopped in End so the COM
+        /// port is released before SimHub re-Inits.
         /// </summary>
         internal DeviceConnectionManager Device { get; private set; }
 
         /// <summary>
-        /// Host-side brightness policy (M9): slider and device buttons feed
-        /// it; every change persists into <see cref="Settings"/> and is
-        /// forwarded to the device as one coalesced Brightness packet.
+        /// Host-side brightness policy: slider and device buttons feed it;
+        /// every change persists into <see cref="Settings"/> and is forwarded
+        /// to the device as one coalesced Brightness packet.
         /// </summary>
         internal BrightnessPolicy Brightness { get; private set; }
 
-        // Telemetry path (M4): one reused snapshot + an immutable pipeline —
-        // zero avoidable allocation on the 60 Hz update thread. M10 layers
-        // the iRacing raw-telemetry refiner after the generic baseline; it
-        // only ever runs when GameData.GameName is iRacing.
+        // One reused snapshot + immutable pipeline — zero avoidable allocation
+        // on the 60 Hz update thread. The iRacing refiner layers after the
+        // generic baseline; it only runs when GameData.GameName is iRacing.
         private readonly TelemetrySnapshot _snapshot = new TelemetrySnapshot();
         private readonly AdapterPipeline _adapters = new AdapterPipeline(new IRacingAdapter());
 
@@ -82,9 +79,8 @@ namespace Uniflag
 
         public void DataUpdate(PluginManager pluginManager, ref GameData data)
         {
-            // Runs on SimHub's update thread (~60 Hz), including while no
-            // game is running. Everything is copied out of `data` by the
-            // extractor; the ref is never stored.
+            // Runs on SimHub's update thread (~60 Hz), including while no game
+            // is running. `data` is copied out by the extractor; never stored.
             RendererLoop renderer = Renderer;
             if (renderer == null)
             {
@@ -93,12 +89,10 @@ namespace Uniflag
             GameDataExtractor.Extract(ref data, _snapshot);
             if (!_snapshot.HasLiveSession)
             {
-                // No live game session — the predicate is GameRunning &&
-                // !GameInMenu && NewData != null (TelemetrySnapshot
-                // .HasLiveSession): menus and process-only detection carry
-                // no usable flag state, so show the §7b connected-idle
-                // marker. This feeds the NORMAL channel; the settings-tab
-                // cycler's override keeps winning if active.
+                // Menus and process-only detection carry no usable flag
+                // state, so show the §7b connected-idle marker. Feeds the
+                // NORMAL channel; the settings-tab cycler's override still
+                // wins if active.
                 renderer.SetConnectedIdle();
                 return;
             }
@@ -107,9 +101,8 @@ namespace Uniflag
 
         public void End(PluginManager pluginManager)
         {
-            // Device first: its worker unregisters the USB sink and releases
-            // the COM port. Then the web server (unregisters its sink), then
-            // the renderer itself.
+            // Device first (unregisters the USB sink, releases the COM port),
+            // then the web server (unregisters its sink), then the renderer.
             Device?.Dispose();
             Device = null;
             WebServer?.Stop();
@@ -130,9 +123,9 @@ namespace Uniflag
         }
 
         /// <summary>
-        /// Persist every brightness change (slider or device buttons) into
-        /// the settings object; SimHub writes the file at End. May fire on
-        /// the UI or the device RX thread — a plain property write is safe.
+        /// Persist every brightness change into settings (SimHub writes the
+        /// file at End). May fire on the UI or the device RX thread — a plain
+        /// property write is safe.
         /// </summary>
         private void OnBrightnessChanged(byte value)
         {

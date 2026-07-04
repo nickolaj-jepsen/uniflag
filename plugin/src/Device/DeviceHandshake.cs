@@ -159,8 +159,8 @@ namespace Uniflag.Device
                     $"Unsupported panel size {ack.Width}x{ack.Height} — this plugin drives a "
                     + $"{PacketCodec.PanelWidth}x{PacketCodec.PanelHeight} Cosmic Unicorn.");
             }
-            // Hand any packets already decoded behind the ack to the caller
-            // so post-ack ButtonEvents in the same read chunk are not lost.
+            // Post-ack packets in the same read chunk (e.g. ButtonEvents)
+            // handed to the caller so they are not lost.
             var trailing = new List<Packet>();
             for (int i = trailingFrom; i < packets.Count; i++)
             {

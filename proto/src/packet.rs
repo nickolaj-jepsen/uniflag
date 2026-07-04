@@ -18,17 +18,17 @@
 //! A *known* type with a wrong-length payload is also dropped
 //! ([`Error::BadLength`]).
 //!
-//! Payload schemas are frozen as of M6: the typed [`Packet`] layer below
-//! is the Rust source of truth, mirrored in prose by `docs/protocol.md`
-//! and in bytes by the golden vectors under `testdata/proto/`. Any
-//! wire-visible change bumps [`PROTOCOL_VERSION`].
+//! Payload schemas are frozen: the typed [`Packet`] layer below is the
+//! Rust source of truth, mirrored in prose by `docs/protocol.md` and in
+//! bytes by the golden vectors under `testdata/proto/`. Any wire-visible
+//! change bumps [`PROTOCOL_VERSION`].
 
 use crate::{cobs, crc};
 
 /// Protocol version carried in the [`Packet::Hello`] /
 /// [`Packet::HelloAck`] handshake. The plugin requires exact equality and
 /// refuses to drive the device on mismatch â€” bump on any wire-visible
-/// change after the M6 freeze.
+/// change.
 pub const PROTOCOL_VERSION: u8 = 1;
 
 /// USB vendor id the device enumerates with and hosts filter on during
@@ -160,7 +160,7 @@ pub fn parse_raw(raw: &[u8]) -> Result<(u8, &[u8]), Error> {
 }
 
 // ---------------------------------------------------------------------
-// Typed layer (M6 freeze). One variant per assigned type; the payload
+// Typed layer. One variant per assigned type; the payload
 // layouts are immutable wire contracts â€” golden vectors under
 // `testdata/proto/` and `docs/protocol.md` Â§"Payload layouts" pin the
 // exact bytes. All multi-byte values are little-endian (today only the
@@ -518,7 +518,7 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
-    // Typed layer (M6 freeze)
+    // Typed layer
     // ------------------------------------------------------------------
 
     const ALL_BUTTONS: [Button; 3] = [Button::BrightnessUp, Button::BrightnessDown, Button::Sleep];
@@ -651,7 +651,7 @@ mod tests {
 
     #[test]
     fn payload_layouts_are_frozen() {
-        // Byte-exact golden layouts (M6 freeze; mirrors docs/protocol.md
+        // Byte-exact golden layouts (mirrors docs/protocol.md
         // Â§"Payload layouts"). Changing any assertion here is a
         // wire-protocol break.
         let mut raw = [0u8; MAX_RAW_LEN];

@@ -57,8 +57,7 @@ namespace Uniflag.Protocol
                 throw new ArgumentOutOfRangeException(nameof(count));
             }
 
-            // MaxEncodedLength is an exact bound for zero-free input and an
-            // over-estimate otherwise; encode into it, then trim.
+            // MaxEncodedLength over-estimates for input with zeros; trim after.
             var dst = new byte[MaxEncodedLength(count)];
             // codeIdx is the reserved slot for the current group's code byte;
             // outIdx is the next free slot.

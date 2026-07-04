@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The generic game adapter (docs/v2-plan.md M4 step 2): maps SimHub's
-// unified Flag_* layer to a RenderState. The mapping contract is documented
-// in docs/simhub-flag-properties.md ("Generic adapter mapping") — doc and
-// code must state the same rules; change them together.
+// The generic game adapter: maps SimHub's unified Flag_* layer to a
+// RenderState. The mapping contract is documented in
+// docs/simhub-flag-properties.md ("Generic adapter mapping") — doc and code
+// must state the same rules; change them together.
 
 using Uniflag.Rendering;
 
@@ -20,7 +20,7 @@ namespace Uniflag.Adapters
     /// the unified layer cannot distinguish displayed from waved flags.</item>
     /// <item><b>Session</b>: see <see cref="MapSession"/>.</item>
     /// <item><b>Caution / sectors</b>: always None / Empty. VSC, SC and
-    /// sector-local yellows only exist in per-sim raw data (M10).</item>
+    /// sector-local yellows only exist in per-sim raw data.</item>
     /// </list>
     /// The unified layer never surfaces a red flag, so this adapter never
     /// emits <see cref="Flag.Red"/> either.

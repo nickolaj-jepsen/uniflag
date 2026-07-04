@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The precedence ladder as its own dispatch layer (docs/effects-spec.md §4,
-// mirroring the match in render/src/effects.rs:79-112 and the authoritative
-// ladder in firmware/src/runtime.rs:39-59, extended by the M10 penalty
-// layers). Kept separate from the painters so it can be unit-tested in
-// isolation:
+// The precedence ladder as its own dispatch layer (docs/effects-spec.md §4).
+// Kept separate from the painters so it can be unit-tested in isolation:
 //
 //   disconnected > red > VSC > SC > slowdown > meatball
 //                > per-flag base > session idle
@@ -37,10 +34,10 @@ namespace Uniflag.Rendering
         /// <summary>Safety-car board — beats every flag except red.</summary>
         SafetyCarBoard,
 
-        /// <summary>Slow-down penalty board (M10) — beats every per-flag base, loses to caution boards.</summary>
+        /// <summary>Slow-down penalty board — beats every per-flag base, loses to caution boards.</summary>
         SlowdownBoard,
 
-        /// <summary>Meatball / mandatory-repair board (M10) — beats every per-flag base, loses to slowdown.</summary>
+        /// <summary>Meatball / mandatory-repair board — beats every per-flag base, loses to slowdown.</summary>
         MeatballBoard,
 
         YellowFlag,
@@ -62,13 +59,11 @@ namespace Uniflag.Rendering
     public static class Precedence
     {
         /// <summary>
-        /// Select the base layer for <paramref name="state"/> — the C# mirror
-        /// of the <c>match (state.flag, state.caution)</c> dispatch in
-        /// <c>effects.rs:87-105</c> plus the disconnected early-out, with the
-        /// M10 penalty boards slotted between the caution boards and the
-        /// per-flag bases. Default penalty state never reaches the new arms,
-        /// so every pre-M10 (state, frame) tuple dispatches exactly as
-        /// before — the 40 ported-parity goldens pin this.
+        /// Select the base layer for <paramref name="state"/>, with the
+        /// penalty boards slotted between the caution boards and the per-flag
+        /// bases. Default penalty state never reaches those arms, so every
+        /// penalty-free (state, frame) tuple dispatches as the 40 ported-parity
+        /// goldens pin it.
         /// </summary>
         public static RenderLayer Select(RenderState state, bool connected)
         {
@@ -121,20 +116,19 @@ namespace Uniflag.Rendering
 
         /// <summary>
         /// Whether the sector band overlay is painted on top of the base
-        /// layer (<c>effects.rs:109-111</c>): never when disconnected, never
-        /// under red (drivers must stop — extra signalling is noise), and
-        /// only when at least one sector is flagged. Caution boards keep it,
-        /// and so do the M10 penalty boards (same reasoning: still racing,
-        /// sector state still matters).
+        /// layer: never when disconnected, never under red (drivers must
+        /// stop — extra signalling is noise), and only when at least one
+        /// sector is flagged. Caution and penalty boards keep it (still
+        /// racing, sector state still matters).
         /// </summary>
         public static bool SectorBandVisible(RenderState state, bool connected) =>
             connected && !state.Sectors.IsEmpty && state.Flag != Flag.Red;
 
         /// <summary>
         /// Whether the furled warning accent is painted on top of the base
-        /// layer (M10). Mirrors the sector-band rule: never disconnected,
-        /// never under red, otherwise whenever the warning is set — over
-        /// flags, boards and idle alike (a warning stays a warning).
+        /// layer. Mirrors the sector-band rule: never disconnected, never
+        /// under red, otherwise whenever the warning is set — over flags,
+        /// boards and idle alike (a warning stays a warning).
         /// </summary>
         public static bool FurledAccentVisible(RenderState state, bool connected) =>
             connected && state.Furled && state.Flag != Flag.Red;

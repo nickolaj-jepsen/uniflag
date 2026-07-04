@@ -65,7 +65,7 @@ namespace Uniflag.Tests
         private static Dictionary<string, object> ParseObject(string s, ref int pos)
         {
             var result = new Dictionary<string, object>();
-            pos++; // consume '{'
+            pos++;
             SkipWhitespace(s, ref pos);
             if (Peek(s, pos) == '}')
             {
@@ -104,7 +104,7 @@ namespace Uniflag.Tests
         private static List<object> ParseArray(string s, ref int pos)
         {
             var result = new List<object>();
-            pos++; // consume '['
+            pos++;
             SkipWhitespace(s, ref pos);
             if (Peek(s, pos) == ']')
             {
@@ -130,7 +130,7 @@ namespace Uniflag.Tests
 
         private static string ParseString(string s, ref int pos)
         {
-            pos++; // consume opening '"'
+            pos++;
             var sb = new StringBuilder();
             while (true)
             {

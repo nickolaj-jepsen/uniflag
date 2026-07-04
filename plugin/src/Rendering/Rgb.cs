@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// 8-bit-per-channel RGB triple — the C# mirror of `render/src/surface.rs`'s
-// `type Rgb = (u8, u8, u8)` (docs/effects-spec.md §1).
+// 8-bit-per-channel RGB triple (docs/effects-spec.md §1).
 
 using System;
 
 namespace Uniflag.Rendering
 {
-    /// <summary>An 8-bit-per-channel RGB colour.</summary>
     public readonly struct Rgb : IEquatable<Rgb>
     {
         public readonly byte R;

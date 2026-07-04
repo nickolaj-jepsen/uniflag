@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// First sink (docs/v2-plan.md M3 step 7): the settings-tab preview. This
-// file is the WPF side of the sink boundary — the rendering core in
-// plugin/src/Rendering/ stays WPF-free; only this layer touches
-// System.Windows.*.
+// The settings-tab preview sink: the WPF side of the sink boundary. The
+// rendering core in plugin/src/Rendering/ stays WPF-free; only this layer
+// touches System.Windows.*.
 
 using System;
 using System.Windows;
@@ -16,17 +15,16 @@ namespace Uniflag
 {
     /// <summary>
     /// <see cref="IFrameSink"/> that mirrors the renderer's output into a
-    /// 32×32 <see cref="WriteableBitmap"/> (Rgb24 — the same byte layout as
-    /// the renderer's RGB888 frames, so the update is a straight copy).
-    /// Bind <see cref="Bitmap"/> as an <c>Image.Source</c>; the XAML side
-    /// supplies NearestNeighbor scaling.
+    /// 32×32 <see cref="WriteableBitmap"/> (Rgb24 — same byte layout as the
+    /// renderer's RGB888 frames, so the update is a straight copy). Bind
+    /// <see cref="Bitmap"/> as an <c>Image.Source</c>.
     ///
     /// <para><b>Threading:</b> <see cref="OnFrame"/> runs on the render
-    /// thread and never blocks on the UI — it snapshots the frame under a
-    /// lock and queues at most one Dispatcher operation. Updates coalesce:
-    /// while the UI hasn't caught up, newer frames overwrite the snapshot
-    /// and ride the already-queued operation, so only the newest frame is
-    /// ever painted and no backlog can build.</para>
+    /// thread and never blocks on the UI — it snapshots under a lock and
+    /// queues at most one Dispatcher operation. Updates coalesce: while the
+    /// UI hasn't caught up, newer frames overwrite the snapshot and ride the
+    /// already-queued operation, so only the newest frame is ever painted and
+    /// no backlog can build.</para>
     /// </summary>
     public sealed class WpfPreviewSink : IFrameSink
     {

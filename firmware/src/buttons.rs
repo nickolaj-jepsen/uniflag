@@ -2,11 +2,10 @@
 //!
 //! Wires the Cosmic Unicorn's three buttons (GPIO 21 / 26 / 27, all
 //! active-low with internal pull-ups) into `proto` `ButtonEvent`s on the
-//! CDC TX channel. v2 firmware no longer steps brightness locally — the
-//! host owns button policy (docs/v2-plan.md M9) — so all this task does
-//! is debounce, classify, and report (only while a handshaken host is
-//! live — `BUTTON_REPORTING` in `main.rs`). The one local side effect: a
-//! long press (any button) also toggles the runtime's test screen.
+//! CDC TX channel. The host owns button policy, so all this task does is
+//! debounce, classify, and report (only while a handshaken host is live —
+//! `BUTTON_REPORTING` in `main.rs`). The one local side effect: a long
+//! press (any button) also toggles the runtime's test screen.
 //!
 //! Classification happens **on release** — a press held for at least
 //! [`LONG_PRESS_TICKS`] polls reports `PressKind::Long`, anything shorter

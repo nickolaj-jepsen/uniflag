@@ -11,17 +11,14 @@ using Uniflag.Web;
 namespace Uniflag
 {
     /// <summary>
-    /// Settings tab v1 (M9): device status block (port, connection state,
-    /// firmware + protocol version, panel size, or the refuse-with-message
-    /// text), the brightness slider driving the shared
-    /// <see cref="BrightnessPolicy"/>, the manual COM-port override, the
-    /// live 32×32 renderer preview with its debug state-cycler (M3), and
-    /// the web overlay server status line (M5). The preview sink and the
-    /// 1 Hz status poll run only between Loaded and Unloaded, so the
-    /// renderer loop and the timer are idle while the tab is not visible.
-    /// All status updates happen on the UI thread — the timer is a
-    /// <see cref="DispatcherTimer"/> and the device/web servers expose
-    /// lock-free snapshots.
+    /// Settings tab: device status block, brightness slider driving the
+    /// shared <see cref="BrightnessPolicy"/>, manual COM-port override, the
+    /// live 32×32 renderer preview with its debug state-cycler, and the web
+    /// overlay status line. The preview sink and 1 Hz status poll run only
+    /// between Loaded and Unloaded, so the renderer loop and timer are idle
+    /// while the tab is not visible. All status updates happen on the UI
+    /// thread — the timer is a <see cref="DispatcherTimer"/> and the
+    /// device/web servers expose lock-free snapshots.
     /// </summary>
     public partial class SettingsControl : UserControl
     {
@@ -35,9 +32,9 @@ namespace Uniflag
         private readonly DispatcherTimer _statusTimer;
         private bool _active;
 
-        // Guards the slider feedback loop: true while the status poll is
-        // pushing the policy's value into the slider, so ValueChanged does
-        // not echo it back into the policy.
+        // Guards the slider feedback loop: true while the status poll pushes
+        // the policy's value into the slider, so ValueChanged does not echo
+        // it back into the policy.
         private bool _syncingSlider;
 
         /// <summary>Designer/stub constructor: static tab, no live content.</summary>
@@ -89,9 +86,8 @@ namespace Uniflag
             if (_webServer != null || _device != null || _brightness != null)
             {
                 // Polled, not evented: the servers expose no change
-                // notifications and 1 Hz is plenty for status lines that
-                // only tick while the tab is visible. Ticks run on the
-                // dispatcher, so every UI touch is already marshalled.
+                // notifications. Ticks run on the dispatcher, so every UI
+                // touch is already marshalled.
                 _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
                 _statusTimer.Tick += OnStatusTick;
             }
@@ -215,9 +211,8 @@ namespace Uniflag
             {
                 return;
             }
-            // Direct set: the policy raises Changed once per effective
-            // change; the plugin persists it and the connection manager's
-            // depth-one slot coalesces the packet sends during a drag.
+            // The connection manager's depth-one slot coalesces the packet
+            // sends during a drag.
             _brightness.SetDirect(rounded);
         }
 

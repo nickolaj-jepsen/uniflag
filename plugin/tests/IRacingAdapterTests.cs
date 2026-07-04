@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// iRacing adapter tests (docs/v2-plan.md M10 step 2): the game-name gate,
-// every documented SessionFlags mapping rule (bit values verified against
-// the iRacingSDK.dll shipped inside SimHub 9.11.21 — see
-// docs/simhub-flag-properties.md), and the raw-extraction path through
-// StatusDataBase.GetRawDataObject() exercised against fakes that mirror
-// the real IRacingReader.DataSampleEx shape (a `Telemetry` property whose
-// value derives from Dictionary<string, object>).
+// iRacing adapter tests: the game-name gate, every documented SessionFlags
+// mapping rule (bit values verified against the iRacingSDK.dll shipped
+// inside SimHub 9.11.21 — see docs/simhub-flag-properties.md), and the
+// raw-extraction path through StatusDataBase.GetRawDataObject() exercised
+// against fakes that mirror the real IRacingReader.DataSampleEx shape (a
+// `Telemetry` property whose value derives from Dictionary<string, object>).
 
 using System.Collections.Generic;
 using GameReaderCommon;

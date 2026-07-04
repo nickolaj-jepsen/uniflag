@@ -299,14 +299,12 @@ impl Display {
         Display {
             back,
             front,
-            // Boot default: full brightness (multiplier 256 = unity),
-            // deliberately. The runtime re-applies the host value before
-            // every streamed blit and pins the local screens at full
-            // brightness (runtime.rs), so this default only covers the
-            // boot fallback paint — where full matters: the fallback's
-            // sole lit pixel is already the dim literal (40, 14, 0), and
-            // scaling it further would risk making "device alive, no
-            // host" invisible.
+            // Boot default full brightness (multiplier 256 = unity). Only
+            // covers the boot fallback paint (runtime re-applies the host
+            // value per streamed blit, local screens paint at full): the
+            // fallback's sole lit pixel is already the dim literal
+            // (40, 14, 0), and scaling it further risks making "device
+            // alive, no host" invisible.
             brightness: 256,
             _sm: sm0,
             _common: common,
@@ -366,7 +364,7 @@ impl Display {
     /// from the top-left, 3 bytes per pixel — exactly the `Frame` packet
     /// payload (docs/protocol.md §Payload layouts). Layered on
     /// [`Self::set_pixel`], so the brightness multiplier and gamma apply
-    /// per pixel. Call [`Self::present`] afterwards to show it.
+    /// per pixel. Writes only the back buffer; call [`Self::present`] to show it.
     pub fn blit_rgb888(&mut self, rgb: &[u8; WIDTH * HEIGHT * 3]) {
         for y in 0..HEIGHT {
             for x in 0..WIDTH {

@@ -15,16 +15,13 @@
 //! The wire format is specified in prose by `docs/protocol.md` and in
 //! bytes by the golden vectors under `testdata/proto/` (exercised by
 //! `tests/golden_vectors.rs` here and by the plugin's conformance suite).
-//! The packet set is **frozen as of M6**: any wire-visible change bumps
+//! The packet set is **frozen**: any wire-visible change bumps
 //! [`packet::PROTOCOL_VERSION`] and regenerates the vectors via
 //! `just golden-regen` in a deliberate, reviewed commit.
 //!
 //! Forward-compat posture: receivers ignore unknown packet types, drop
 //! bad-CRC / wrong-length packets silently, and resynchronize at the next
 //! `0x00` delimiter.
-//!
-//! (The v1 ASCII line protocol that used to live in this file was retired
-//! at M11 together with the `render/` crate — see git history.)
 
 #![no_std]
 

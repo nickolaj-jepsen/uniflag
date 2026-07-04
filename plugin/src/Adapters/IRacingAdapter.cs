@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The iRacing raw-telemetry refiner (docs/v2-plan.md M10 step 2): layered
-// after GenericAdapter through the M4 seam, it overrides or enriches ONLY
-// where the raw SessionFlags bitmask is better than the unified Flag_*
-// layer. Every bit value below was verified against the iRacingSDK.dll
-// shipped inside SimHub 9.11.21 (the assembly SimHub's own reader consumes),
-// and SimHub's unified mapping was IL-verified for cross-checking — both
-// are documented in docs/simhub-flag-properties.md ("iRacing"). The mapping
-// contract lives there too; change doc and code together.
+// The iRacing raw-telemetry refiner: layered after GenericAdapter, it
+// overrides or enriches ONLY where the raw SessionFlags bitmask is better
+// than the unified Flag_* layer. Every bit value below was verified against
+// the iRacingSDK.dll shipped inside SimHub 9.11.21 (the assembly SimHub's
+// own reader consumes), and SimHub's unified mapping was IL-verified for
+// cross-checking — both documented in docs/simhub-flag-properties.md
+// ("iRacing"), which holds the mapping contract; change doc and code together.
 
 using System;
 using Uniflag.Rendering;
@@ -51,9 +50,8 @@ namespace Uniflag.Adapters
     public sealed class IRacingAdapter : IGameAdapter
     {
         /// <summary>
-        /// SimHub's <c>GameData.GameName</c> for iRacing — the same code
-        /// that names the <c>PluginsData\IRacing</c> per-game settings
-        /// folder on a live install.
+        /// SimHub's <c>GameData.GameName</c> for iRacing — also names the
+        /// <c>PluginsData\IRacing</c> per-game settings folder.
         /// </summary>
         public const string IRacingGameName = "IRacing";
 

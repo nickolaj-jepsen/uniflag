@@ -1,16 +1,15 @@
 //! Embassy task that drives the panel.
 //!
-//! v2: the firmware renders nothing of its own during normal operation —
-//! the host streams complete RGB888 frames at 30 fps (docs/protocol.md,
-//! "stream-as-heartbeat") and this task blits them. The v1 effects code
-//! and its precedence rules retired to the host renderer; their spec
-//! lives in `docs/effects-spec.md`.
+//! The firmware renders nothing of its own during normal operation — the
+//! host streams complete RGB888 frames at 30 fps (docs/protocol.md,
+//! "stream-as-heartbeat") and this task blits them. The effects and their
+//! precedence rules live host-side; their spec is `docs/effects-spec.md`.
 //!
 //! Select loop, in arrival order:
 //!
 //! - **Frame** (zero-copy slot from `cdc_rx_loop`) → blit into the back
-//!   buffer + `present().await`, keeping v1's paint-into-back /
-//!   await-present cadence so a mid-paint refresh never tears.
+//!   buffer + `present().await`: paint-into-back then await-present so a
+//!   mid-paint refresh never tears.
 //! - **Brightness** → remembered and applied (via
 //!   [`Display::set_brightness`]) when the next streamed frame blits —
 //!   near-immediate at 30 fps. Deliberately *not* applied to the local
@@ -45,9 +44,8 @@ use crate::{FrameBuf, TestToggleChannel, BUTTON_REPORTING, FW_VERSION};
 const FRAME_TICK: Duration = Duration::from_millis(16);
 
 /// How long without a decodable Frame before we drop to the local
-/// fallback screen. Carried over from v1's disconnect timeout; the host
-/// streams at 30 fps, so 1.5 s tolerates ~45 missed frames
-/// (docs/protocol.md §Stream-as-heartbeat).
+/// fallback screen. The host streams at 30 fps, so 1.5 s tolerates ~45
+/// missed frames (docs/protocol.md §Stream-as-heartbeat).
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(1500);
 
 pub async fn run(
@@ -103,9 +101,6 @@ pub async fn run(
             }
             Either4::Second(value) => {
                 host_brightness = value;
-                // Applied when the next streamed frame blits; the 30 fps
-                // stream makes that near-immediate. Local screens never
-                // see it (module docs).
             }
             Either4::Third(()) => {
                 test_mode = !test_mode;

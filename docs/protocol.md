@@ -1,6 +1,6 @@
 # uniflag v2 wire protocol
 
-> **Status: FROZEN (M6).** The packet set is complete as of M6; the byte
+> **Status: FROZEN (M6).** The byte
 > vectors under `testdata/proto/` are the frozen conformance fixtures
 > that both the Rust and C# codecs must round-trip. Layouts here are
 > implemented in `proto/src/{crc,cobs,packet}.rs`; this document, the
@@ -152,8 +152,7 @@ host                                        device
 The host streams Frames continuously at 30 fps whether or not content
 changed; there are no frame acks. The stream doubles as the liveness
 signal: after ~1.5 s without a decodable Frame the device drops to its
-local idle/fallback screen (M8 implements; the constant mirrors v1's
-`CONNECT_TIMEOUT`).
+local idle/fallback screen.
 
 ## M2b spike measurements (2026-07-03, dev box → Cosmic Unicorn)
 

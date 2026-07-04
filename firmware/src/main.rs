@@ -28,9 +28,8 @@
 //!   realigns at the next `0x00` delimiter; unknown packet types are
 //!   ignored (forward compat).
 //! - TX: [`TX_CHANNEL`] carries `HelloAck` + `ButtonEvent` to the CDC
-//!   sender (v1 discarded its `Sender` half — v2 finally talks back).
-//!   ButtonEvent queueing is gated on [`BUTTON_REPORTING`] so presses
-//!   made with no live host never flush ahead of a later HelloAck.
+//!   sender. ButtonEvent queueing is gated on [`BUTTON_REPORTING`] so
+//!   presses made with no live host never flush ahead of a later HelloAck.
 
 #![no_std]
 #![no_main]
@@ -241,8 +240,7 @@ async fn run_usb(mut usb: embassy_usb::UsbDevice<'static, Driver<'static, USB>>)
 /// and dispatch. Any malformed packet, CRC failure, oversized
 /// accumulation, or mid-frame disconnect ends with the accumulator
 /// cleared and the stream realigned at the next delimiter — that is the
-/// whole resync story (proven in the M2b spike: garbage injection past
-/// the accumulator limit recovers without a power cycle).
+/// whole resync story.
 async fn cdc_rx_loop(
     mut rx: Receiver<'static, Driver<'static, USB>>,
     mut frames: zerocopy_channel::Sender<'static, CriticalSectionRawMutex, FrameBuf>,

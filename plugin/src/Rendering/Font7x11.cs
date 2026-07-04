@@ -1,36 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The 7×11 pixel font (M10 text engine). S, C and V are moved VERBATIM from
-// Effects.cs (originally render/src/effects.rs:34-77, spec §5.9) — their
-// bit patterns are golden-frozen through the VSC/SC caution boards in
-// testdata/frames/, so they must never change. The remaining glyphs are the
-// digits and letters the penalty suite needs (SLOW, DT, SG, severity 1-3),
-// drawn in the same style: 2-px strokes, rounded caps, bit 6 = leftmost
-// column, one byte per row.
+// The 7×11 pixel font (spec §5.9). S, C and V are golden-frozen through the
+// VSC/SC caution boards in testdata/frames/, so they must never change. The
+// rest are the digits and letters the penalty suite needs (SLOW, DT, SG,
+// severity 1-3), drawn in the same style: 2-px strokes, rounded caps, bit 6
+// = leftmost column, one byte per row.
 
 namespace Uniflag.Rendering
 {
     /// <summary>
     /// Glyph store for the 7×11 pixel font. Each glyph is 11 row bytes; the
-    /// low 7 bits of each byte are the columns, bit 6 leftmost. Only set
-    /// bits are painted (the background shows through), exactly as the
-    /// original caution-board glyphs behaved.
+    /// low 7 bits of each byte are the columns, bit 6 leftmost. Only set bits
+    /// are painted (the background shows through).
     /// </summary>
     public static class Font7x11
     {
-        /// <summary>Glyph width in pixels.</summary>
         public const int GlyphWidth = 7;
 
-        /// <summary>Glyph height in pixels (rows per glyph).</summary>
         public const int GlyphHeight = 11;
 
         // ---------------------------------------------------------------
-        // Golden-frozen glyphs — bit-for-bit the caution-board letters of
-        // render/src/effects.rs:34-77. Any change here breaks the 40
+        // Golden-frozen caution-board glyphs. Any change here breaks the 40
         // ported-parity goldens; fix the caller, never these tables.
         // ---------------------------------------------------------------
 
-        /// <summary>S (frozen: caution boards, docs/effects-spec.md §5.9).</summary>
+        /// <summary>S (caution boards, docs/effects-spec.md §5.9).</summary>
         public static readonly byte[] S =
         {
             0b0111110, // .#####.
@@ -46,7 +40,7 @@ namespace Uniflag.Rendering
             0b0111110, // .#####.
         };
 
-        /// <summary>C (frozen: caution boards, docs/effects-spec.md §5.9).</summary>
+        /// <summary>C (caution boards, docs/effects-spec.md §5.9).</summary>
         public static readonly byte[] C =
         {
             0b0111110, // .#####.
@@ -62,7 +56,7 @@ namespace Uniflag.Rendering
             0b0111110, // .#####.
         };
 
-        /// <summary>V (frozen: VSC board, docs/effects-spec.md §5.9).</summary>
+        /// <summary>V (VSC board, docs/effects-spec.md §5.9).</summary>
         public static readonly byte[] V =
         {
             0b1100011, // ##...##
@@ -79,8 +73,7 @@ namespace Uniflag.Rendering
         };
 
         // ---------------------------------------------------------------
-        // M10 penalty-suite glyphs (C#-authored; pinned by the
-        // testdata/frames-plugin/ corpus, pending maintainer visual review).
+        // Penalty-suite glyphs — pinned by the testdata/frames-plugin/ corpus.
         // ---------------------------------------------------------------
 
         /// <summary>D (drive-through marker).</summary>

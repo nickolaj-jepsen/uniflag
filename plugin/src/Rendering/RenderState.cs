@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Host-side state model for the renderer — mirrors the vocabulary of
-// proto's State (flag / wave / session / caution / sectors) with the
-// PascalCase variant names used by testdata/frames/manifest.json. This
-// model is host-only and never crosses the wire; the v2 wire protocol
-// carries rendered frames, not state.
+// Host-side state model for the renderer — mirrors proto's State (flag /
+// wave / session / caution / sectors) with the PascalCase variant names used
+// by testdata/frames/manifest.json. Host-only, never crosses the wire; the
+// v2 protocol carries rendered frames, not state.
 
 using System;
 
@@ -52,13 +51,11 @@ namespace Uniflag.Rendering
     }
 
     /// <summary>
-    /// Black-flag detail (M10 penalty suite, host-only): which service the
-    /// black flag orders. <see cref="None"/> renders the plain golden-frozen
-    /// black-flag X; the other two add a DT / SG text marker. No current
-    /// adapter can populate this from telemetry (iRacing's SessionFlags has
-    /// a single <c>black</c> bit — verified against the iRacing SDK shipped
-    /// with SimHub 9.11.21); the dimension exists for sims that do expose
-    /// the distinction (e.g. the Codemasters F1 UDP penalty events).
+    /// Which service the black flag orders. <see cref="None"/> renders the
+    /// plain golden-frozen black-flag X; the other two add a DT / SG text
+    /// marker. No current adapter populates this — iRacing's SessionFlags has
+    /// a single <c>black</c> bit; the dimension exists for sims that expose
+    /// the distinction (e.g. Codemasters F1 UDP penalty events).
     /// </summary>
     public enum BlackFlagDetail
     {
@@ -80,10 +77,9 @@ namespace Uniflag.Rendering
             _bits = bits;
         }
 
-        /// <summary>No sectors flagged.</summary>
         public static SectorSet Empty => new SectorSet(0);
 
-        /// <summary>Build from a raw low-3-bit mask (mirrors <c>SectorMask::from_bits</c>).</summary>
+        /// <summary>Build from a raw low-3-bit mask.</summary>
         public static SectorSet FromBits(byte bits) => new SectorSet((byte)(bits & 0b111));
 
         /// <summary>This set plus sector <paramref name="sector"/> (1..=3).</summary>
@@ -100,7 +96,6 @@ namespace Uniflag.Rendering
         public bool Contains(int sector) =>
             sector >= 1 && sector <= 3 && (_bits & (1 << (sector - 1))) != 0;
 
-        /// <summary>Whether no sector is flagged.</summary>
         public bool IsEmpty => _bits == 0;
 
         public bool Equals(SectorSet other) => _bits == other._bits;
@@ -112,12 +107,10 @@ namespace Uniflag.Rendering
 
     /// <summary>
     /// Everything <see cref="Effects.Paint"/> needs besides the frame
-    /// counter. The first five fields are the C# mirror of
-    /// <c>proto::State</c>; the M10 penalty dimensions below them are
-    /// host-only and never cross the wire (the v2 protocol carries rendered
-    /// frames). Every penalty default means "none", so any state built
-    /// without touching them renders byte-identically to the pre-M10
-    /// renderer — the 40 ported-parity goldens pin this.
+    /// counter. The first five fields mirror <c>proto::State</c>; the penalty
+    /// dimensions below them are host-only and never cross the wire. Every
+    /// penalty default means "none", so any state built without touching them
+    /// renders byte-identically — the 40 ported-parity goldens pin this.
     /// </summary>
     public struct RenderState
     {
@@ -129,11 +122,10 @@ namespace Uniflag.Rendering
 
         /// <summary>
         /// Slow-down alert severity, 0 (none) to 3 (most urgent); values
-        /// above 3 render as 3. Named for the iRacing "SLOW DOWN" penalty,
-        /// but graded so richer sources can scale it. iRacing telemetry
-        /// exposes no graded slow-down meter (verified — see
+        /// above 3 render as 3. Graded so richer sources can scale it, but
+        /// iRacing exposes no graded slow-down meter (see
         /// docs/simhub-flag-properties.md), so today only the preview tour
-        /// and future adapters set it.
+        /// sets it above 0.
         /// </summary>
         public byte Slowdown;
 
@@ -155,9 +147,8 @@ namespace Uniflag.Rendering
         public bool Furled;
 
         /// <summary>
-        /// Mirror of Rust <c>State::default()</c>: no flag, no wave, session
-        /// unknown, no caution, no sectors — and no penalty state, keeping
-        /// every M10 code path unreachable by default.
+        /// All-none default: session unknown, no penalty state, keeping every
+        /// penalty code path unreachable by default.
         /// </summary>
         public static RenderState Default => new RenderState
         {

@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The one-renderer→N-sinks core (docs/v2-plan.md M3 step 6 and the
-// "Renderer clock discipline" policy): a dedicated background thread ticks
-// the 60 fps internal frame counter that all ported animation math assumes
-// (docs/effects-spec.md §1), paints the whole panel via Effects.Paint (or
-// IdleEffects.PaintConnectedIdle in the connected-idle mode) into a back
-// buffer, publishes the completed 3072-byte RGB888 frame, and hands it to
-// every registered IFrameSink. Sinks sample this clock; the counter is
-// never rebased to a sink's rate (30 fps USB, the overlay's measured fps,
-// WPF's display cadence) — that would halve every strobe rate.
+// The one-renderer→N-sinks core: a dedicated background thread ticks the
+// 60 fps internal frame counter that all animation math assumes
+// (docs/effects-spec.md §1), paints the whole panel into a back buffer,
+// publishes the completed 3072-byte RGB888 frame, and hands it to every
+// registered IFrameSink. Sinks sample this clock; the counter is never
+// rebased to a sink's rate (30 fps USB, the overlay's measured fps, WPF's
+// display cadence) — that would halve every strobe rate.
 //
 // WPF-free by contract: plugin/src/Rendering/ must stay loadable from plain
 // xunit with no SimHub-assembly or System.Windows dependency.
@@ -28,9 +26,7 @@ namespace Uniflag.Rendering
     {
         /// <summary>
         /// Boot-dark blank panel (the firmware's disconnected posture,
-        /// §7 state (a) as seen host-side). The initial mode, and what
-        /// <see cref="RendererLoop.SetState"/> selects for
-        /// <c>connected = false</c>.
+        /// §7 state (a) as seen host-side). The initial mode.
         /// </summary>
         Blank,
 
@@ -81,8 +77,7 @@ namespace Uniflag.Rendering
         /// </summary>
         public const int TargetFps = 60;
 
-        // Sink registration + render-thread lifecycle. _sinkSnapshot is a
-        // copy-on-write array so the render thread reads it without locking.
+        // _sinkSnapshot is copy-on-write so the render thread reads it without locking.
         private readonly object _gate = new object();
         private readonly List<IFrameSink> _sinks = new List<IFrameSink>();
         private volatile IFrameSink[] _sinkSnapshot = Array.Empty<IFrameSink>();
@@ -95,9 +90,8 @@ namespace Uniflag.Rendering
         private bool _disposed;
 
         // Latest input, latched once at the top of every tick. The normal
-        // channel boots blank — mirroring the firmware's boot-dark posture
-        // (firmware/src/runtime.rs:99-102) — until someone feeds it; the
-        // override channel, when active, shadows it entirely.
+        // channel boots blank (firmware's boot-dark posture) until someone
+        // feeds it; the override channel, when active, shadows it entirely.
         private readonly object _inputGate = new object();
         private RenderInputMode _normalMode = RenderInputMode.Blank;
         private RenderState _normalState = RenderState.Default;
@@ -106,23 +100,20 @@ namespace Uniflag.Rendering
         private RenderState _overrideState = RenderState.Default;
 
         // Double buffer: _back is painted each tick; _front is the published
-        // copy handed to sinks and pull-readers, swapped in under
-        // _publishGate so no consumer ever observes a partially painted
-        // frame.
+        // copy handed to sinks and pull-readers, published under _publishGate
+        // so no consumer ever observes a partially painted frame.
         private readonly FrameBuffer _back = new FrameBuffer();
         private readonly byte[] _front = new byte[FrameBuffer.ByteLength];
         private readonly object _publishGate = new object();
         private long _publishedIndex = -1;
 
-        // Next frame index to render. Written by the render thread
-        // (Interlocked, so a stop/start cycle resumes the clock instead of
-        // restarting it), read at thread start.
+        // Next frame index to render. Interlocked so a stop/start cycle
+        // resumes the clock instead of restarting it.
         private long _nextFrame;
 
-        // Render-thread-only flag-age bookkeeping, mirroring the firmware
-        // (runtime.rs:117-120, 133): record the tick at which the latched
-        // flag last changed; age is the wrapping u32 difference. Handed
-        // safely across stop/start cycles by the Thread.Start/Join barriers.
+        // Render-thread-only flag-age bookkeeping: record the tick at which
+        // the latched flag last changed; age is the wrapping u32 difference.
+        // Handed across stop/start cycles by the Thread.Start/Join barriers.
         private Flag _lastFlag = RenderState.Default.Flag;
         private uint _flagChangedAtFrame;
 
@@ -152,8 +143,7 @@ namespace Uniflag.Rendering
         /// an active override clears). Flag-age tracking (red and green
         /// onsets, the ready orb's 5 s fallback) resets whenever the latched
         /// <see cref="RenderState.Flag"/> differs from the previous tick's —
-        /// session or caution changes do not reset it, mirroring
-        /// firmware/src/runtime.rs:117-120.
+        /// session or caution changes do not reset it.
         /// </summary>
         public void SetState(RenderState state, bool connected)
         {
@@ -269,7 +259,6 @@ namespace Uniflag.Rendering
         /// Copy the latest completed frame into <paramref name="destination"/>
         /// (at least <see cref="FrameBuffer.ByteLength"/> bytes). Returns the
         /// frame's tick index, or -1 if nothing has been rendered yet.
-        /// Thread-safe pull counterpart to the push-style sink delivery.
         /// </summary>
         public long CopyLatestFrame(byte[] destination)
         {
@@ -352,9 +341,9 @@ namespace Uniflag.Rendering
                 return null;
             }
             _stop.Set();
-            // The event is deliberately not disposed: the render thread may
-            // still be inside Wait(), and a signalled-then-collected
-            // ManualResetEventSlim costs nothing measurable.
+            // Deliberately not disposed: the render thread may still be inside
+            // Wait(), and a signalled-then-collected ManualResetEventSlim costs
+            // nothing measurable.
             _stop = null;
             _thread = null;
             _retiring = thread;
@@ -439,11 +428,9 @@ namespace Uniflag.Rendering
                 }
             }
 
-            // Wrapping u32 frame counter + flag age, exactly as the firmware
-            // computes them (runtime.rs:125, 133). Tracking runs in every
+            // Wrapping u32 frame counter + flag age. Tracking runs in every
             // mode — ConnectedIdle latches RenderState.Default (flag None),
-            // matching the firmware's behaviour of keeping its last flag
-            // bookkeeping across disconnected spells.
+            // keeping the last flag bookkeeping across disconnected spells.
             uint frame = unchecked((uint)frameIndex);
             if (state.Flag != _lastFlag)
             {

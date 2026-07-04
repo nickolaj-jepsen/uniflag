@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Debug state-cycler (docs/v2-plan.md M3 step 7, arbitration reworked in
-// M4): steps the renderer's OVERRIDE input through a deterministic tour of
-// the full flag/wave/caution/sector vocabulary so the preview animates with
-// zero hardware and zero game — and keeps animating even while DataUpdate
-// feeds the normal input at 60 Hz. Deliberately WPF-free (it only talks to
-// the rendering core) so the sequence and stepping logic are unit-testable
-// from plain xunit.
+// Debug state-cycler: steps the renderer's OVERRIDE input through a
+// deterministic tour of the full flag/wave/caution/sector vocabulary so the
+// preview animates with zero hardware and zero game — and keeps animating
+// even while DataUpdate feeds the normal input at 60 Hz. Deliberately
+// WPF-free so the sequence and stepping logic are unit-testable from plain
+// xunit.
 
 using System;
 using System.Collections.Generic;
@@ -17,16 +16,12 @@ namespace Uniflag
 {
     /// <summary>
     /// Steps a <see cref="RendererLoop"/>'s override input through
-    /// <see cref="BuildSequence"/> every <see cref="StepMilliseconds"/>,
-    /// always with <c>connected = true</c>. The override channel wins over
-    /// the live telemetry feed, so the tour shows even mid-session;
-    /// <see cref="Stop"/> clears the override, falling the renderer back to
-    /// its last normal input (the live adapter view, or boot-dark blank if
-    /// nothing has fed it yet) — never a stale tour flag frozen on the
-    /// preview.
-    ///
-    /// Thread-safe; <see cref="Start"/>/<see cref="Stop"/> are idempotent
-    /// and restart the tour from the beginning.
+    /// <see cref="BuildSequence"/> every <see cref="StepMilliseconds"/>. The
+    /// override channel wins over the live telemetry feed, so the tour shows
+    /// even mid-session; <see cref="Stop"/> clears the override, falling back
+    /// to the last normal input — never a stale tour flag frozen on the
+    /// preview. Thread-safe; Start/Stop are idempotent and restart the tour
+    /// from the beginning.
     /// </summary>
     public sealed class StateCycler : IDisposable
     {
@@ -47,10 +42,8 @@ namespace Uniflag
         }
 
         /// <summary>
-        /// Core constructor: <paramref name="applyOverride"/> receives each
-        /// (state, connected) step; <paramref name="clearOverride"/> is
-        /// invoked once per <see cref="Stop"/>. Used directly by tests to
-        /// observe the applied sequence without a renderer.
+        /// Core constructor. Used directly by tests to observe the applied
+        /// sequence without a renderer.
         /// </summary>
         public StateCycler(Action<RenderState, bool> applyOverride, Action clearOverride)
         {
@@ -118,9 +111,9 @@ namespace Uniflag
             using (var drained = new ManualResetEvent(false))
             {
                 // Dispose(WaitHandle) signals only after queued/executing
-                // callbacks complete. Even if the 1 s wait ever expired,
-                // OnTimer's gate below makes a straggler a no-op — the
-                // cleared override cannot be re-set by a stale step.
+                // callbacks complete. Even if the 1 s wait expired, OnTimer's
+                // gate makes a straggler a no-op — a cleared override cannot
+                // be re-set by a stale step.
                 if (timer.Dispose(drained))
                 {
                     drained.WaitOne(1000);
@@ -137,9 +130,8 @@ namespace Uniflag
         }
 
         /// <summary>
-        /// Apply the next state in the tour (wrapping at the end). Called by
-        /// the timer; public so tests and diagnostics can single-step
-        /// without waiting on wall-clock time.
+        /// Apply the next state in the tour (wrapping at the end). Public so
+        /// tests and diagnostics can single-step without wall-clock time.
         /// </summary>
         public void Advance()
         {
@@ -171,19 +163,13 @@ namespace Uniflag
         }
 
         /// <summary>
-        /// The deterministic tour: both no-flag idle layers (ready orb,
-        /// race idle), every flag at every wave level, both caution boards,
-        /// every non-empty sector mask over the race-idle base, one
-        /// double-waved yellow with all sectors (the 4 Hz band over a
-        /// strobing base), and the M10 penalty suite (slowdown severities
-        /// 1-3, meatball, DT/SG black-flag details, furled accent over dark
-        /// and bright bases). Pure — two calls yield identical sequences.
+        /// The deterministic tour over the full state vocabulary. Pure — two
+        /// calls yield identical sequences.
         /// </summary>
         public static IReadOnlyList<RenderState> BuildSequence()
         {
             var sequence = new List<RenderState>
             {
-                // The two session-idle layers (docs/effects-spec.md §5.10/§5.11).
                 Make(Flag.None, WaveLevel.None, Session.PreRace, Caution.None, SectorSet.Empty),
                 Make(Flag.None, WaveLevel.None, Session.Racing, Caution.None, SectorSet.Empty),
             };
@@ -205,11 +191,9 @@ namespace Uniflag
                 }
             }
 
-            // Both caution boards (VSC, SC).
             sequence.Add(Make(Flag.None, WaveLevel.None, Session.Racing, Caution.VirtualSafetyCar, SectorSet.Empty));
             sequence.Add(Make(Flag.None, WaveLevel.None, Session.Racing, Caution.SafetyCar, SectorSet.Empty));
 
-            // Every non-empty sector mask, banded over the race-idle base.
             for (byte bits = 1; bits <= 7; bits++)
             {
                 sequence.Add(Make(Flag.None, WaveLevel.None, Session.Racing, Caution.None, SectorSet.FromBits(bits)));
@@ -218,10 +202,8 @@ namespace Uniflag
             // 4 Hz sector band over a double-waved yellow strobe.
             sequence.Add(Make(Flag.Yellow, WaveLevel.Double, Session.Racing, Caution.None, SectorSet.FromBits(0b111)));
 
-            // M10 penalty suite — every severity, both black-flag details,
-            // the meatball board, and the furled accent over both a dark
-            // base (race idle) and a bright one (static yellow). This is
-            // the WPF-preview review path for the C#-authored corpus.
+            // Penalty suite — the WPF-preview review path for the C#-authored
+            // golden corpus.
             sequence.Add(MakePenalty(slowdown: 1));
             sequence.Add(MakePenalty(slowdown: 2));
             sequence.Add(MakePenalty(slowdown: 3));
@@ -249,7 +231,7 @@ namespace Uniflag
 
         /// <summary>
         /// A penalty-suite tour step: <see cref="Session.Racing"/> base with
-        /// the given penalty dimensions (everything else default).
+        /// the given penalty dimensions.
         /// </summary>
         private static RenderState MakePenalty(
             Flag flag = Flag.None,

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Adapter orchestration (docs/v2-plan.md M4 step 2): the generic adapter
-// always runs first, then any registered game-specific refiners whose
-// Matches accepts the current game — so M10's iRacing raw-telemetry
-// adapter plugs in by construction, no pipeline changes needed.
+// Adapter orchestration: the generic adapter always runs first, then any
+// registered game-specific refiners whose Matches accepts the current game
+// — so the iRacing raw-telemetry adapter plugs in by construction, no
+// pipeline changes needed.
 
 using System;
 using Uniflag.Rendering;
@@ -20,7 +20,7 @@ namespace Uniflag.Adapters
     {
         private readonly IGameAdapter[] _adapters;
 
-        /// <summary>The production pipeline: generic adapter only (until M10).</summary>
+        /// <summary>Pipeline with the generic adapter only, no refiners.</summary>
         public AdapterPipeline()
             : this(Array.Empty<IGameAdapter>())
         {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Shared in-memory fakes for the M9 device tests: an ISerialConnection
+// Shared in-memory fakes for the device tests: an ISerialConnection
 // duplex fake with scripted RX bytes, captured TX bytes and failure/stall
 // injection; a scripted connection factory; a fake port enumeration; and a
 // registration-counting sink host. No test in this suite ever opens a real
@@ -251,9 +251,9 @@ namespace Uniflag.Tests
     }
 
     /// <summary>
-    /// Registration-counting stand-in for the renderer (same shape as the
-    /// M5 web-server tests): the manager only needs AddSink/RemoveSink, so
-    /// tests observe the refcount without spinning up a render thread.
+    /// Registration-counting stand-in for the renderer: the manager only
+    /// needs AddSink/RemoveSink, so tests observe the refcount without
+    /// spinning up a render thread.
     /// </summary>
     internal sealed class CountingSinkHost : IFrameSinkHost
     {

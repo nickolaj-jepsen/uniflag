@@ -106,13 +106,13 @@ JSON.net-serializable POCOs.
 - `GameData` (in `GameReaderCommon.dll`) exposes `OldData`/`NewData` as
   public **fields** (not properties) of type
   `GameReaderCommon.StatusDataBase` (~257 properties — the normalized
-  telemetry M4 consumes), plus properties `GameRunning`, `GamePaused`,
+  telemetry the plugin consumes), plus properties `GameRunning`, `GamePaused`,
   `GameInMenu`, `GameReplay`, `GameName`, `Spectating`, `FrameTime`,
   `SessionId`.
 - Custom properties/actions/events: `this.AttachDelegate(name, func)`,
   `this.AddAction(...)`, `this.AddEvent(...)` — same extensions class.
 
-## Game-specific raw data via `GetRawDataObject()` (M10 research)
+## Game-specific raw data via `GetRawDataObject()`
 
 Everything verified against SimHub 9.11.21 by reflection + IL inspection.
 

@@ -7,9 +7,7 @@ using Xunit;
 namespace Uniflag.Tests
 {
     /// <summary>
-    /// Smoke tests for the M1 skeleton: the plugin type exposes exactly the
-    /// contract SimHub's loader scans for. Real suites arrive with the
-    /// renderer (M3) and codec (M6).
+    /// The plugin type exposes exactly the contract SimHub's loader scans for.
     /// </summary>
     public class PluginContractTests
     {

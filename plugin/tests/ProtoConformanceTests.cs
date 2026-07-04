@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Cross-language golden-vector conformance suite (docs/v2-plan.md M6) — the
-// C# mirror of proto/tests/golden_vectors.rs. Both suites load the exact
-// frozen files under testdata/proto/ (described by manifest.json); neither
-// side generates its own fixtures. The Rust suite additionally asserts the
+// Cross-language golden-vector conformance suite — the C# mirror of
+// proto/tests/golden_vectors.rs. Both suites load the exact frozen files
+// under testdata/proto/ (described by manifest.json); neither side
+// generates its own fixtures. The Rust suite additionally asserts the
 // files are byte-identical to their generator, so the expectation tables
 // here mirror the same single source of truth.
 
@@ -22,8 +22,7 @@ namespace Uniflag.Tests
         [Fact]
         public void CheckValueMatchesCrc16CcittFalse()
         {
-            // The canonical "check" value from the CRC catalogue
-            // (reveng / crccalc): CRC-16/CCITT-FALSE of "123456789".
+            // The catalogue "check" value: CRC-16/CCITT-FALSE of "123456789".
             Assert.Equal(0x29B1, Crc16.Checksum(Encoding.ASCII.GetBytes("123456789")));
         }
 
@@ -117,7 +116,6 @@ namespace Uniflag.Tests
             {
                 RoundTrip(new byte[len]);
             }
-            // Shape check: n zeros -> n+1 bytes of 0x01.
             Assert.Equal(new byte[] { 1, 1, 1, 1 }, Cobs.Encode(new byte[] { 0, 0, 0 }));
         }
 
@@ -180,7 +178,7 @@ namespace Uniflag.Tests
         [Fact]
         public void FrameSizedRoundTrip()
         {
-            // The largest packet the protocol carries: type + 3072 RGB bytes + CRC.
+            // The largest packet the protocol carries.
             var payload = new byte[PacketCodec.MaxRawLength];
             for (int i = 0; i < payload.Length; i++)
             {
@@ -495,10 +493,6 @@ namespace Uniflag.Tests
             }
         }
 
-        // -----------------------------------------------------------------
-        // Positive vectors.
-        // -----------------------------------------------------------------
-
         [Theory]
         [MemberData(nameof(PositiveVectorNames))]
         public void RawVectorParsesToTheExpectedTypedPacket(string name)
@@ -563,10 +557,7 @@ namespace Uniflag.Tests
             AssertBytesEqual("frame pixels vs raw[1..3073]", parsed.Pixels, payload);
         }
 
-        // -----------------------------------------------------------------
         // The 254-boundary vector: catches Wikipedia-variant COBS encoders.
-        // -----------------------------------------------------------------
-
         [Fact]
         public void CobsBoundary254RawEndsIn254NonZeroBytesAfterAZero()
         {
@@ -633,10 +624,6 @@ namespace Uniflag.Tests
             AssertBytesEqual("non-canonical form must decode identically", decodedShort, rawFile);
         }
 
-        // -----------------------------------------------------------------
-        // Negative vectors.
-        // -----------------------------------------------------------------
-
         [Theory]
         [MemberData(nameof(NegativeVectors))]
         public void NegativeVectorFailsWithExactlyTheExpectedClass(string name, ProtocolErrorKind expected)
@@ -644,10 +631,6 @@ namespace Uniflag.Tests
             byte[] wire = RepoPaths.ReadVector(name + ".wire");
             Assert.Equal(expected, Classify(name, wire));
         }
-
-        // -----------------------------------------------------------------
-        // Resync stream.
-        // -----------------------------------------------------------------
 
         [Fact]
         public void ResyncStreamRecoversExactlyTheEmbeddedPackets()
@@ -726,10 +709,6 @@ namespace Uniflag.Tests
             Assert.Contains($"\"protocol_version\": {PacketCodec.ProtocolVersion}", manifest);
             Assert.Contains("\"expected_packets\": [ \"hello\", \"brightness\" ]", manifest);
         }
-
-        // -----------------------------------------------------------------
-        // Helpers.
-        // -----------------------------------------------------------------
 
         /// <summary>
         /// The receiver-side decode pipeline the negative vectors are defined

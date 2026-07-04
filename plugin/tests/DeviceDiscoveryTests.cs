@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Discovery filter tests (M9): the VID/PID nomination logic with injected
+// Discovery filter tests: the VID/PID nomination logic with injected
 // fake port entries. Both the test PID and the future registered PID must
 // pass during the transition; foreign identities and uncorrelated ports
 // must not; a manual override bypasses the filter entirely (the handshake

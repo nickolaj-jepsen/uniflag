@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Cross-language golden-frame conformance suite (docs/effects-spec.md §8,
-// docs/v2-plan.md M3 step 8): iterate testdata/frames/manifest.json, render
-// each pinned (state, frame, flag_age, connected) tuple through the C# port
-// of effects::paint, and byte-compare all 3072 bytes against the frozen
-// .rgb dump. No tolerance, no epsilon — the fixtures are the contract and
-// are never regenerated from this side.
+// Cross-language golden-frame conformance suite (docs/effects-spec.md §8):
+// iterate testdata/frames/manifest.json, render each pinned
+// (state, frame, flag_age, connected) tuple through the C# port of
+// effects::paint, and byte-compare all 3072 bytes against the frozen .rgb
+// dump. No tolerance, no epsilon — the fixtures are the contract and are
+// never regenerated from this side.
 
 using System;
 using System.Collections.Generic;

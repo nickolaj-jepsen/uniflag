@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Adapter-layer tests (docs/v2-plan.md M4 step 2): the generic unified
-// Flag_* mapping matrix, the flag priority order, the session-name mapping,
-// the no-game predicate, the pipeline's refiner seam, and the SimHub-typed
-// extractor. Everything except GameDataExtractorTests is SimHub-free.
+// Adapter-layer tests: the generic unified Flag_* mapping matrix, the flag
+// priority order, the session-name mapping, the no-game predicate, the
+// pipeline's refiner seam, and the SimHub-typed extractor. Everything
+// except GameDataExtractorTests is SimHub-free.
 
 using GameReaderCommon;
 using Uniflag.Adapters;
@@ -167,9 +167,9 @@ namespace Uniflag.Tests
         [Fact]
         public void CautionAndSectorsAreAlwaysCleared()
         {
-            // Raw-data layers (VSC/SC, sector yellows) arrive with M10 —
-            // until then the generic adapter must pin them to None/Empty
-            // even if a refiner-less pipeline reuses a dirty state.
+            // The generic adapter has no raw-data layers (VSC/SC, sector
+            // yellows), so it must pin caution/sectors to None/Empty even
+            // when a refiner-less pipeline reuses a dirty state.
             TelemetrySnapshot snapshot = Live();
             snapshot.FlagYellow = true;
             var state = new RenderState
@@ -226,7 +226,7 @@ namespace Uniflag.Tests
 
     public class AdapterPipelineTests
     {
-        /// <summary>M10 stand-in: refines the wave level for one game only.</summary>
+        /// <summary>Refiner stand-in: overrides the wave level for one game only.</summary>
         private sealed class DoubleWaveRefiner : IGameAdapter
         {
             public bool Matches(string gameName) => gameName == "IRacing";

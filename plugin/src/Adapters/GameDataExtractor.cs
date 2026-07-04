@@ -6,16 +6,15 @@
 // reused and the only strings assigned are references the API already
 // allocated.
 //
-// M10 adds the iRacing raw layer. The raw object behind
-// StatusDataBase.GetRawDataObject() is IRacingReader.DataSampleEx from
-// ICarsReader.dll — a proprietary assembly that is NOT in the plugin's
-// reference set (CI stages only SimHub.Plugins / GameReaderCommon /
-// log4net / SimHub.Logging), so it is read reflectively: one cached
-// PropertyInfo fetch of `Telemetry`, whose value derives from
+// The iRacing raw object behind StatusDataBase.GetRawDataObject() is
+// IRacingReader.DataSampleEx from ICarsReader.dll — a proprietary assembly
+// NOT in the plugin's reference set (CI stages only SimHub.Plugins /
+// GameReaderCommon / log4net / SimHub.Logging), so it is read reflectively:
+// one cached PropertyInfo fetch of `Telemetry`, whose value derives from
 // Dictionary<string, object> (iRacingSDK.Telemetry) and is therefore
-// readable through the BCL IDictionary interface with no further
-// reflection. Per-tick cost at 60 Hz: GetRawDataObject() is a plain field
-// read (IL-verified, no boxing for the class-typed sample), one
+// readable through the BCL IDictionary interface with no further reflection.
+// Per-tick cost at 60 Hz: GetRawDataObject() is a plain field read
+// (IL-verified, no boxing for the class-typed sample), one
 // PropertyInfo.GetValue invocation, one dictionary lookup — no per-tick
 // allocation. Shapes verified against SimHub 9.11.21; documented in
 // docs/simhub-plugin-api.md.
@@ -36,9 +35,8 @@ namespace Uniflag.Adapters
     public static class GameDataExtractor
     {
         /// <summary>
-        /// <c>GameData.GameName</c> for iRacing — the per-game key SimHub
-        /// uses everywhere (e.g. the <c>PluginsData\IRacing</c> settings
-        /// folder); matches <see cref="IRacingAdapter.IRacingGameName"/>.
+        /// <c>GameData.GameName</c> for iRacing; matches
+        /// <see cref="IRacingAdapter.IRacingGameName"/>.
         /// </summary>
         private const string IRacingGameName = "IRacing";
 

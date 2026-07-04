@@ -1,6 +1,6 @@
 # uniflag effects specification
 
-Executable-spec companion for the C# renderer port (v2-plan milestone M3, step 3).
+Executable-spec companion for the C# renderer port.
 
 > **M11 note.** The `render/` crate was deleted at M11; every `render/…`
 > file:line citation below refers to git history (the pre-M11 tree). The

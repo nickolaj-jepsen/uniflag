@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// State-cycler tests (docs/v2-plan.md M3 step 7, override semantics from
-// M4): the debug tour is deterministic, covers the whole
+// State-cycler tests: the debug tour is deterministic, covers the whole
 // flag/wave/caution/sector vocabulary, applies entries in order on the
 // override channel with connected=true, and stopping clears the override
 // (falling the renderer back to its normal input) instead of clobbering it.

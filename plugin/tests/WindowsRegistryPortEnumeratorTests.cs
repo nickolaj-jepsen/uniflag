@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Pure-logic tests for the Windows registry port enumerator (M9): the
+// Pure-logic tests for the Windows registry port enumerator: the
 // Enum\USB key-name VID/PID parsing (both PIDs, composite-interface shapes,
 // foreign devices, malformed ids) and the identity-collision tie-break that
 // keeps a stale foreign registry entry from masking the live device. No
