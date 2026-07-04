@@ -1,9 +1,10 @@
 name: Release
 
 # Tag-triggered release: one versioned zip containing the plugin DLL, the
-# firmware UF2, the DashStudio overlay dash, and INSTALL.md. The local
-# `just package` recipe (packaging/package.ps1) produces the identical
-# layout — keep the two in lockstep.
+# firmware UF2, the DashStudio overlay dash (as a double-click .simhubdash),
+# and INSTALL.md. The local `just package` recipe (packaging/package.ps1)
+# produces the identical layout — keep the two in lockstep. Both pack the
+# dash via the shared packaging/make-simhubdash.ps1.
 
 on:
   push:
@@ -174,7 +175,9 @@ jobs:
           # tag exists on the remote — this workflow only runs on tag push).
           sed -i 's|/blob/main/|/blob/${{ github.ref_name }}/|' stage/INSTALL.md
           grep -q '/blob/${{ github.ref_name }}/' stage/INSTALL.md
-          cp -r "overlay/dash/Uniflag Overlay" stage/
+          # Pack the overlay dash with the same generator `just package` uses
+          # (ubuntu runners ship pwsh) so the local and CI zips stay identical.
+          pwsh packaging/make-simhubdash.ps1 -DashFolder "overlay/dash/Uniflag Overlay" -OutFile "stage/Uniflag Overlay.simhubdash"
           (cd stage && zip -r "../uniflag-${{ github.ref_name }}.zip" .)
           unzip -l "uniflag-${{ github.ref_name }}.zip"
 
@@ -195,7 +198,7 @@ jobs:
 
           # Exactly the four expected top-level entries.
           top=$(echo "$entries" | sed 's|/.*|/|' | LC_ALL=C sort -u)
-          expected=$(printf 'INSTALL.md\nUniflag Overlay/\nUniflagPlugin.dll\nuniflag.uf2\n')
+          expected=$(printf 'INSTALL.md\nUniflag Overlay.simhubdash\nUniflagPlugin.dll\nuniflag.uf2\n')
           if [ "$top" != "$expected" ]; then
             echo "::error::zip top-level layout mismatch"
             echo "--- expected ---"; echo "$expected"

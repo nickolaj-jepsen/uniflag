@@ -72,12 +72,11 @@ panel in — no port picking needed:
 
 The plugin serves a browser-rendered virtual panel at
 `http://127.0.0.1:8972/` (localhost-only, by design). A ready-made
-DashStudio overlay ships in the release zip as the `Uniflag Overlay/`
-folder (source: `overlay/dash/Uniflag Overlay/`) — copy the whole
-folder into `C:\Program Files (x86)\SimHub\DashTemplates\` and add
-*Uniflag Overlay* as an overlay in Dash Studio to get the virtual panel
-in-game. Details, wire format, and design contracts:
-[`docs/web-overlay.md`](../docs/web-overlay.md).
+DashStudio overlay ships in the release zip as `Uniflag Overlay.simhubdash`
+(source: `overlay/dash/Uniflag Overlay/`) — with SimHub running,
+double-click it to import, then add *Uniflag Overlay* as an overlay in
+Dash Studio to get the virtual panel in-game. Details, wire format, and
+design contracts: [`docs/web-overlay.md`](../docs/web-overlay.md).
 
 ## Troubleshooting
 

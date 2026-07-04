@@ -7,7 +7,8 @@
 # Zip layout (exactly these four top-level entries):
 #   UniflagPlugin.dll
 #   uniflag.uf2
-#   Uniflag Overlay/   (the committed DashStudio dash, shipped as-is)
+#   Uniflag Overlay.simhubdash   (the DashStudio overlay, packed by
+#                                 make-simhubdash.ps1 -- double-click to import)
 #   INSTALL.md
 
 $ErrorActionPreference = 'Stop'
@@ -40,10 +41,13 @@ New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item $dll $stage
 Copy-Item $uf2 $stage
 Copy-Item $md $stage
-Copy-Item $dash (Join-Path $stage 'Uniflag Overlay') -Recurse
+# Pack the overlay dash into a single double-click-to-import .simhubdash
+# (shared with the CI release job -- keep the generator single-sourced).
+& (Join-Path $PSScriptRoot 'make-simhubdash.ps1') `
+    -DashFolder $dash -OutFile (Join-Path $stage 'Uniflag Overlay.simhubdash')
 
 # Audit 1: exactly the four expected top-level entries.
-$expected = @('INSTALL.md', 'Uniflag Overlay', 'UniflagPlugin.dll', 'uniflag.uf2')
+$expected = @('INSTALL.md', 'Uniflag Overlay.simhubdash', 'UniflagPlugin.dll', 'uniflag.uf2')
 $top = @(Get-ChildItem $stage | Sort-Object Name | ForEach-Object Name)
 if (Compare-Object $expected $top) {
     Write-Host "staged: $($top -join ', ')"

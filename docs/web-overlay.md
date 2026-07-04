@@ -57,15 +57,22 @@ Page query parameters:
 
 ## Installing the overlay dash
 
-1. Close SimHub.
-2. Copy the folder `overlay/dash/Uniflag Overlay/` into SimHub's dash
-   directory: `C:\Program Files (x86)\SimHub\DashTemplates\` (needs one
-   admin file-copy because of Program Files).
-3. Start SimHub → *Dash Studio* → the "Uniflag Overlay" dash appears in the
-   dashboard list. Use *overlay* mode (e.g. add it in the *Overlays* /
-   in-game overlay layout for your game) — it is flagged as an overlay and
-   sized 320×320.
-4. The dash needs the Uniflag plugin enabled; the panel connects to
+The release zip ships the dash as `Uniflag Overlay.simhubdash` — a single
+packaged file SimHub imports on double-click. It is produced from
+`overlay/dash/Uniflag Overlay/` at release time by
+[`packaging/make-simhubdash.ps1`](../packaging/make-simhubdash.ps1) (a ZIP
+whose entries are folder-name-prefixed with backslash separators, matching
+SimHub's own *Export Dashboard*); `just simhubdash` regenerates it locally.
+
+1. With SimHub running, double-click `Uniflag Overlay.simhubdash` and
+   confirm the import prompt — no admin file-copy needed. (Working from
+   source instead? Copy the `overlay/dash/Uniflag Overlay/` folder into
+   `C:\Program Files (x86)\SimHub\DashTemplates\` with SimHub closed.)
+2. *Dash Studio* → the "Uniflag Overlay" dash appears in the dashboard
+   list. Use *overlay* mode (e.g. add it in the *Overlays* / in-game
+   overlay layout for your game) — it is flagged as an overlay and sized
+   320×320.
+3. The dash needs the Uniflag plugin enabled; the panel connects to
    `http://127.0.0.1:8972/?v=1` by itself.
 
 **Cache-busting (`?v=`):** the Web Page View caches pages aggressively

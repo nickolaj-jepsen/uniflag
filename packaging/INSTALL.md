@@ -9,7 +9,7 @@ whose protocol version differs.
 |------|------------|
 | `UniflagPlugin.dll` | SimHub plugin — reads flag telemetry, renders the frames, drives the panel |
 | `uniflag.uf2` | Firmware for the Pimoroni Cosmic Unicorn (original RP2040 / Pico W only) |
-| `Uniflag Overlay/` | DashStudio dash — the virtual panel as an in-game overlay |
+| `Uniflag Overlay.simhubdash` | DashStudio dash — the virtual panel as an in-game overlay (double-click to import) |
 | `INSTALL.md` | This file |
 
 ## 1. Plugin
@@ -30,10 +30,13 @@ whose protocol version differs.
 
 ## 3. Overlay dash (optional)
 
-1. Copy the whole `Uniflag Overlay` folder into
-   `C:\Program Files (x86)\SimHub\DashTemplates\` (needs one admin
-   file-copy prompt).
+1. With SimHub running, **double-click `Uniflag Overlay.simhubdash`** and
+   confirm the import prompt. SimHub adds *Uniflag Overlay* to your
+   dashboard library — no admin file-copy needed.
 2. In SimHub → **Dash Studio**, add *Uniflag Overlay* as an overlay.
+
+The dash renders the virtual panel from the plugin's local web server, so
+the Uniflag plugin must be enabled (step 1) for it to show anything.
 
 ## Help
 

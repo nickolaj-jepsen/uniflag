@@ -16,3 +16,6 @@ plugin/**/obj/
 # Release packaging
 dist/
 *.zip
+# .simhubdash is packed from overlay/dash/<name>/ at release time
+# (packaging/make-simhubdash.ps1) -- a build output, never committed.
+*.simhubdash

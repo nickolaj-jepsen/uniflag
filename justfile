@@ -126,6 +126,13 @@ plugin-build:
 plugin-test:
     dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}"
 
+# Pack the overlay dash into a double-click .simhubdash (gitignored build
+# output) for import testing. `just package` and the CI release job run the
+# same generator; this recipe is just the standalone loop.
+[windows]
+simhubdash:
+    powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File packaging\make-simhubdash.ps1 -DashFolder "overlay/dash/Uniflag Overlay" -OutFile "overlay/dash/Uniflag Overlay.simhubdash"
+
 # Assemble the release zip locally: plugin DLL + firmware UF2 + overlay dash +
 # INSTALL.md, identical layout (and only-one-DLL audit) to the CI release job.
 # Output: target/uniflag-<git describe>.zip (or uniflag-dev.zip if dirty).
