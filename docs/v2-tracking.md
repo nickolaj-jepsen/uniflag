@@ -4,6 +4,61 @@ Tracks the two unbounded external clocks started in M1 of
 [v2-plan.md](v2-plan.md). (Written as a doc so it lives with the code;
 paste into a GitHub issue if issue-tracking is preferred.)
 
+## Maintainer verification checklist (written 2026-07-04, end of the autonomous M9–M12 run)
+
+All twelve milestones are code-complete on `v2` (through commit
+`f3b7c33`); everything machine-verifiable is verified (CI green, 396
+plugin tests + 79 Rust tests, the plugin hardware test passed against
+the real panel on COM5, `just package` audited). What remains needs
+eyes, hands, or a public action. Already done on the dev box: the
+2.0.0 `UniflagPlugin.dll` is deployed into SimHub, the "Uniflag
+Overlay" dash folder is copied into `DashTemplates`, and the old
+ASCII Custom Serial device is confirmed **disabled** (delete it via
+the GUI when convenient: Custom serial devices → remove "Custom
+Serial device"). The panel still runs the fw built as 0.1.0 —
+protocol-compatible (both v1), but reflash `target/uniflag.uf2` for a
+matching 2.0.0 HelloAck when convenient.
+
+1. **Release dry-run** (the one blocked-for-the-agent step —
+   publishing a prerelease is a public action):
+   `git tag v2.0.0-rc1 && git push origin v2.0.0-rc1`, then check the
+   Actions run and that the release page shows exactly one asset
+   (`uniflag-v2.0.0-rc1.zip`, marked prerelease). Unzip and eyeball:
+   `UniflagPlugin.dll` + `uniflag.uf2` + `Uniflag Overlay/` +
+   `INSTALL.md`, nothing else.
+2. **One SimHub session covers most of it** (panel plugged in):
+   - Uniflag tab: device auto-discovered, status shows port +
+     firmware/protocol version + 32×32; brightness slider dims the
+     panel; device buttons step it and the value survives a SimHub
+     restart; USB yank → tab shows disconnected + panel drops to the
+     amber fallback ≤ ~1.5 s; replug → auto-reconnect.
+   - No game running: panel and preview show **connected-idle** (dim
+     blue breathing pair, bottom-centre) — this is the §7b visual
+     sign-off. §7a (amber corner blink) was already seen live during
+     M8 bring-up. On approval say so — the PROPOSED markers in
+     docs/effects-spec.md §7 get removed.
+   - Tick **Cycle test states**: the tour now includes the 8 penalty
+     states (slowdown severities, meatball, DT/SG, furled) — this is
+     the visual review the `testdata/frames-plugin/` corpus is
+     pending on. Rejections are cheap: the corpus regenerates via
+     `just golden-regen`.
+   - Browser at `http://127.0.0.1:8972/` mirrors the preview; from
+     another LAN machine the same URL must be **unreachable**.
+   - DashStudio: the "Uniflag Overlay" dash imports and renders
+     in-game (never enable SimHub's HTML rendering mode — issue
+     #1494).
+   - Any sim replay: flags on panel + preview + overlay
+     simultaneously. iRacing specifically: repair → meatball, furled
+     → warning accent, caution → SC board (the M10 live check).
+3. **Clean-machine walkthrough** (M12 verification): on a fresh PC,
+   zip → INSTALL.md → flags on panel, unaided.
+4. **pid.codes** (unchanged): the `uniflag-f1a6` branch is staged in
+   the scratchpad clone; file when ready. v2.0 ships on the test PID
+   by explicit M12 decision (see protocol.md); swap sites enumerated
+   there.
+5. Optional, deferred with rationale in protocol.md: the forced-panic
+   watchdog-recovery flash test.
+
 ## pid.codes registration
 
 - Requested PID: **0x1209:0xF1A6** ("FLAG" in hexspeak; verified free
