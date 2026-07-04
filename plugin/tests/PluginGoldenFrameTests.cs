@@ -88,6 +88,9 @@ namespace Uniflag.Tests
                     Meatball = (bool)stateObj["meatball"],
                     BlackDetail = ParseEnum<BlackFlagDetail>(stateObj["black_detail"]),
                     Furled = (bool)stateObj["furled"],
+                    StartLights = ParseEnum<StartLights>(stateObj["start_lights"]),
+                    Debris = (bool)stateObj["debris"],
+                    IncidentWarning = (bool)stateObj["incident_warning"],
                 };
                 var scenario = new GoldenScenario(
                     (string)entry["name"],
@@ -147,9 +150,9 @@ namespace Uniflag.Tests
         [Fact]
         public void ManifestPinsTheWholeCorpus()
         {
-            // The in-code ledger holds 20 entries; append-only, so fewer
+            // The in-code ledger holds 29 entries; append-only, so fewer
             // means a broken checkout or a missed regen.
-            Assert.Equal(20, Scenarios.Value.Count);
+            Assert.Equal(29, Scenarios.Value.Count);
             foreach (GoldenScenario scenario in Scenarios.Value)
             {
                 Assert.True(

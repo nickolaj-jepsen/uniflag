@@ -177,14 +177,22 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void GreenHeldEnrichesToGreenOnlyWhenNothingElseClaimsTheBase()
+        public void GreenHeldIsNotAGreenFlagItArmsTheGantryInstead()
         {
-            RenderState alone = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagGreenHeld));
-            Assert.Equal(Flag.Green, alone.Flag);
+            // greenHeld = the starter holding the green still furled: the
+            // real green arrives with the green bit. Showing green here made
+            // the panel jump the start, so the bit folds into the gantry's
+            // Set phase instead.
+            RenderState held = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagGreenHeld));
+            Assert.Equal(Flag.None, held.Flag);
+            Assert.Equal(StartLights.Set, held.StartLights);
+            Assert.Equal(RenderLayer.StartLightsBoard, Precedence.Select(held, connected: true));
 
-            RenderState withWhite = MapThroughPipeline(
-                IRacingSnapshot(IRacingAdapter.FlagGreenHeld | IRacingAdapter.FlagWhite));
-            Assert.Equal(Flag.White, withWhite.Flag);
+            // The moment the green bit flies, the flag claims the base over
+            // the gantry board.
+            RenderState green = MapThroughPipeline(IRacingSnapshot(
+                IRacingAdapter.FlagGreenHeld | IRacingAdapter.FlagGreen | IRacingAdapter.FlagStartGo));
+            Assert.Equal(Flag.Green, green.Flag);
         }
 
         [Fact]
@@ -207,6 +215,101 @@ namespace Uniflag.Tests
             // Even with (impossible) raw data present, a non-iRacing game
             // gets the pure generic mapping — never a red flag.
             Assert.NotEqual(Flag.Red, state.Flag);
+        }
+
+        [Theory]
+        [InlineData(IRacingAdapter.FlagStartGo, StartLights.Go)]
+        [InlineData(IRacingAdapter.FlagStartSet, StartLights.Set)]
+        [InlineData(IRacingAdapter.FlagGreenHeld, StartLights.Set)]
+        [InlineData(IRacingAdapter.FlagStartReady, StartLights.Ready)]
+        [InlineData(IRacingAdapter.FlagOneLapToGreen, StartLights.Ready)]
+        [InlineData(IRacingAdapter.FlagGreenHeld | IRacingAdapter.FlagStartGo, StartLights.Go)]
+        [InlineData(IRacingAdapter.FlagStartHidden, StartLights.Off)]
+        [InlineData(0u, StartLights.Off)]
+        public void StartLightBitsMapToTheGantryPhase(uint bits, StartLights expected)
+        {
+            // go > set > ready; the rolling-start oneLapToGreen folds into
+            // Ready and greenHeld (furled green in hand) into Set;
+            // startHidden and the unset case are Off.
+            Assert.Equal(expected, MapThroughPipeline(IRacingSnapshot(bits)).StartLights);
+        }
+
+        [Fact]
+        public void StartLightsBoardShowsOnlyWhileNoFlagClaimsTheBase()
+        {
+            RenderState ready = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagStartReady));
+            Assert.Equal(StartLights.Ready, ready.StartLights);
+            Assert.Equal(RenderLayer.StartLightsBoard, Precedence.Select(ready, connected: true));
+
+            // A real flag on the same tick supersedes the gantry.
+            RenderState withYellow = MapThroughPipeline(
+                IRacingSnapshot(IRacingAdapter.FlagStartReady | IRacingAdapter.FlagYellow));
+            Assert.Equal(StartLights.Ready, withYellow.StartLights);
+            Assert.Equal(RenderLayer.YellowFlag, Precedence.Select(withYellow, connected: true));
+        }
+
+        [Fact]
+        public void DebrisBitRaisesTheDebrisBoardOnlyWhenNoFlagWins()
+        {
+            RenderState alone = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagDebris));
+            Assert.True(alone.Debris);
+            Assert.Equal(Flag.None, alone.Flag);
+            Assert.Equal(RenderLayer.DebrisBoard, Precedence.Select(alone, connected: true));
+
+            // A unified flag (which already conveys caution) supersedes it.
+            RenderState withYellow = MapThroughPipeline(
+                IRacingSnapshot(IRacingAdapter.FlagDebris | IRacingAdapter.FlagYellow));
+            Assert.True(withYellow.Debris);
+            Assert.Equal(RenderLayer.YellowFlag, Precedence.Select(withYellow, connected: true));
+        }
+
+        [Fact]
+        public void StartLightsOutrankDebrisInTheIdleArm()
+        {
+            RenderState state = MapThroughPipeline(
+                IRacingSnapshot(IRacingAdapter.FlagStartSet | IRacingAdapter.FlagDebris));
+            Assert.Equal(RenderLayer.StartLightsBoard, Precedence.Select(state, connected: true));
+        }
+
+        /// <summary>An iRacing snapshot carrying incident count/limit dimensions.</summary>
+        private static TelemetrySnapshot IncidentSnapshot(bool hasCount, int count, bool hasLimit, int limit)
+        {
+            TelemetrySnapshot snapshot = IRacingSnapshot(0);
+            snapshot.HasIncidentCount = hasCount;
+            snapshot.IncidentCount = count;
+            snapshot.HasIncidentLimit = hasLimit;
+            snapshot.IncidentLimit = limit;
+            return snapshot;
+        }
+
+        [Fact]
+        public void IncidentWarningFiresWithinTheMarginOfTheLimit()
+        {
+            // Margin 4, limit 17 → warn once the count reaches 13.
+            Assert.True(MapThroughPipeline(IncidentSnapshot(true, 13, true, 17)).IncidentWarning);
+            Assert.True(MapThroughPipeline(IncidentSnapshot(true, 17, true, 17)).IncidentWarning);
+            Assert.False(MapThroughPipeline(IncidentSnapshot(true, 12, true, 17)).IncidentWarning);
+        }
+
+        [Fact]
+        public void IncidentWarningStaysOffWithoutBothCountAndFiniteLimit()
+        {
+            // "unlimited" → HasIncidentLimit false → never warn, any count.
+            Assert.False(MapThroughPipeline(IncidentSnapshot(true, 999, false, 0)).IncidentWarning);
+            // No count sample → never warn.
+            Assert.False(MapThroughPipeline(IncidentSnapshot(false, 0, true, 17)).IncidentWarning);
+            // A zero/negative limit is not a real limit.
+            Assert.False(MapThroughPipeline(IncidentSnapshot(true, 5, true, 0)).IncidentWarning);
+        }
+
+        [Fact]
+        public void IncidentWarningIsIndependentOfTheSessionFlagsMask()
+        {
+            // The mask can drop out (shape drift) while incident data survives
+            // — the warning is derived before the mask guard, so it still fires.
+            TelemetrySnapshot snapshot = IncidentSnapshot(true, 15, true, 17);
+            snapshot.HasRawSessionFlags = false;
+            Assert.True(MapThroughPipeline(snapshot).IncidentWarning);
         }
     }
 
@@ -387,6 +490,98 @@ namespace Uniflag.Tests
             GameDataExtractor.Extract(ref data, snapshot);
             Assert.False(snapshot.HasRawSessionFlags);
             Assert.Equal(0u, snapshot.RawSessionFlags);
+        }
+
+        // --- Incident count + limit extraction. Fakes mirror the researched
+        //     DataSampleEx shape: a `SessionDataDict` (Dictionary<string,
+        //     object>) holding the raw WeekendInfo → WeekendOptions →
+        //     IncidentLimit tree the typed SessionData model omits, plus
+        //     PlayerCarMyIncidentCount in the Telemetry dictionary.
+
+        private sealed class FakeFullSample
+        {
+            public FakeTelemetryDictionary Telemetry { get; set; }
+
+            public Dictionary<string, object> SessionDataDict { get; set; }
+        }
+
+        private static FakeFullSample FullSample(
+            object incidentCount, object incidentLimit, bool includeLimitKey = true)
+        {
+            var telemetry = new FakeTelemetryDictionary();
+            if (incidentCount != null)
+            {
+                telemetry["PlayerCarMyIncidentCount"] = incidentCount;
+            }
+            var weekendOptions = new Dictionary<string, object>();
+            if (includeLimitKey)
+            {
+                weekendOptions["IncidentLimit"] = incidentLimit;
+            }
+            var sessionData = new Dictionary<string, object>
+            {
+                ["WeekendInfo"] = new Dictionary<string, object> { ["WeekendOptions"] = weekendOptions },
+            };
+            return new FakeFullSample { Telemetry = telemetry, SessionDataDict = sessionData };
+        }
+
+        [Fact]
+        public void ReadsThePlayerIncidentCount()
+        {
+            TelemetrySnapshot snapshot = Extract(FullSample(incidentCount: 7, incidentLimit: 17L));
+            Assert.True(snapshot.HasIncidentCount);
+            Assert.Equal(7, snapshot.IncidentCount);
+        }
+
+        [Fact]
+        public void ReadsTheNestedIncidentLimit()
+        {
+            // Numeric IncidentLimit boxed as Int64 (iRacingSDK parses numeric
+            // YAML scalars to long, like the typed WeekendOptions fields).
+            TelemetrySnapshot snapshot = Extract(FullSample(incidentCount: 3, incidentLimit: 17L));
+            Assert.True(snapshot.HasIncidentLimit);
+            Assert.Equal(17, snapshot.IncidentLimit);
+        }
+
+        [Fact]
+        public void ParsesANumericStringIncidentLimit()
+        {
+            TelemetrySnapshot snapshot = Extract(FullSample(incidentCount: 0, incidentLimit: "8"));
+            Assert.True(snapshot.HasIncidentLimit);
+            Assert.Equal(8, snapshot.IncidentLimit);
+        }
+
+        [Fact]
+        public void UnlimitedIncidentLimitIsNoFiniteLimit()
+        {
+            TelemetrySnapshot snapshot = Extract(FullSample(incidentCount: 0, incidentLimit: "unlimited"));
+            Assert.False(snapshot.HasIncidentLimit);
+        }
+
+        [Fact]
+        public void MissingSessionDataDictLeavesTheLimitUnknown()
+        {
+            // The telemetry-only fake exposes no SessionDataDict property.
+            TelemetrySnapshot snapshot = Extract(Sample(0x08));
+            Assert.False(snapshot.HasIncidentLimit);
+        }
+
+        [Fact]
+        public void MissingIncidentLimitKeyLeavesItUnknown()
+        {
+            TelemetrySnapshot snapshot = Extract(
+                FullSample(incidentCount: 2, incidentLimit: null, includeLimitKey: false));
+            Assert.True(snapshot.HasIncidentCount);
+            Assert.False(snapshot.HasIncidentLimit);
+        }
+
+        [Fact]
+        public void NonIRacingGameNeverReadsIncidentData()
+        {
+            TelemetrySnapshot snapshot = Extract(
+                FullSample(incidentCount: 5, incidentLimit: 17L), gameName: "Ac");
+            Assert.False(snapshot.HasIncidentCount);
+            Assert.False(snapshot.HasIncidentLimit);
         }
     }
 }

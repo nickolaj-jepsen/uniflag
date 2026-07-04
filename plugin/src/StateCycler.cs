@@ -213,6 +213,16 @@ namespace Uniflag
             sequence.Add(MakePenalty(furled: true));
             sequence.Add(MakePenalty(flag: Flag.Yellow, furled: true));
 
+            // iRacing extension effects — same WPF-preview review path: the
+            // start-light gantry, the debris board, and the incident-limit
+            // warning frame (alone and riding over a yellow base).
+            sequence.Add(MakePenalty(startLights: StartLights.Ready));
+            sequence.Add(MakePenalty(startLights: StartLights.Set));
+            sequence.Add(MakePenalty(startLights: StartLights.Go));
+            sequence.Add(MakePenalty(debris: true));
+            sequence.Add(MakePenalty(incidentWarning: true));
+            sequence.Add(MakePenalty(flag: Flag.Yellow, incidentWarning: true));
+
             return sequence;
         }
 
@@ -238,13 +248,19 @@ namespace Uniflag
             byte slowdown = 0,
             bool meatball = false,
             BlackFlagDetail blackDetail = BlackFlagDetail.None,
-            bool furled = false)
+            bool furled = false,
+            StartLights startLights = StartLights.Off,
+            bool debris = false,
+            bool incidentWarning = false)
         {
             RenderState state = Make(flag, WaveLevel.None, Session.Racing, Caution.None, SectorSet.Empty);
             state.Slowdown = slowdown;
             state.Meatball = meatball;
             state.BlackDetail = blackDetail;
             state.Furled = furled;
+            state.StartLights = startLights;
+            state.Debris = debris;
+            state.IncidentWarning = incidentWarning;
             return state;
         }
     }

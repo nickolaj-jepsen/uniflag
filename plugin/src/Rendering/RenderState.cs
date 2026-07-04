@@ -65,6 +65,23 @@ namespace Uniflag.Rendering
     }
 
     /// <summary>
+    /// Standing/rolling start-light gantry phase (iRacing SessionFlags
+    /// <c>startReady</c>/<c>startSet</c>/<c>startGo</c>, plus
+    /// <c>oneLapToGreen</c> folded into <see cref="Ready"/> and the furled
+    /// pre-start <c>greenHeld</c> into <see cref="Set"/>). Host-only, like
+    /// the penalty dimensions — a start signal is a device presentation, not a
+    /// wire flag. <see cref="Off"/> is the default so any state built without
+    /// touching it renders exactly as the frozen corpus pins it.
+    /// </summary>
+    public enum StartLights
+    {
+        Off,
+        Ready,
+        Set,
+        Go,
+    }
+
+    /// <summary>
     /// Set of flagged sectors 1..=3, mirroring <c>proto::SectorMask</c>
     /// (sector n is bit n-1 of the low 3 bits).
     /// </summary>
@@ -147,6 +164,32 @@ namespace Uniflag.Rendering
         public bool Furled;
 
         /// <summary>
+        /// Start-light gantry phase. Rendered as its own board only when no
+        /// flag, caution or penalty claims the base (the <see cref="Flag.None"/>
+        /// idle arm) — a real flag always supersedes it, and at "GO" the green
+        /// flag naturally takes over. <see cref="StartLights.Off"/> means "no
+        /// start sequence", keeping the board code path unreachable by default.
+        /// </summary>
+        public StartLights StartLights;
+
+        /// <summary>
+        /// Debris / surface warning (iRacing SessionFlags <c>debris</c> bit):
+        /// a yellow-and-red striped hazard board. Like the start-light board it
+        /// only paints in the <see cref="Flag.None"/> idle arm — a unified flag
+        /// (which already conveys caution) supersedes it.
+        /// </summary>
+        public bool Debris;
+
+        /// <summary>
+        /// Incident-limit warning (host-derived: iRacing
+        /// <c>PlayerCarMyIncidentCount</c> within a margin of the session
+        /// incident limit). A blinking-red-frame accent overlaid on whatever
+        /// base is showing — suppressed under red / disconnected like the
+        /// furled accent, since it is a heads-up while racing continues.
+        /// </summary>
+        public bool IncidentWarning;
+
+        /// <summary>
         /// All-none default: session unknown, no penalty state, keeping every
         /// penalty code path unreachable by default.
         /// </summary>
@@ -161,6 +204,9 @@ namespace Uniflag.Rendering
             Meatball = false,
             BlackDetail = BlackFlagDetail.None,
             Furled = false,
+            StartLights = StartLights.Off,
+            Debris = false,
+            IncidentWarning = false,
         };
     }
 }

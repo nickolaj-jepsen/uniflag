@@ -21,6 +21,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using GameReaderCommon;
 
@@ -48,6 +49,7 @@ namespace Uniflag.Adapters
         // redundant work, never a torn read.
         private static Type _rawType;
         private static PropertyInfo _rawTelemetryProperty;
+        private static PropertyInfo _rawSessionDataDictProperty;
 
         /// <summary>
         /// Copy one tick. A null <paramref name="data"/> or a null
@@ -101,6 +103,10 @@ namespace Uniflag.Adapters
             // pays zero raw-data cost.
             into.HasRawSessionFlags = false;
             into.RawSessionFlags = 0;
+            into.HasIncidentCount = false;
+            into.IncidentCount = 0;
+            into.HasIncidentLimit = false;
+            into.IncidentLimit = 0;
             if (string.Equals(into.GameName, IRacingGameName, StringComparison.OrdinalIgnoreCase))
             {
                 ExtractIRacingRaw(telemetry, into);
@@ -108,13 +114,16 @@ namespace Uniflag.Adapters
         }
 
         /// <summary>
-        /// Pull the SessionFlags bitmask out of the iRacing raw-data object.
-        /// Null-safe at every layer: any deviation from the researched shape
-        /// (missing raw object, no <c>Telemetry</c> property, not a
+        /// Pull the iRacing raw-data signals the refiner consumes: the
+        /// SessionFlags bitmask and PlayerCarMyIncidentCount from the live
+        /// telemetry dictionary, and the incident limit from the session-info
+        /// dictionary. Null-safe at every layer: any deviation from the
+        /// researched shape (missing raw object, absent property, not a
         /// string-keyed dictionary, missing key, unexpected boxed type)
-        /// simply leaves <see cref="TelemetrySnapshot.HasRawSessionFlags"/>
-        /// false. SimHub throttles plugins whose DataUpdate throws, so this
-        /// path must never leak an exception.
+        /// simply leaves the corresponding <c>Has*</c> flag false. SimHub
+        /// throttles plugins whose DataUpdate throws, so this path must never
+        /// leak an exception. The three reads are independent — a miss on one
+        /// never skips the others.
         /// </summary>
         private static void ExtractIRacingRaw(StatusDataBase telemetry, TelemetrySnapshot into)
         {
@@ -137,52 +146,88 @@ namespace Uniflag.Adapters
             Type rawType = raw.GetType();
             if (!ReferenceEquals(rawType, _rawType))
             {
-                // (Re-)resolve on type change. Shape drift in a future
-                // SimHub must degrade, never throw: GetProperty returns
-                // null when the property is gone, but it *throws*
-                // AmbiguousMatchException when a derived raw type shadows
-                // `Telemetry` with a different property type — cache null
-                // either way, checked below.
-                try
-                {
-                    _rawTelemetryProperty = rawType.GetProperty("Telemetry");
-                }
-                catch (Exception)
-                {
-                    _rawTelemetryProperty = null;
-                }
+                // (Re-)resolve both cached properties on type change. Shape
+                // drift in a future SimHub must degrade, never throw:
+                // GetProperty returns null when the property is gone, but it
+                // *throws* AmbiguousMatchException when a derived raw type
+                // shadows one with a different property type — SafeGetProperty
+                // caches null either way.
+                _rawTelemetryProperty = SafeGetProperty(rawType, "Telemetry");
+                _rawSessionDataDictProperty = SafeGetProperty(rawType, "SessionDataDict");
                 _rawType = rawType;
             }
-            PropertyInfo telemetryProperty = _rawTelemetryProperty;
-            if (telemetryProperty == null)
+
+            // iRacingSDK.Telemetry derives from Dictionary<string, object> and
+            // SessionDataDict *is* one, so the BCL interface reaches both
+            // without referencing the proprietary assembly.
+            IDictionary<string, object> telemetryDict = ReadDictionary(raw, _rawTelemetryProperty);
+            if (telemetryDict != null)
             {
-                return;
+                ExtractSessionFlags(telemetryDict, into);
+                ExtractIncidentCount(telemetryDict, into);
             }
 
-            object telemetryObject;
+            IDictionary<string, object> sessionDataDict = ReadDictionary(raw, _rawSessionDataDictProperty);
+            if (sessionDataDict != null)
+            {
+                ExtractIncidentLimit(sessionDataDict, into);
+            }
+        }
+
+        /// <summary>
+        /// <c>Type.GetProperty</c> that swallows the one throwing drift shape
+        /// (a derived raw type shadowing the property with a different type →
+        /// <c>AmbiguousMatchException</c>) and caches null like every absent
+        /// property.
+        /// </summary>
+        private static PropertyInfo SafeGetProperty(Type type, string name)
+        {
             try
             {
-                telemetryObject = telemetryProperty.GetValue(raw);
+                return type.GetProperty(name);
             }
             catch (Exception)
             {
-                return;
+                return null;
             }
-            // iRacingSDK.Telemetry derives from Dictionary<string, object>,
-            // so the BCL interface reaches it without referencing the
-            // proprietary assembly.
-            if (!(telemetryObject is IDictionary<string, object> dictionary))
+        }
+
+        /// <summary>
+        /// Read a <paramref name="property"/> off <paramref name="raw"/> and
+        /// return it as a string-keyed dictionary, or null on any miss
+        /// (absent property, throwing getter, unexpected shape).
+        /// </summary>
+        private static IDictionary<string, object> ReadDictionary(object raw, PropertyInfo property)
+        {
+            if (property == null)
             {
-                return;
+                return null;
             }
+            object value;
+            try
+            {
+                value = property.GetValue(raw);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+            return value as IDictionary<string, object>;
+        }
+
+        /// <summary>
+        /// SessionFlags bitmask. Boxed as Int32 by the reader (IL-verified:
+        /// the typed getter unboxes int); tolerate unsigned/wider boxes
+        /// defensively. The top bit (startGo, 0x80000000) makes the int
+        /// negative — the unchecked reinterpretation preserves the bit
+        /// pattern.
+        /// </summary>
+        private static void ExtractSessionFlags(IDictionary<string, object> dictionary, TelemetrySnapshot into)
+        {
             if (!dictionary.TryGetValue("SessionFlags", out object value))
             {
                 return;
             }
-            // Boxed as Int32 by the reader (IL-verified: the typed getter
-            // unboxes int); tolerate unsigned/wider boxes defensively. The
-            // top bit (startGo, 0x80000000) makes the int negative — the
-            // unchecked reinterpretation preserves the bit pattern.
             if (value is int intValue)
             {
                 into.RawSessionFlags = unchecked((uint)intValue);
@@ -200,6 +245,97 @@ namespace Uniflag.Adapters
             }
         }
 
+        /// <summary>
+        /// PlayerCarMyIncidentCount — the player's incidents this session.
+        /// A telemetry variable with no typed getter (verified: absent from
+        /// iRacingSDK.Telemetry's typed members), so read straight from the
+        /// dictionary. Boxed as int by the reader; tolerate wider boxes.
+        /// </summary>
+        private static void ExtractIncidentCount(IDictionary<string, object> dictionary, TelemetrySnapshot into)
+        {
+            if (dictionary.TryGetValue("PlayerCarMyIncidentCount", out object value)
+                && TryReadInt(value, out int count))
+            {
+                into.IncidentCount = count;
+                into.HasIncidentCount = true;
+            }
+        }
+
+        /// <summary>
+        /// The session incident limit. SimHub 9.11.21's iRacingSDK typed
+        /// SessionData model omits IncidentLimit (verified by reflection over
+        /// iRacingSDK.dll — <c>_WeekendOptions</c> has NumStarters/Standing
+        /// Start/… but no limit), so read the raw session-info tree:
+        /// <c>WeekendInfo → WeekendOptions → IncidentLimit</c>. This path is
+        /// researched, not live-verified against a running session — every
+        /// layer is guarded, so a wrong nesting/key/type simply leaves
+        /// <see cref="TelemetrySnapshot.HasIncidentLimit"/> false. "unlimited"
+        /// (and any non-numeric value) counts as no finite limit.
+        /// </summary>
+        private static void ExtractIncidentLimit(IDictionary<string, object> sessionDataDict, TelemetrySnapshot into)
+        {
+            if (sessionDataDict.TryGetValue("WeekendInfo", out object weekendInfoObj)
+                && weekendInfoObj is IDictionary<string, object> weekendInfo
+                && weekendInfo.TryGetValue("WeekendOptions", out object weekendOptionsObj)
+                && weekendOptionsObj is IDictionary<string, object> weekendOptions
+                && weekendOptions.TryGetValue("IncidentLimit", out object value)
+                && TryParseIncidentLimit(value, out int limit))
+            {
+                into.IncidentLimit = limit;
+                into.HasIncidentLimit = true;
+            }
+        }
+
+        /// <summary>Read a boxed integer value, tolerating int/long/short/uint boxes.</summary>
+        private static bool TryReadInt(object value, out int result)
+        {
+            switch (value)
+            {
+                case int i:
+                    result = i;
+                    return true;
+                case long l:
+                    result = unchecked((int)l);
+                    return true;
+                case short sh:
+                    result = sh;
+                    return true;
+                case uint u:
+                    result = unchecked((int)u);
+                    return true;
+                default:
+                    result = 0;
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Parse the IncidentLimit value: a numeric box is the limit; a string
+        /// is parsed with the invariant culture ("unlimited" and any other
+        /// non-numeric string → false, i.e. no finite limit).
+        /// </summary>
+        private static bool TryParseIncidentLimit(object value, out int limit)
+        {
+            switch (value)
+            {
+                case int i:
+                    limit = i;
+                    return true;
+                case long l:
+                    limit = unchecked((int)l);
+                    return true;
+                case short sh:
+                    limit = sh;
+                    return true;
+                case string str:
+                    return int.TryParse(
+                        str, NumberStyles.Integer, CultureInfo.InvariantCulture, out limit);
+                default:
+                    limit = 0;
+                    return false;
+            }
+        }
+
         private static void ClearSessionFields(TelemetrySnapshot into)
         {
             into.HasData = false;
@@ -213,6 +349,10 @@ namespace Uniflag.Adapters
             into.FlagOrange = false;
             into.HasRawSessionFlags = false;
             into.RawSessionFlags = 0;
+            into.HasIncidentCount = false;
+            into.IncidentCount = 0;
+            into.HasIncidentLimit = false;
+            into.IncidentLimit = 0;
         }
     }
 }

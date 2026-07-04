@@ -33,6 +33,15 @@ namespace Uniflag.Adapters
     /// derive their "slow down" alerts from the same furled bit), so
     /// <see cref="RenderState.Slowdown"/> and
     /// <see cref="RenderState.BlackDetail"/> stay at their defaults here.</item>
+    /// <item><b>Start-lights</b> — <c>startReady</c>/<c>startSet</c>/
+    /// <c>startGo</c> (+ rolling-start <c>oneLapToGreen</c> and
+    /// <c>greenHeld</c>) drive the start-light gantry board; the unified
+    /// layer has no start concept.</item>
+    /// <item><b>Debris</b> — <c>debris</c> (0x40) is a raw-only track flag the
+    /// unified layer never surfaces.</item>
+    /// <item><b>Incident warning</b> — <c>PlayerCarMyIncidentCount</c> within
+    /// <see cref="IncidentWarnMargin"/> of the session incident limit (read
+    /// from the session-info dictionary; see <c>GameDataExtractor</c>).</item>
     /// </list>
     /// Checkered / white / green / black are single raw bits that the
     /// unified layer already mirrors 1:1 (IL-verified). Blue is <b>not</b> a
@@ -42,9 +51,10 @@ namespace Uniflag.Adapters
     /// deliberately does <b>not</b> restore blue from raw during that
     /// overlap: green is the flag that matters at a start/restart, and
     /// honouring the suppression keeps the panel consistent with every other
-    /// SimHub-driven display. The one restore is <c>greenHeld</c> (0x400),
-    /// which the unified layer drops and this adapter surfaces when no other
-    /// flag won.
+    /// SimHub-driven display. <c>greenHeld</c> (0x400) is likewise never a
+    /// green flag: iRacing raises it while the starter still holds the green
+    /// <em>furled</em> (start/restart imminent), so it folds into the gantry's
+    /// Set phase — the panel goes green only when the <c>green</c> bit flies.
     /// Pure and allocation-free per call (runs at ~60 Hz).
     /// </summary>
     public sealed class IRacingAdapter : IGameAdapter
@@ -79,6 +89,17 @@ namespace Uniflag.Adapters
         internal const uint FlagServicible = 0x00040000;
         internal const uint FlagFurled = 0x00080000;
         internal const uint FlagRepair = 0x00100000;
+        internal const uint FlagStartHidden = 0x10000000;
+        internal const uint FlagStartReady = 0x20000000;
+        internal const uint FlagStartSet = 0x40000000;
+        internal const uint FlagStartGo = 0x80000000;
+
+        /// <summary>
+        /// Warn once the player's session incident count is within this many
+        /// of the session limit. A single hard incident is 4 points, so a
+        /// margin of 4 gives roughly one-incident heads-up. Tunable.
+        /// </summary>
+        internal const int IncidentWarnMargin = 4;
 
         /// <inheritdoc />
         public bool Matches(string gameName) =>
@@ -87,6 +108,18 @@ namespace Uniflag.Adapters
         /// <inheritdoc />
         public void Map(TelemetrySnapshot snapshot, ref RenderState state)
         {
+            // Incident-limit warning is independent of the SessionFlags mask
+            // (it reads the incident count from telemetry and the limit from
+            // the session-info dictionary), so derive it before the mask
+            // guard — a tick that lost the mask can still warn. Only fires
+            // when both are known and the limit is finite (>0; an "unlimited"
+            // limit leaves HasIncidentLimit false in the extractor).
+            if (snapshot.HasIncidentCount && snapshot.HasIncidentLimit && snapshot.IncidentLimit > 0)
+            {
+                state.IncidentWarning =
+                    snapshot.IncidentCount >= snapshot.IncidentLimit - IncidentWarnMargin;
+            }
+
             if (!snapshot.HasRawSessionFlags)
             {
                 // Raw layer unavailable this tick (shape drift, no sample
@@ -122,20 +155,14 @@ namespace Uniflag.Adapters
             }
 
             // Conservative enrichment when the unified layer mapped nothing:
-            // disqualify shows the black flag (the sim's own presentation),
-            // greenHeld is a green the unified layer drops. Never outranks
-            // a flag another bit already won — the generic priority order
-            // is the contract.
-            if (state.Flag == Flag.None)
+            // disqualify shows the black flag (the sim's own presentation).
+            // Never outranks a flag another bit already won — the generic
+            // priority order is the contract. greenHeld is deliberately NOT
+            // green: the flag is still furled in the starter's hand, so it
+            // feeds the gantry (MapStartLights) instead.
+            if (state.Flag == Flag.None && (bits & FlagDisqualify) != 0)
             {
-                if ((bits & FlagDisqualify) != 0)
-                {
-                    state.Flag = Flag.Black;
-                }
-                else if ((bits & FlagGreenHeld) != 0)
-                {
-                    state.Flag = Flag.Green;
-                }
+                state.Flag = Flag.Black;
             }
 
             // Penalty dimensions (host-only; see RenderState). repair also
@@ -146,6 +173,40 @@ namespace Uniflag.Adapters
             state.Furled = (bits & FlagFurled) != 0;
             // state.Slowdown / state.BlackDetail: deliberately untouched —
             // no iRacing telemetry source exists (see class doc).
+
+            // Debris / surface warning — a raw-only track flag the unified
+            // layer never surfaces. Rendered only when no flag claims the
+            // base (precedence), so a co-incident yellow supersedes it.
+            state.Debris = (bits & FlagDebris) != 0;
+
+            // Start-light gantry. The end-of-race tenToGo/fiveToGo bits are
+            // NOT the standing-start sequence and stay unmapped.
+            state.StartLights = MapStartLights(bits);
+        }
+
+        /// <summary>
+        /// Standing/rolling start phase from the start-light bits: go &gt; set
+        /// &gt; ready, with the rolling-start <c>oneLapToGreen</c> folded into
+        /// Ready ("get ready, green next lap") and <c>greenHeld</c> folded
+        /// into Set (furled green in the starter's hand — green imminent).
+        /// <c>startHidden</c> and the unset case are
+        /// <see cref="StartLights.Off"/>.
+        /// </summary>
+        private static StartLights MapStartLights(uint bits)
+        {
+            if ((bits & FlagStartGo) != 0)
+            {
+                return StartLights.Go;
+            }
+            if ((bits & (FlagStartSet | FlagGreenHeld)) != 0)
+            {
+                return StartLights.Set;
+            }
+            if ((bits & (FlagStartReady | FlagOneLapToGreen)) != 0)
+            {
+                return StartLights.Ready;
+            }
+            return StartLights.Off;
         }
     }
 }

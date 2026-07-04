@@ -265,8 +265,8 @@ namespace Uniflag.Tests
             // mask is synthetic (built from the verified bit values).
             Expect[] sequence =
             {
-                new Expect(IRacingAdapter.FlagGreenHeld, Flag.Green, WaveLevel.None, Caution.None,
-                    because: "greenHeld alone: raw-only green the unified layer drops"),
+                new Expect(IRacingAdapter.FlagGreenHeld, Flag.None, WaveLevel.None, Caution.None,
+                    because: "greenHeld: green still furled — gantry Set, no flag yet"),
                 new Expect(IRacingAdapter.FlagGreen, Flag.Green, WaveLevel.None, Caution.None),
                 new Expect(0, Flag.None, WaveLevel.None, Caution.None),
                 new Expect(IRacingAdapter.FlagYellow, Flag.Yellow, WaveLevel.None, Caution.None,

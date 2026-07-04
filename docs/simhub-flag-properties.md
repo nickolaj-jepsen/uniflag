@@ -80,6 +80,8 @@ Useful raw fields:
 | `DataCorePlugin.GameRawData.Telemetry.SessionFlagsDetails.Is<flag>` | Per-bit booleans (NCalc convenience — see below) |
 | `DataCorePlugin.GameRawData.Telemetry.UnderPaceCar`       | Pace car on track (typed getter: `CarIdxTrackSurface[0] == 3`; car index 0 is always the pace car) |
 | `DataCorePlugin.GameRawData.Telemetry.PlayerCarTowTime`   | Tow-truck recovery state (proxy for damage) |
+| `DataCorePlugin.GameRawData.Telemetry.PlayerCarMyIncidentCount` | Player's incident count this session — drives the incident-limit warning. A dictionary key with **no typed getter** on `iRacingSDK.Telemetry` (verified). |
+| `SessionData.WeekendInfo.WeekendOptions.IncidentLimit` (raw session-info) | Session incident limit ("unlimited" or a number). **Not in SimHub's typed model** — see the incident-limit note below. |
 
 **`irsdk_Flags` bit values — VERIFIED at M10** against the `iRacingSDK.dll`
 that ships *inside* SimHub 9.11.21 (the assembly SimHub's own iRacing reader
@@ -279,14 +281,37 @@ the same contract — change them together.
   the generic "yellow is always Single" guess for displayed-only yellows.
   iRacing has no double-waved concept, so *Double* never appears.
 - **Conservative enrichment** (only when the generic flag is *None*):
-  `disqualify` → black flag; `greenHeld` → green. Never re-ranks a flag the
-  unified layer already chose — the generic priority order is the contract.
+  `disqualify` → black flag. Never re-ranks a flag the unified layer already
+  chose — the generic priority order is the contract. `greenHeld` (`0x400`) is
+  deliberately **not** mapped to green: iRacing raises it while the starter
+  still holds the green *furled* (start/restart imminent), so surfacing it as
+  a green flag made the panel jump the start. It folds into the start-light
+  gantry instead (next bullet); the panel goes green only when the `green` bit
+  itself flies.
 - **Penalties** (host-only `RenderState` dimensions, never on the wire):
   `repair` (`0x100000`) → meatball board (the unified layer maps the same bit
   to `Flag_Orange`; the meatball board outranks the orange base by precedence);
   `furled` (`0x80000`) → furled warning accent. **Slowdown severity and
   DT-vs-SG stay defaulted** — no iRacing telemetry source exists (see the
   penalty-telemetry-limits note above).
+- **Start-lights** (host-only `RenderState.StartLights`): `startGo`
+  (`0x80000000`) → Go, `startSet` (`0x40000000`) or `greenHeld` (`0x400`,
+  furled green in the starter's hand) → Set, `startReady`
+  (`0x20000000`) or rolling-start `oneLapToGreen` (`0x200`) → Ready; else Off
+  (`startHidden` included). Rendered as a five-light gantry board, but only in
+  the `Flag.None` idle arm — a real flag/caution/penalty supersedes it, and at
+  Go the green flag takes over. The end-of-race `tenToGo`/`fiveToGo` bits are
+  **not** the standing-start sequence and stay unmapped.
+- **Debris** (host-only `RenderState.Debris`): `debris` (`0x40`) → a
+  yellow/red striped hazard board, also only in the `Flag.None` arm (a unified
+  flag, which already conveys caution, supersedes it). The unified layer never
+  surfaces this bit.
+- **Incident warning** (host-only `RenderState.IncidentWarning`): fires when
+  `PlayerCarMyIncidentCount` ≥ session `IncidentLimit − IncidentWarnMargin`
+  (margin 4 ≈ one hard incident). Rendered as a blinking-red-frame accent
+  (suppressed under red / disconnected, like the furled accent). Independent
+  of the SessionFlags mask, so a mask-less tick still warns. See the
+  incident-limit note below for the source.
 - **Not touched**: checkered/white/green/black are single bits the unified
   layer already carries 1:1; blue stands as the unified layer derives it —
   `blue && !green`, so on a simultaneous blue+green tick the panel shows
@@ -294,9 +319,23 @@ the same contract — change them together.
   that overlap: SimHub suppresses it on purpose (issue
   [#436](https://github.com/SHWotever/SimHub/issues/436), spurious blues
   around starts), and green is the flag that matters in that window; session
-  mapping stays generic;
-  `startGo`/`oneLapToGreen`/`tenToGo`/`fiveToGo` are recognized but unmapped
-  (candidates for future refinement, deliberately not guessed at).
+  mapping stays generic; the end-of-race `tenToGo`/`fiveToGo` bits remain
+  unmapped (candidates for future refinement, deliberately not guessed at).
+
+**Incident-limit source (researched, not live-verified).** iRacing's incident
+limit lives in the session-info YAML at
+`WeekendInfo:WeekendOptions:IncidentLimit`, not in telemetry. Reflection over
+the `iRacingSDK.dll` shipped inside SimHub 9.11.21 shows its **typed**
+`SessionData._WeekendOptions` model maps only a subset of that section
+(`NumStarters`, `StandingStart`, `HardcoreLevel`, …) and **omits
+`IncidentLimit`** — so the typed path does not exist. The extractor instead
+reads the raw parsed tree exposed as `DataSampleEx.SessionDataDict`
+(`Dictionary<string, object>` — reachable through the BCL interface, no
+proprietary reference), walking `WeekendInfo → WeekendOptions → IncidentLimit`.
+Every layer is guarded (a wrong nesting/key/type degrades to "no limit", never
+throws); `"unlimited"` and any non-numeric value count as no finite limit. The
+**dictionary** nesting/casing is researched, not confirmed against a live
+session — verify (and tweak if needed) in a running race.
 
 ## Property-layer gotchas
 

@@ -4,18 +4,27 @@
 // Kept separate from the painters so it can be unit-tested in isolation:
 //
 //   disconnected > red > VSC > SC > slowdown > meatball
-//                > per-flag base > session idle
+//                > per-flag base > start-lights > debris > session idle
 //
-// with two overlays painted last unless the flag is red: the sector band
-// and the furled warning accent. Rationale for the penalty positions:
-// red means the session is stopped — penalties are moot; the caution
-// boards are a full-course neutralisation order and penalty service waits
-// for the pits anyway; slowdown outranks meatball because it demands an
-// immediate speed change while the meatball is "pit at the end of this
-// lap"; both outrank per-flag bases because they are orders directed at
-// this driver, not track state. DT/SG are variants of the black-flag base
-// (RenderState.BlackDetail), not separate layers; furled is a warning
-// accent, not a board.
+// with three overlays painted last unless the flag is red: the sector band,
+// the furled warning accent and the incident-limit warning frame. Rationale
+// for the penalty positions: red means the session is stopped — penalties
+// are moot; the caution boards are a full-course neutralisation order and
+// penalty service waits for the pits anyway; slowdown outranks meatball
+// because it demands an immediate speed change while the meatball is "pit at
+// the end of this lap"; both outrank per-flag bases because they are orders
+// directed at this driver, not track state. DT/SG are variants of the
+// black-flag base (RenderState.BlackDetail), not separate layers; furled and
+// the incident warning are accents, not boards.
+//
+// Start-lights and debris sit in the session-idle region — they only paint
+// when no flag/caution/penalty claimed the base (F=None). A start gantry is
+// only meaningful before green (F=None during the grid/pace hold), and at
+// "GO" the green flag rightly supersedes it; a debris warning is the lowest
+// track-state signal, so any real flag (which already conveys caution) wins.
+// This keeps them from ever overriding a driver-directed flag, and — being
+// reachable only for non-default StartLights/Debris — leaves every existing
+// (state, frame) tuple dispatching exactly as the frozen goldens pin it.
 
 namespace Uniflag.Rendering
 {
@@ -47,6 +56,12 @@ namespace Uniflag.Rendering
         BlackFlag,
         OrangeFlag,
         CheckeredFlag,
+
+        /// <summary>No flag: start-light gantry (iRacing start sequence).</summary>
+        StartLightsBoard,
+
+        /// <summary>No flag: debris / surface warning board.</summary>
+        DebrisBoard,
 
         /// <summary>No flag, session Racing/Paused: minimal alive marker.</summary>
         RaceIdle,
@@ -108,6 +123,18 @@ namespace Uniflag.Rendering
                 case Flag.Checkered:
                     return RenderLayer.CheckeredFlag;
                 default: // Flag.None
+                    // Start-lights and debris slot in ahead of the idle
+                    // markers (both default to "off", so the existing idle
+                    // dispatch is unchanged). Start-lights first: a start
+                    // gantry outranks a debris warning in the rare overlap.
+                    if (state.StartLights != StartLights.Off)
+                    {
+                        return RenderLayer.StartLightsBoard;
+                    }
+                    if (state.Debris)
+                    {
+                        return RenderLayer.DebrisBoard;
+                    }
                     return state.Session == Session.Racing || state.Session == Session.Paused
                         ? RenderLayer.RaceIdle
                         : RenderLayer.ReadyOrb;
@@ -132,5 +159,15 @@ namespace Uniflag.Rendering
         /// </summary>
         public static bool FurledAccentVisible(RenderState state, bool connected) =>
             connected && state.Furled && state.Flag != Flag.Red;
+
+        /// <summary>
+        /// Whether the incident-limit warning frame is painted on top of the
+        /// base layer. Same rule as the furled accent (never disconnected,
+        /// never under red, otherwise whenever set): a heads-up that rides
+        /// over whatever the driver is currently being shown while racing
+        /// continues.
+        /// </summary>
+        public static bool IncidentWarningVisible(RenderState state, bool connected) =>
+            connected && state.IncidentWarning && state.Flag != Flag.Red;
     }
 }

@@ -38,10 +38,11 @@ matching 2.0.0 HelloAck when convenient.
      M8 bring-up. On approval say so — the PROPOSED markers in
      docs/effects-spec.md §7 get removed.
    - Tick **Cycle test states**: the tour now includes the 8 penalty
-     states (slowdown severities, meatball, DT/SG, furled) — this is
-     the visual review the `testdata/frames-plugin/` corpus is
-     pending on. Rejections are cheap: the corpus regenerates via
-     `just golden-regen`.
+     states (slowdown severities, meatball, DT/SG, furled) plus the 6
+     iRacing-extension states (start-lights Ready/Set/Go, debris, and
+     the incident-warning frame alone and over yellow) — this is the
+     visual review the `testdata/frames-plugin/` corpus is pending on.
+     Rejections are cheap: the corpus regenerates via `just golden-regen`.
    - Browser at `http://127.0.0.1:8972/` mirrors the preview; from
      another LAN machine the same URL must be **unreachable**.
    - DashStudio: the "Uniflag Overlay" dash imports and renders
@@ -49,7 +50,15 @@ matching 2.0.0 HelloAck when convenient.
      #1494).
    - Any sim replay: flags on panel + preview + overlay
      simultaneously. iRacing specifically: repair → meatball, furled
-     → warning accent, caution → SC board (the M10 live check).
+     → warning accent, caution → SC board (the M10 live check); plus
+     the new refinements — a standing/rolling start → the light gantry
+     (Ready→Set→Go), a debris flag → the striped board, and nearing
+     the incident limit → the blinking red frame. **The incident-limit
+     read is the one path not confirmed against a live session** (the
+     `SessionDataDict` nesting for `WeekendInfo:WeekendOptions:Incident
+     Limit` is researched, not live-verified — see docs/simhub-flag-
+     properties.md); confirm it fires here and tweak the dictionary walk
+     in `GameDataExtractor` if the shape differs.
 3. **Clean-machine walkthrough** (M12 verification): on a fresh PC,
    zip → INSTALL.md → flags on panel, unaided.
 4. **pid.codes** (unchanged): the `uniflag-f1a6` branch is staged in

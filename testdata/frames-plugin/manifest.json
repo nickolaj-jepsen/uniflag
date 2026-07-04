@@ -11,7 +11,10 @@
       "slowdown": 1,
       "meatball": false,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 0,
     "flag_age": 100,
@@ -30,7 +33,10 @@
       "slowdown": 2,
       "meatball": false,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 10,
     "flag_age": 100,
@@ -49,7 +55,10 @@
       "slowdown": 2,
       "meatball": false,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 20,
     "flag_age": 100,
@@ -68,7 +77,10 @@
       "slowdown": 3,
       "meatball": false,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 5,
     "flag_age": 100,
@@ -87,7 +99,10 @@
       "slowdown": 3,
       "meatball": false,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 12,
     "flag_age": 100,
@@ -106,7 +121,10 @@
       "slowdown": 0,
       "meatball": true,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 0,
     "flag_age": 100,
@@ -125,7 +143,10 @@
       "slowdown": 0,
       "meatball": true,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 15,
     "flag_age": 100,
@@ -144,7 +165,10 @@
       "slowdown": 0,
       "meatball": true,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 45,
     "flag_age": 100,
@@ -163,7 +187,10 @@
       "slowdown": 0,
       "meatball": true,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 0,
     "flag_age": 100,
@@ -182,7 +209,10 @@
       "slowdown": 0,
       "meatball": false,
       "black_detail": "DriveThrough",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 25,
     "flag_age": 100,
@@ -201,7 +231,10 @@
       "slowdown": 0,
       "meatball": false,
       "black_detail": "StopAndGo",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 25,
     "flag_age": 100,
@@ -220,7 +253,10 @@
       "slowdown": 0,
       "meatball": false,
       "black_detail": "DriveThrough",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 75,
     "flag_age": 100,
@@ -239,7 +275,10 @@
       "slowdown": 0,
       "meatball": false,
       "black_detail": "None",
-      "furled": true
+      "furled": true,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 10,
     "flag_age": 100,
@@ -258,7 +297,10 @@
       "slowdown": 0,
       "meatball": false,
       "black_detail": "None",
-      "furled": true
+      "furled": true,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 20,
     "flag_age": 100,
@@ -277,7 +319,10 @@
       "slowdown": 0,
       "meatball": false,
       "black_detail": "None",
-      "furled": true
+      "furled": true,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 0,
     "flag_age": 100,
@@ -296,7 +341,10 @@
       "slowdown": 0,
       "meatball": false,
       "black_detail": "None",
-      "furled": true
+      "furled": true,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 0,
     "flag_age": 100,
@@ -315,7 +363,10 @@
       "slowdown": 3,
       "meatball": true,
       "black_detail": "None",
-      "furled": true
+      "furled": true,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 100,
     "flag_age": 100,
@@ -334,7 +385,10 @@
       "slowdown": 3,
       "meatball": false,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 0,
     "flag_age": 100,
@@ -353,7 +407,10 @@
       "slowdown": 2,
       "meatball": true,
       "black_detail": "None",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 10,
     "flag_age": 100,
@@ -372,11 +429,212 @@
       "slowdown": 0,
       "meatball": true,
       "black_detail": "DriveThrough",
-      "furled": false
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": false
     },
     "frame": 25,
     "flag_age": 100,
     "connected": true,
     "description": "meatball board wins over the black-flag base (DT detail deferred); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "start_ready_breathe_peak",
+    "file": "start_ready_breathe_peak.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false,
+      "start_lights": "Ready",
+      "debris": false,
+      "incident_warning": false
+    },
+    "frame": 30,
+    "flag_age": 100,
+    "connected": true,
+    "description": "start gantry Ready at the breathe peak (m 200 — brightest, still below Set's full red); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "start_ready_breathe_trough",
+    "file": "start_ready_breathe_trough.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false,
+      "start_lights": "Ready",
+      "debris": false,
+      "incident_warning": false
+    },
+    "frame": 90,
+    "flag_age": 100,
+    "connected": true,
+    "description": "start gantry Ready at the breathe trough (m 60 — dimmest red); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "start_set_solid_red",
+    "file": "start_set_solid_red.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false,
+      "start_lights": "Set",
+      "debris": false,
+      "incident_warning": false
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true,
+    "description": "start gantry Set: five solid full-red bars (hold); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "start_go_solid_green",
+    "file": "start_go_solid_green.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false,
+      "start_lights": "Go",
+      "debris": false,
+      "incident_warning": false
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true,
+    "description": "start gantry Go: five solid green bars (launch); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "debris_stripes_offset0",
+    "file": "debris_stripes_offset0.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false,
+      "start_lights": "Off",
+      "debris": true,
+      "incident_warning": false
+    },
+    "frame": 0,
+    "flag_age": 100,
+    "connected": true,
+    "description": "debris board: yellow/red diagonal stripes at scroll offset 0; pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "debris_stripes_offset1",
+    "file": "debris_stripes_offset1.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false,
+      "start_lights": "Off",
+      "debris": true,
+      "incident_warning": false
+    },
+    "frame": 6,
+    "flag_age": 100,
+    "connected": true,
+    "description": "debris board: stripes shifted one step (scroll offset 1); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "incident_frame_over_race_idle_on",
+    "file": "incident_frame_over_race_idle_on.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": true
+    },
+    "frame": 10,
+    "flag_age": 100,
+    "connected": true,
+    "description": "incident warning red frame (on-phase) over the race-idle marker; pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "incident_frame_off_phase",
+    "file": "incident_frame_off_phase.rgb",
+    "state": {
+      "flag": "None",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": true
+    },
+    "frame": 20,
+    "flag_age": 100,
+    "connected": true,
+    "description": "incident warning off-phase: base race-idle only (accent leaves no residue); pending maintainer visual review (WPF preview)"
+  },
+  {
+    "name": "incident_frame_over_yellow",
+    "file": "incident_frame_over_yellow.rgb",
+    "state": {
+      "flag": "Yellow",
+      "wave": "None",
+      "session": "Racing",
+      "caution": "None",
+      "sectors": [],
+      "slowdown": 0,
+      "meatball": false,
+      "black_detail": "None",
+      "furled": false,
+      "start_lights": "Off",
+      "debris": false,
+      "incident_warning": true
+    },
+    "frame": 10,
+    "flag_age": 100,
+    "connected": true,
+    "description": "incident warning red frame riding over the static-yellow base; pending maintainer visual review (WPF preview)"
   }
 ]

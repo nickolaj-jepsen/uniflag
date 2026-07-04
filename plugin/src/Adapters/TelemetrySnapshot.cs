@@ -79,6 +79,37 @@ namespace Uniflag.Adapters
         public uint RawSessionFlags { get; set; }
 
         /// <summary>
+        /// Whether <see cref="IncidentCount"/> holds a live value this tick.
+        /// Only true while the running game is iRacing and the raw telemetry
+        /// exposed a <c>PlayerCarMyIncidentCount</c> entry — any missing layer
+        /// leaves it false, never throws.
+        /// </summary>
+        public bool HasIncidentCount { get; set; }
+
+        /// <summary>
+        /// The player's incident count this session (iRacing telemetry
+        /// <c>PlayerCarMyIncidentCount</c>). Meaningless unless
+        /// <see cref="HasIncidentCount"/> is true.
+        /// </summary>
+        public int IncidentCount { get; set; }
+
+        /// <summary>
+        /// Whether <see cref="IncidentLimit"/> holds a finite limit this tick.
+        /// False when the running game is not iRacing, the session-info
+        /// dictionary was unavailable/an unexpected shape, or the limit is
+        /// "unlimited"/non-numeric (in which case there is nothing to warn
+        /// against). See <c>GameDataExtractor.ExtractIRacingIncidentLimit</c>.
+        /// </summary>
+        public bool HasIncidentLimit { get; set; }
+
+        /// <summary>
+        /// The session incident limit (iRacing session-info
+        /// <c>WeekendInfo:WeekendOptions:IncidentLimit</c>). Meaningless unless
+        /// <see cref="HasIncidentLimit"/> is true.
+        /// </summary>
+        public int IncidentLimit { get; set; }
+
+        /// <summary>
         /// The no-game predicate (docs/effects-spec.md §7b trigger): a live
         /// game session needs the game process running, the player out of
         /// the menus, and a telemetry block present. <c>GamePaused</c>

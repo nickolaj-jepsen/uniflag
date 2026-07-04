@@ -92,12 +92,25 @@ namespace Uniflag.Rendering
                 case RenderLayer.CheckeredFlag:
                     PaintCheckered(s, frame);
                     break;
+                case RenderLayer.StartLightsBoard:
+                    PaintStartLights(s, state.StartLights, frame);
+                    break;
+                case RenderLayer.DebrisBoard:
+                    PaintDebris(s, frame);
+                    break;
                 case RenderLayer.RaceIdle:
                     PaintRaceIdle(s, frame);
                     break;
                 case RenderLayer.ReadyOrb:
                     PaintReady(s, frame, flagAge);
                     break;
+            }
+            if (Precedence.IncidentWarningVisible(state, connected))
+            {
+                // Painted before the two edge overlays below so the sector
+                // band (bottom rows) and furled tile (top-centre) stay
+                // legible where they meet the frame's edges.
+                PaintIncidentFrame(s, frame);
             }
             if (Precedence.SectorBandVisible(state, connected))
             {
@@ -419,6 +432,99 @@ namespace Uniflag.Rendering
                         : Black;
                     s.SetPixel(x, y, c);
                 }
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // iRacing extension boards + accent (host-only, pinned by the
+        // testdata/frames-plugin/ corpus alongside the penalty suite).
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// Start-light gantry: a centred row of five 5×12 bars. Ready — red,
+        /// breathing 60..200 at 0.5 Hz (arming); Set — solid full red (hold);
+        /// Go — solid green (launch). Ready never reaches full red, so it
+        /// stays distinct from Set even at the breathe peak; colour then tells
+        /// Set from Go. Black background.
+        /// </summary>
+        private static void PaintStartLights(FrameBuffer s, StartLights phase, uint frame)
+        {
+            Fill(s, Black);
+            const int Cells = 5;
+            const int CellW = 5;
+            const int Gap = 1;
+            const int Top = 10;
+            const int BarH = 12;
+            // Five bars + four gaps = 29 px, centred → xLeft 1 (bars at
+            // x 1, 7, 13, 19, 25); each spans y 10..21.
+            int xLeft = (Width - (Cells * CellW + (Cells - 1) * Gap)) / 2;
+            Rgb color;
+            switch (phase)
+            {
+                case StartLights.Go:
+                    color = Green;
+                    break;
+                case StartLights.Set:
+                    color = Red;
+                    break;
+                default: // Ready
+                    byte m = (byte)(60 + Anim.Breathe(frame, 120) * 140 / 255);
+                    color = Anim.ScaleRgb(Red, m);
+                    break;
+            }
+            for (int cell = 0; cell < Cells; cell++)
+            {
+                int x0 = xLeft + cell * (CellW + Gap);
+                for (int y = Top; y < Top + BarH; y++)
+                {
+                    for (int x = x0; x < x0 + CellW; x++)
+                    {
+                        s.SetPixel(x, y, color);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Debris / surface warning board: yellow-and-red diagonal stripes
+        /// (the striped surface flag), scrolling toward the top-left at
+        /// 1 px / 6 frames. Pure function of the frame counter.
+        /// </summary>
+        private static void PaintDebris(FrameBuffer s, uint frame)
+        {
+            const int StripeW = 4;
+            int off = unchecked((int)(frame / 6));
+            FillWith(s, (x, y) =>
+            {
+                // FloorDiv keeps the stripe parity correct across the panel;
+                // x + y + off never goes negative here, but port it faithfully
+                // (docs/effects-spec.md §2.6), like the checkered scroll.
+                int stripe = Anim.FloorDiv(x + y + off, StripeW) & 1;
+                return stripe == 0 ? Yellow : Red;
+            });
+        }
+
+        /// <summary>
+        /// Incident-limit warning accent: a 1-px red frame around the panel,
+        /// blinking at 2 Hz (18/30 duty — off-phase leaves the base
+        /// untouched). Distinct from a red flag, which fills the whole panel;
+        /// this only tints the edge over whatever the driver is being shown.
+        /// </summary>
+        private static void PaintIncidentFrame(FrameBuffer s, uint frame)
+        {
+            if (!Anim.Strobe60(frame, 2))
+            {
+                return;
+            }
+            for (int x = 0; x < Width; x++)
+            {
+                s.SetPixel(x, 0, Red);
+                s.SetPixel(x, Height - 1, Red);
+            }
+            for (int y = 0; y < Height; y++)
+            {
+                s.SetPixel(0, y, Red);
+                s.SetPixel(Width - 1, y, Red);
             }
         }
 

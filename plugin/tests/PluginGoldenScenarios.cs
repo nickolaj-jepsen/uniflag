@@ -188,6 +188,64 @@ namespace Uniflag.Tests
                     Penalty(flag: Flag.Black, blackDetail: BlackFlagDetail.DriveThrough, meatball: true),
                     frame: 25,
                     "meatball board wins over the black-flag base (DT detail deferred)"),
+
+                // --- Start-light gantry (iRacing standing/rolling start).
+                //     Ready breathes red 60..200 at 0.5 Hz (peak frame 30,
+                //     trough frame 90); Set and Go are solid, frame-independent.
+                new Scenario(
+                    "start_ready_breathe_peak",
+                    Penalty(startLights: StartLights.Ready),
+                    frame: 30,
+                    "start gantry Ready at the breathe peak (m 200 — brightest, still below Set's full red)"),
+                new Scenario(
+                    "start_ready_breathe_trough",
+                    Penalty(startLights: StartLights.Ready),
+                    frame: 90,
+                    "start gantry Ready at the breathe trough (m 60 — dimmest red)"),
+                new Scenario(
+                    "start_set_solid_red",
+                    Penalty(startLights: StartLights.Set),
+                    frame: 0,
+                    "start gantry Set: five solid full-red bars (hold)"),
+                new Scenario(
+                    "start_go_solid_green",
+                    Penalty(startLights: StartLights.Go),
+                    frame: 0,
+                    "start gantry Go: five solid green bars (launch)"),
+
+                // --- Debris board: yellow/red diagonal stripes scrolling
+                //     1 px / 6 frames. Frame 0 (offset 0) and frame 6
+                //     (offset 1) pin the scroll.
+                new Scenario(
+                    "debris_stripes_offset0",
+                    Penalty(debris: true),
+                    frame: 0,
+                    "debris board: yellow/red diagonal stripes at scroll offset 0"),
+                new Scenario(
+                    "debris_stripes_offset1",
+                    Penalty(debris: true),
+                    frame: 6,
+                    "debris board: stripes shifted one step (scroll offset 1)"),
+
+                // --- Incident-limit warning frame: 2 Hz red edge accent over
+                //     the base. On-phase (frame 10) over race-idle and over a
+                //     yellow base; off-phase (frame 20) proves it leaves the
+                //     base untouched.
+                new Scenario(
+                    "incident_frame_over_race_idle_on",
+                    Penalty(incidentWarning: true),
+                    frame: 10,
+                    "incident warning red frame (on-phase) over the race-idle marker"),
+                new Scenario(
+                    "incident_frame_off_phase",
+                    Penalty(incidentWarning: true),
+                    frame: 20,
+                    "incident warning off-phase: base race-idle only (accent leaves no residue)"),
+                new Scenario(
+                    "incident_frame_over_yellow",
+                    Penalty(flag: Flag.Yellow, incidentWarning: true),
+                    frame: 10,
+                    "incident warning red frame riding over the static-yellow base"),
             };
 
             var seen = new HashSet<string>();
@@ -210,7 +268,10 @@ namespace Uniflag.Tests
             byte slowdown = 0,
             bool meatball = false,
             BlackFlagDetail blackDetail = BlackFlagDetail.None,
-            bool furled = false)
+            bool furled = false,
+            StartLights startLights = StartLights.Off,
+            bool debris = false,
+            bool incidentWarning = false)
         {
             RenderState state = RenderState.Default;
             state.Flag = flag;
@@ -221,6 +282,9 @@ namespace Uniflag.Tests
             state.Meatball = meatball;
             state.BlackDetail = blackDetail;
             state.Furled = furled;
+            state.StartLights = startLights;
+            state.Debris = debris;
+            state.IncidentWarning = incidentWarning;
             return state;
         }
 
@@ -260,7 +324,11 @@ namespace Uniflag.Tests
                     .Append(s.State.Slowdown.ToString(CultureInfo.InvariantCulture)).Append(",\n");
                 sb.Append("      \"meatball\": ").Append(s.State.Meatball ? "true" : "false").Append(",\n");
                 sb.Append("      \"black_detail\": \"").Append(s.State.BlackDetail).Append("\",\n");
-                sb.Append("      \"furled\": ").Append(s.State.Furled ? "true" : "false").Append('\n');
+                sb.Append("      \"furled\": ").Append(s.State.Furled ? "true" : "false").Append(",\n");
+                sb.Append("      \"start_lights\": \"").Append(s.State.StartLights).Append("\",\n");
+                sb.Append("      \"debris\": ").Append(s.State.Debris ? "true" : "false").Append(",\n");
+                sb.Append("      \"incident_warning\": ")
+                    .Append(s.State.IncidentWarning ? "true" : "false").Append('\n');
                 sb.Append("    },\n");
                 sb.Append("    \"frame\": ").Append(s.Frame.ToString(CultureInfo.InvariantCulture)).Append(",\n");
                 sb.Append("    \"flag_age\": ").Append(s.FlagAge.ToString(CultureInfo.InvariantCulture)).Append(",\n");
