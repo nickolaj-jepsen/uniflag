@@ -6,6 +6,11 @@
     <LangVersion>9.0</LangVersion>
     <RootNamespace>Uniflag</RootNamespace>
     <AssemblyName>UniflagPlugin</AssemblyName>
+    <!-- Release version — kept in lockstep with firmware/Cargo.toml (HelloAck fw tail)
+         and cli/Cargo.toml; the release zip ships plugin + firmware as one unit. -->
+    <Version>2.0.0</Version>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
     <!-- SimHub's own DLLs are the reference surface; they are proprietary and never
          committed or shipped. Point SimHubDir at an install or an extracted installer. -->
     <SimHubDir Condition="'$(SimHubDir)' == ''">C:\Program Files (x86)\SimHub</SimHubDir>

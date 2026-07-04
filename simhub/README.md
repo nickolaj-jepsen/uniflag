@@ -8,12 +8,21 @@ framebuffer device; there is nothing to configure on it.
 > Tested with SimHub **9.11.21** (the project's pinned reference
 > version). Any modern 9.x should work.
 
+Grab `uniflag-<version>.zip` from the [releases
+page](https://github.com/nickolaj-jepsen/uniflag/releases). One zip holds
+everything, versioned together: `UniflagPlugin.dll` (the plugin),
+`uniflag.uf2` (the firmware), the `Uniflag Overlay/` dash folder, and
+`INSTALL.md` (a condensed version of this guide). Always install plugin
+and firmware from the same zip — releases are only tested as a matched
+pair, and the plugin refuses to drive a panel whose protocol version
+differs.
+
 ## Install the plugin
 
-1. Copy `UniflagPlugin.dll` into the SimHub install directory
-   (`C:\Program Files (x86)\SimHub` by default) — the same folder that
-   holds `SimHubWPF.exe`. Do **not** put it in a subfolder; SimHub only
-   scans its own directory.
+1. Copy `UniflagPlugin.dll` from the release zip into the SimHub
+   install directory (`C:\Program Files (x86)\SimHub` by default) — the
+   same folder that holds `SimHubWPF.exe`. Do **not** put it in a
+   subfolder; SimHub only scans its own directory.
 2. Start SimHub. It shows a *"New plugins have been detected!"* dialog —
    enable **Uniflag** there (or later via **Settings → Plugins**).
 3. A **Uniflag** entry appears in the left-hand menu. That tab holds the
@@ -27,8 +36,11 @@ for the reference assemblies — override the location with
 
 ## Plug in the panel
 
-Flash the firmware first (see the top-level README, `just flash`). Then
-just plug the panel in — no port picking needed:
+Flash the firmware first: hold **BOOTSEL** on the Cosmic Unicorn while
+plugging in USB (it mounts as the `RPI-RP2` drive), then copy the
+release zip's `uniflag.uf2` onto that drive. (Building from source
+instead: `just flash`, see the top-level README.) Then just plug the
+panel in — no port picking needed:
 
 - **Auto-discovery**: the plugin scans for the panel's USB identity
   (VID `0x1209`, PID `0x0001` — pid.codes test PID; the registered PID
@@ -60,9 +72,12 @@ just plug the panel in — no port picking needed:
 
 The plugin serves a browser-rendered virtual panel at
 `http://127.0.0.1:8972/` (localhost-only, by design). A ready-made
-DashStudio overlay lives at `overlay/dash/Uniflag Overlay/` — import it
-to get the virtual panel as an in-game overlay. Details, wire format,
-and design contracts: [`docs/web-overlay.md`](../docs/web-overlay.md).
+DashStudio overlay ships in the release zip as the `Uniflag Overlay/`
+folder (source: `overlay/dash/Uniflag Overlay/`) — copy the whole
+folder into `C:\Program Files (x86)\SimHub\DashTemplates\` and add
+*Uniflag Overlay* as an overlay in Dash Studio to get the virtual panel
+in-game. Details, wire format, and design contracts:
+[`docs/web-overlay.md`](../docs/web-overlay.md).
 
 ## Troubleshooting
 

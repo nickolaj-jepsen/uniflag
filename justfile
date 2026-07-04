@@ -125,3 +125,10 @@ plugin-build:
 [windows]
 plugin-test:
     dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}"
+
+# Assemble the release zip locally: plugin DLL + firmware UF2 + overlay dash +
+# INSTALL.md, identical layout (and only-one-DLL audit) to the CI release job.
+# Output: target/uniflag-<git describe>.zip (or uniflag-dev.zip if dirty).
+[windows]
+package: plugin-build img
+    powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File packaging\package.ps1

@@ -14,6 +14,17 @@ identity: VID `0x1209`, PID `0x0001` (pid.codes **test PID** — the
 registered PID `0xF1A6` replaces it once granted; see
 [v2-tracking.md](v2-tracking.md)).
 
+> **PID gate — M12 decision, 2026-07-04:** the pid.codes registration
+> for `0xF1A6` is still pending (PR filing maintainer-deferred), so
+> **v2.0 ships on the test PID `0x1209:0x0001`** — an explicit
+> decision, not a slip. Follow-up once the registration is granted:
+> swap the PID constant in `proto/src/packet.rs` (`USB_PID`), its C#
+> mirror (`plugin/src/Device/DeviceDiscovery.cs`), this section, and
+> `simhub/README.md` to `0xF1A6`, and re-run the proto/plugin constant
+> tests. No flag-day: the plugin's discovery filter already accepts
+> both PIDs, so field devices keep working through the swap and are
+> collapsed to the registered PID only after a reflash cycle.
+
 ## Framing
 
 ```text

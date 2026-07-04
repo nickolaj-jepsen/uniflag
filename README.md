@@ -19,6 +19,15 @@ the hardware.
 
 [SimHub]: https://www.simhubdash.com
 
+## Install (prebuilt)
+
+Grab `uniflag-<version>.zip` from the
+[releases page](https://github.com/nickolaj-jepsen/uniflag/releases) — one
+zip with the plugin DLL, the firmware UF2, the DashStudio overlay dash,
+and an `INSTALL.md`. Plugin and firmware are versioned together; always
+install both from the same zip. Full guide:
+[`simhub/README.md`](simhub/README.md). Building from source: read on.
+
 ## Repo layout
 
 - `proto/` — the frozen v2 binary wire protocol (Rust, `no_std`):
@@ -74,6 +83,7 @@ with no arguments to list them.
 | `just plugin-test`   | run the plugin test suite (Windows)                                       |
 | `just overlay-serve` | serve the overlay page from disk for iteration outside SimHub            |
 | `just golden-regen`  | regenerate the *regenerable* golden fixtures — deliberate commits only    |
+| `just package`       | assemble the release zip locally (Windows; same layout + audit as CI)     |
 
 ## Flashing
 

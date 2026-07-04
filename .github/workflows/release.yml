@@ -1,5 +1,10 @@
 name: Release
 
+# Tag-triggered release: one versioned zip containing the plugin DLL, the
+# firmware UF2, the DashStudio overlay dash, and INSTALL.md. The local
+# `just package` recipe (packaging/package.ps1) produces the identical
+# layout — keep the two in lockstep.
+
 on:
   push:
     tags: ['v*']
@@ -8,7 +13,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  firmware:
+    name: firmware (uf2)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,10 +23,192 @@ jobs:
         with:
           tool: just,elf2uf2-rs
       - run: just img
-      - name: Rename UF2 with tag
-        run: cp target/uniflag.uf2 uniflag-${{ github.ref_name }}.uf2
-      - uses: softprops/action-gh-release@v2
+      - name: Upload UF2 artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: uniflag-${{ github.ref_name }}.uf2
+          name: uniflag-uf2
+          path: target/uniflag.uf2
+          if-no-files-found: error
+
+  plugin:
+    name: plugin (windows)
+    runs-on: windows-latest
+    env:
+      SIMHUB_VERSION: '9.11.21'
+      # SHA-256 of the SimHub.9.11.21.zip GitHub release asset (computed 2026-07-03).
+      SIMHUB_ZIP_SHA256: '4660A46FC741CD108E472AFFCD6E05B294C9D34407FA2A14863BB63461C6FF70'
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same cache key as ci.yml so tag builds hit the entries the CI runs on
+      # main already populated. The proprietary DLLs live only in this
+      # ephemeral, repo-scoped cache — never in the repo or any published
+      # artifact (the packaging job audits that).
+      - name: Cache SimHub reference assemblies
+        id: simhub-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\simhub-refs
+          key: ${{ runner.os }}-simhub-refs-${{ env.SIMHUB_VERSION }}-v1
+
+      - name: Install SimHub silently and stage reference DLLs
+        if: steps.simhub-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          # innoextract (newest release 1.9, Inno Setup ceiling 6.0.5) cannot
+          # unpack SimHub's Inno Setup 6.4.3 installer, so the headless silent
+          # install is the primary path, not a fallback.
+          $ErrorActionPreference = 'Stop'
+          $v    = $env:SIMHUB_VERSION
+          $zip  = "$env:RUNNER_TEMP\SimHub.$v.zip"
+          $tmp  = "$env:RUNNER_TEMP\simhub-setup"
+          $app  = "$env:RUNNER_TEMP\simhub-app"
+          $refs = "$env:RUNNER_TEMP\simhub-refs"
+          $log  = "$env:RUNNER_TEMP\simhub-install.log"
+
+          curl.exe -fsSL -o $zip "https://github.com/SHWotever/SimHub/releases/download/$v/SimHub.$v.zip"
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+          if ($hash -ne $env:SIMHUB_ZIP_SHA256) {
+            throw "SimHub.$v.zip SHA-256 mismatch: got $hash, expected $env:SIMHUB_ZIP_SHA256"
+          }
+
+          Expand-Archive $zip -DestinationPath $tmp -Force
+          $setup = Get-ChildItem $tmp -Filter 'SimHubSetup_*.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'SimHubSetup_*.exe not found inside release zip' }
+
+          # The setup exe is a GUI-subsystem app: Start-Process -Wait is required.
+          $p = Start-Process -FilePath $setup.FullName -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SP-', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS',
+            "/DIR=$app", "/LOG=$log"
+          )
+          if ($p.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log -Tail 120 }
+            throw "SimHub installer exited with code $($p.ExitCode)"
+          }
+
+          New-Item -ItemType Directory -Force $refs | Out-Null
+          foreach ($dll in 'SimHub.Plugins.dll', 'GameReaderCommon.dll', 'log4net.dll', 'SimHub.Logging.dll') {
+            Copy-Item (Join-Path $app $dll) $refs
+          }
+          Get-ChildItem $refs | Format-Table Name, Length
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Build plugin
+        shell: pwsh
+        env:
+          UNIFLAG_SIMHUB_DIR: ${{ runner.temp }}\simhub-refs
+        run: just plugin-build
+
+      - name: Test plugin
+        shell: pwsh
+        env:
+          UNIFLAG_SIMHUB_DIR: ${{ runner.temp }}\simhub-refs
+        run: just plugin-test
+
+      # Path is the single DLL, not the bin directory: reference assemblies
+      # are Private=false so they never land in bin, but uploading only the
+      # exact file makes that a guarantee rather than an assumption.
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UniflagPlugin
+          path: plugin/src/bin/Release/net48/UniflagPlugin.dll
+          if-no-files-found: error
+
+  package:
+    name: package + publish
+    runs-on: ubuntu-latest
+    needs: [firmware, plugin]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Versions are hand-bumped in five places (csproj → DLL self-report,
+      # firmware/Cargo.toml → HelloAck fw tail, cli/Cargo.toml, flake.nix ×2).
+      # The zip is named after the tag, so refuse to publish if the tag
+      # disagrees with any stamped version. Prerelease tags (v2.0.0-rc1)
+      # share the base version with their final release.
+      - name: Check tag matches stamped versions
+        run: |
+          set -euo pipefail
+          tag='${{ github.ref_name }}'
+          base="${tag#v}"; base="${base%%-*}"
+          stamped=$(
+            sed -n 's/^version = "\(.*\)"$/\1/p' firmware/Cargo.toml cli/Cargo.toml
+            sed -n 's/^ *version = "\(.*\)";$/\1/p' flake.nix
+            sed -n 's|.*<Version>\(.*\)</Version>.*|\1|p' plugin/src/UniflagPlugin.csproj
+            sed -n 's|.*<AssemblyVersion>\(.*\)\.0</AssemblyVersion>.*|\1|p' plugin/src/UniflagPlugin.csproj
+            sed -n 's|.*<FileVersion>\(.*\)\.0</FileVersion>.*|\1|p' plugin/src/UniflagPlugin.csproj
+          )
+          echo "tag $tag → base version $base; stamped versions:"
+          echo "$stamped"
+          if [ "$(echo "$stamped" | wc -l)" -ne 7 ]; then
+            echo "::error::expected 7 stamped versions (firmware, cli, flake ×2, csproj ×3) — a version pattern changed; update this check"
+            exit 1
+          fi
+          if echo "$stamped" | grep -qvxF "$base"; then
+            echo "::error::tag $tag (base $base) disagrees with the stamped versions above — forgot a bump?"
+            exit 1
+          fi
+
+      - name: Download UF2 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: uniflag-uf2
+          path: stage
+
+      - name: Download plugin artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: UniflagPlugin
+          path: stage
+
+      - name: Assemble zip
+        run: |
+          set -euo pipefail
+          cp packaging/INSTALL.md stage/
+          # The help link floats on blob/main in the source tree; pin it to
+          # the tag so the shipped doc always matches the shipped code (the
+          # tag exists on the remote — this workflow only runs on tag push).
+          sed -i 's|/blob/main/|/blob/${{ github.ref_name }}/|' stage/INSTALL.md
+          grep -q '/blob/${{ github.ref_name }}/' stage/INSTALL.md
+          cp -r "overlay/dash/Uniflag Overlay" stage/
+          (cd stage && zip -r "../uniflag-${{ github.ref_name }}.zip" .)
+          unzip -l "uniflag-${{ github.ref_name }}.zip"
+
+      - name: Audit zip contents (never ship proprietary DLLs)
+        run: |
+          set -euo pipefail
+          zipfile="uniflag-${{ github.ref_name }}.zip"
+          entries=$(unzip -Z1 "$zipfile")
+
+          # No DLL other than our own — SimHub's reference assemblies are
+          # proprietary and must never leak into a release asset.
+          bad=$(echo "$entries" | grep -i '\.dll$' | grep -vx 'UniflagPlugin.dll' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::unexpected DLLs in release zip:"
+            echo "$bad"
+            exit 1
+          fi
+
+          # Exactly the four expected top-level entries.
+          top=$(echo "$entries" | sed 's|/.*|/|' | LC_ALL=C sort -u)
+          expected=$(printf 'INSTALL.md\nUniflag Overlay/\nUniflagPlugin.dll\nuniflag.uf2\n')
+          if [ "$top" != "$expected" ]; then
+            echo "::error::zip top-level layout mismatch"
+            echo "--- expected ---"; echo "$expected"
+            echo "--- got ---"; echo "$top"
+            exit 1
+          fi
+          echo "audit OK: only UniflagPlugin.dll ships; top-level layout exact"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: uniflag-${{ github.ref_name }}.zip
           generate_release_notes: true
           fail_on_unmatched_files: true
+          # rc/beta tags (anything with a hyphen, e.g. v2.0.0-rc1) are prereleases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
