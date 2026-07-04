@@ -230,22 +230,25 @@ double-waved flag. To recover that, fall back to raw data:
 
 ## Generic adapter mapping (plugin)
 
-How the v2 plugin's generic adapter (`plugin/src/Adapters/GenericAdapter.cs`) maps
-the unified layer to the render state. Doc and code state the same contract —
-change them together.
+How the plugin's generic adapter (`plugin/src/Adapters/GenericAdapter.cs`) maps
+the unified layer to the Grammar `SignalState` (docs/flag-grammar.md §9-§10).
+Doc and code state the same contract — change them together.
 
 - **Inputs**: the seven typed unified flags off `StatusDataBase` (int 0/1, see
   above), `SessionTypeName`, and `GameData.GamePaused`. No raw data — per-sim
-  refinements (waves, VSC/SC, sector yellows) layer on in M10 via game-keyed
-  adapters that run after the generic one and override its result.
-- **Flag priority** when several are set (parity with the v1 Custom Serial
-  NCalc formula, retired at M11 — see git history):
-  **Yellow > Blue > Black > White > Checkered > Green > Orange.**
-  The unified layer never surfaces a red flag, so the generic adapter never emits
-  one either.
-- **Wave heuristic**: the unified booleans can't distinguish a displayed from a
-  waved flag, so a yellow is always treated as **single-waved** (the marshal is
-  signalling); every other flag is static. Same tradeoff the v1 formula made.
+  refinements (tiers, VSC/SC/FCY, sector yellows, notices) layer on via
+  game-keyed adapters that run after the generic one and override its result.
+- **Track-flag priority** when several are set:
+  **Yellow > Blue > White > Checkered > Green.** The unified black and orange
+  flags are *not* in this ladder — they map to the orthogonal
+  `BlackFlag`/`Meatball` dimensions so the compositor's demotion rule
+  (docs/flag-grammar.md §5) can keep them visible under a winning track flag.
+  The unified layer never surfaces a red flag, so the generic adapter never
+  emits one either.
+- **Tier heuristic**: the unified booleans can't distinguish a displayed from a
+  waved flag, so a yellow always enters at **Tier 1 (Alert)** — the
+  marshal-is-waving guess; every other flag enters at Tier 0 (Ambient). Same
+  tradeoff the retired v1 formula made, re-expressed on the tier ladder.
 - **Session mapping** from `SessionTypeName` (ordinal case-insensitive substring
   matching): `GamePaused` → *Paused* outright; null/empty → *Unknown*; names
   containing `practice`, `qualif`, `test`, `warmup`, `hotlap`, `hotstint` or
@@ -254,64 +257,67 @@ change them together.
   "Qualifying n"); otherwise names containing `race` → *Racing*; anything else →
   *Unknown*. Pre-race keywords are checked before `race` so a combined name can't
   misroute.
-- **Caution / sectors**: always none/empty from the generic adapter — first-class
-  VSC/SC and sector-local yellows only exist in per-sim raw data (see the tables
-  above).
+- **Caution / sectors / notices**: always defaults from the generic adapter —
+  first-class VSC/SC/FCY, sector-local yellows, start sequences and penalty
+  notices only exist in per-sim raw data (see the tables above).
 - **No-game predicate**: the plugin shows its connected-idle marker (instead of
   running the adapter) unless `GameRunning && !GameInMenu && NewData != null`.
   A paused game still counts as live — it renders as the *Paused* session, not as
   connected-idle.
 
-## iRacing adapter mapping (plugin, M10)
+## iRacing adapter mapping (plugin)
 
 How the iRacing raw-telemetry refiner (`plugin/src/Adapters/IRacingAdapter.cs`)
-layers over the generic result. It matches `GameData.GameName == "IRacing"`
+layers over the generic result, emitting the Grammar `SignalState`
+(docs/flag-grammar.md §10). It matches `GameData.GameName == "IRacing"`
 (ordinal case-insensitive; the code that also names the `PluginsData\IRacing`
 settings folder) and only ever *refines* — if the raw SessionFlags mask is
 unavailable for a tick, the generic result stands untouched. Doc and code state
 the same contract — change them together.
 
-- **Red** (`0x10`) → `Flag.Red` (raw-only; the unified layer never carries red),
-  wave forced to none.
+- **Red** (`0x10`) → `TrackFlag.Red` at Tier 2 (raw-only; the unified layer
+  never carries red).
 - **Caution** (`0x4000 | 0x8000`) → the **SC board** (`Caution.SafetyCar`).
   iRacing's full-course caution is a deployed pace car and the sim has no VSC,
-  so the SC board is always the right board.
-- **Yellow wave refinement**: when the generic flag is yellow, the wave becomes
-  *Single* iff `yellowWaving | cautionWaving` is set, else *None* — raw kills
-  the generic "yellow is always Single" guess for displayed-only yellows.
-  iRacing has no double-waved concept, so *Double* never appears.
-- **Conservative enrichment** (only when the generic flag is *None*):
-  `disqualify` → black flag. Never re-ranks a flag the unified layer already
-  chose — the generic priority order is the contract. `greenHeld` (`0x400`) is
+  so the SC board is always the right board. The compositor rides it on a
+  yellow field.
+- **Yellow tier refinement**: when the generic flag is yellow,
+  `cautionWaving` → Tier 2, `yellowWaving | caution` → Tier 1, displayed-only
+  → Tier 0 — raw kills the generic "yellow is always Alert" guess. Blue and
+  green firm up to Tier 1 (a blue shown to you and a start/restart both want
+  the attention pulse).
+- **Disqualify** (`0x20000`) → the orthogonal black-family order with
+  `BlackDetail.Disqualified` — never discarded, whatever the track flag; the
+  compositor's demotion rule keeps it visible. `greenHeld` (`0x400`) is
   deliberately **not** mapped to green: iRacing raises it while the starter
   still holds the green *furled* (start/restart imminent), so surfacing it as
-  a green flag made the panel jump the start. It folds into the start-light
-  gantry instead (next bullet); the panel goes green only when the `green` bit
-  itself flies.
-- **Penalties** (host-only `RenderState` dimensions, never on the wire):
-  `repair` (`0x100000`) → meatball board (the unified layer maps the same bit
-  to `Flag_Orange`; the meatball board outranks the orange base by precedence);
-  `furled` (`0x80000`) → furled warning accent. **Slowdown severity and
-  DT-vs-SG stay defaulted** — no iRacing telemetry source exists (see the
-  penalty-telemetry-limits note above).
-- **Start-lights** (host-only `RenderState.StartLights`): `startGo`
-  (`0x80000000`) → Go, `startSet` (`0x40000000`) or `greenHeld` (`0x400`,
-  furled green in the starter's hand) → Set, `startReady`
-  (`0x20000000`) or rolling-start `oneLapToGreen` (`0x200`) → Ready; else Off
-  (`startHidden` included). Rendered as a five-light gantry board, but only in
-  the `Flag.None` idle arm — a real flag/caution/penalty supersedes it, and at
-  Go the green flag takes over. The end-of-race `tenToGo`/`fiveToGo` bits are
-  **not** the standing-start sequence and stay unmapped.
-- **Debris** (host-only `RenderState.Debris`): `debris` (`0x40`) → a
-  yellow/red striped hazard board, also only in the `Flag.None` arm (a unified
-  flag, which already conveys caution, supersedes it). The unified layer never
-  surfaces this bit.
-- **Incident warning** (host-only `RenderState.IncidentWarning`): fires when
+  a green flag made the panel jump the start. It folds into the gantry's Set
+  phase instead; the panel goes green only when the `green` bit itself flies.
+- **Penalties**: `repair` (`0x100000`) → the meatball dimension (the unified
+  layer maps the same bit to `Flag_Orange`, which the generic adapter already
+  routes there — the meatball renders as its true form, a black field with
+  the orange disc); `furled` (`0x80000`) → the furled warning frame.
+  **DT-vs-SG stays defaulted** — no iRacing telemetry source exists (see the
+  penalty-telemetry-limits note above), so a bare `black` bit stays a bare
+  black flag.
+- **Start sequence** (`SignalState.StartPhase`): `startGo` (`0x80000000`) →
+  Go, `startSet` (`0x40000000`) or `greenHeld` (`0x400`, furled green in the
+  starter's hand) → Set, `startReady` (`0x20000000`) or rolling-start
+  `oneLapToGreen` (`0x200`) → Ready; else Off (`startHidden` included).
+  Rendered as the five-light gantry board; under the compositor it can ride
+  any field, and at Go the green flag takes the field naturally. iRacing
+  exposes no light counts, so `StartLightsLit` stays 0 (= all five at Set).
+- **Countdown notices**: `tenToGo` (`0x800`) → `CountdownLaps = 10`,
+  `fiveToGo` (`0x1000`) → 5 — the numeric notice boards.
+- **Debris**: `debris` (`0x40`) → `TrackFlag.Debris`, only when no other
+  track flag won (lowest track state; the real signal is the striped surface
+  flag, rendered as a field). The unified layer never surfaces this bit.
+- **Incident warning** (`SignalState.IncidentWarning`): fires when
   `PlayerCarMyIncidentCount` ≥ session `IncidentLimit − IncidentWarnMargin`
-  (margin 4 ≈ one hard incident). Rendered as a blinking-red-frame accent
-  (suppressed under red / disconnected, like the furled accent). Independent
-  of the SessionFlags mask, so a mask-less tick still warns. See the
-  incident-limit note below for the source.
+  (margin 4 ≈ one hard incident). Rendered as the red warning frame
+  (suppressed under takeovers and DQ). Independent of the SessionFlags mask,
+  so a mask-less tick still warns. See the incident-limit note below for the
+  source.
 - **Not touched**: checkered/white/green/black are single bits the unified
   layer already carries 1:1; blue stands as the unified layer derives it —
   `blue && !green`, so on a simultaneous blue+green tick the panel shows
@@ -319,8 +325,8 @@ the same contract — change them together.
   that overlap: SimHub suppresses it on purpose (issue
   [#436](https://github.com/SHWotever/SimHub/issues/436), spurious blues
   around starts), and green is the flag that matters in that window; session
-  mapping stays generic; the end-of-race `tenToGo`/`fiveToGo` bits remain
-  unmapped (candidates for future refinement, deliberately not guessed at).
+  mapping stays generic. `crossed` (halfway) remains unmapped — a future
+  candidate, deliberately not guessed at.
 
 **Incident-limit source (researched, not live-verified).** iRacing's incident
 limit lives in the session-info YAML at

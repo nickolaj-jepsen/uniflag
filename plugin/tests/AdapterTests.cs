@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Adapter-layer tests: the generic unified Flag_* mapping matrix, the flag
-// priority order, the session-name mapping, the no-game predicate, the
-// pipeline's refiner seam, and the SimHub-typed extractor. Everything
-// except GameDataExtractorTests is SimHub-free.
+// Adapter-layer tests: the generic unified Flag_* mapping matrix, the
+// track-flag priority order, the orthogonal black/meatball dimensions, the
+// session-name mapping, the no-game predicate, the pipeline's refiner seam,
+// and the SimHub-typed extractor. Everything except GameDataExtractorTests
+// is SimHub-free.
 
 using GameReaderCommon;
 using Uniflag.Adapters;
-using Uniflag.Rendering;
+using Uniflag.Rendering.Grammar;
 using Xunit;
+using SectorSet = Uniflag.Rendering.SectorSet;
+using Session = Uniflag.Rendering.Session;
 
 namespace Uniflag.Tests
 {
@@ -28,81 +31,95 @@ namespace Uniflag.Tests
             };
         }
 
-        private static void SetFlag(TelemetrySnapshot snapshot, Flag flag)
+        private static void SetFlag(TelemetrySnapshot snapshot, TrackFlag flag)
         {
             switch (flag)
             {
-                case Flag.Yellow:
+                case TrackFlag.Yellow:
                     snapshot.FlagYellow = true;
                     break;
-                case Flag.Blue:
+                case TrackFlag.Blue:
                     snapshot.FlagBlue = true;
                     break;
-                case Flag.Black:
-                    snapshot.FlagBlack = true;
-                    break;
-                case Flag.White:
+                case TrackFlag.White:
                     snapshot.FlagWhite = true;
                     break;
-                case Flag.Checkered:
+                case TrackFlag.Checkered:
                     snapshot.FlagCheckered = true;
                     break;
-                case Flag.Green:
+                case TrackFlag.Green:
                     snapshot.FlagGreen = true;
-                    break;
-                case Flag.Orange:
-                    snapshot.FlagOrange = true;
                     break;
             }
         }
 
-        private static RenderState Map(TelemetrySnapshot snapshot)
+        private static SignalState Map(TelemetrySnapshot snapshot)
         {
-            RenderState state = RenderState.Default;
+            SignalState state = SignalState.Default;
             new GenericAdapter().Map(snapshot, ref state);
             return state;
         }
 
         [Theory]
-        [InlineData(Flag.Yellow, WaveLevel.Single)]
-        [InlineData(Flag.Blue, WaveLevel.None)]
-        [InlineData(Flag.Black, WaveLevel.None)]
-        [InlineData(Flag.White, WaveLevel.None)]
-        [InlineData(Flag.Checkered, WaveLevel.None)]
-        [InlineData(Flag.Green, WaveLevel.None)]
-        [InlineData(Flag.Orange, WaveLevel.None)]
-        public void EachUnifiedFlagAloneMapsDirectly(Flag flag, WaveLevel wantWave)
+        [InlineData(TrackFlag.Yellow, Tier.Alert)]
+        [InlineData(TrackFlag.Blue, Tier.Ambient)]
+        [InlineData(TrackFlag.White, Tier.Ambient)]
+        [InlineData(TrackFlag.Checkered, Tier.Ambient)]
+        [InlineData(TrackFlag.Green, Tier.Ambient)]
+        public void EachUnifiedTrackFlagAloneMapsDirectly(TrackFlag flag, Tier wantTier)
         {
             TelemetrySnapshot snapshot = Live();
             SetFlag(snapshot, flag);
-            RenderState state = Map(snapshot);
+            SignalState state = Map(snapshot);
             Assert.Equal(flag, state.Flag);
             // The unified layer cannot distinguish displayed from waved —
-            // only yellow gets the documented Single-wave heuristic.
-            Assert.Equal(wantWave, state.Wave);
+            // only yellow gets the documented Alert-tier heuristic.
+            Assert.Equal(wantTier, state.Tier);
             Assert.Equal(Session.Racing, state.Session);
             Assert.Equal(Caution.None, state.Caution);
             Assert.True(state.Sectors.IsEmpty);
+            Assert.False(state.BlackFlag);
+            Assert.False(state.Meatball);
+        }
+
+        [Fact]
+        public void UnifiedBlackMapsToTheOrthogonalOrderDimension()
+        {
+            TelemetrySnapshot snapshot = Live();
+            snapshot.FlagBlack = true;
+            SignalState state = Map(snapshot);
+            Assert.True(state.BlackFlag);
+            Assert.Equal(BlackDetail.None, state.BlackDetail);
+            Assert.Equal(TrackFlag.None, state.Flag);
+        }
+
+        [Fact]
+        public void UnifiedOrangeMapsToTheMeatballDimension()
+        {
+            TelemetrySnapshot snapshot = Live();
+            snapshot.FlagOrange = true;
+            SignalState state = Map(snapshot);
+            Assert.True(state.Meatball);
+            Assert.Equal(TrackFlag.None, state.Flag);
         }
 
         [Fact]
         public void NoFlagSetMapsToNone()
         {
-            RenderState state = Map(Live());
-            Assert.Equal(Flag.None, state.Flag);
-            Assert.Equal(WaveLevel.None, state.Wave);
+            SignalState state = Map(Live());
+            Assert.Equal(TrackFlag.None, state.Flag);
+            Assert.Equal(Tier.Ambient, state.Tier);
+            Assert.False(state.BlackFlag);
+            Assert.False(state.Meatball);
         }
 
-        // Priority parity with the v1 NCalc formula (simhub/README.md):
-        // Yellow > Blue > Black > White > Checkered > Green > Orange.
+        // Track-flag priority: Yellow > Blue > White > Checkered > Green.
         [Theory]
-        [InlineData(Flag.Yellow, Flag.Blue)]
-        [InlineData(Flag.Blue, Flag.Black)]
-        [InlineData(Flag.Black, Flag.White)]
-        [InlineData(Flag.White, Flag.Checkered)]
-        [InlineData(Flag.Checkered, Flag.Green)]
-        [InlineData(Flag.Green, Flag.Orange)]
-        public void AdjacentPriorityPairsResolveToTheHigherFlag(Flag higher, Flag lower)
+        [InlineData(TrackFlag.Yellow, TrackFlag.Blue)]
+        [InlineData(TrackFlag.Blue, TrackFlag.White)]
+        [InlineData(TrackFlag.White, TrackFlag.Checkered)]
+        [InlineData(TrackFlag.Checkered, TrackFlag.Green)]
+        public void AdjacentPriorityPairsResolveToTheHigherFlag(TrackFlag higher, TrackFlag lower)
         {
             TelemetrySnapshot snapshot = Live();
             SetFlag(snapshot, higher);
@@ -111,7 +128,27 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void AllFlagsSetResolveToYellow()
+        public void BlackAndOrangeRideAlongWithAWinningTrackFlag()
+        {
+            // The point of the orthogonal dimensions: a yellow win no longer
+            // discards the driver-directed orders — the compositor's
+            // demotion rule needs to see them.
+            TelemetrySnapshot snapshot = Live();
+            snapshot.FlagYellow = true;
+            snapshot.FlagBlack = true;
+            snapshot.FlagOrange = true;
+            SignalState state = Map(snapshot);
+            Assert.Equal(TrackFlag.Yellow, state.Flag);
+            Assert.True(state.BlackFlag);
+            Assert.True(state.Meatball);
+
+            Composition comp = Compositor.Select(state, connected: true);
+            Assert.Equal(FieldKind.Yellow, comp.Field);
+            Assert.Equal(BoardKind.BlackFlag, comp.Board);
+        }
+
+        [Fact]
+        public void AllFlagsSetResolveToYellowPlusTheOrders()
         {
             TelemetrySnapshot snapshot = Live();
             snapshot.FlagYellow = true;
@@ -121,9 +158,11 @@ namespace Uniflag.Tests
             snapshot.FlagCheckered = true;
             snapshot.FlagGreen = true;
             snapshot.FlagOrange = true;
-            RenderState state = Map(snapshot);
-            Assert.Equal(Flag.Yellow, state.Flag);
-            Assert.Equal(WaveLevel.Single, state.Wave);
+            SignalState state = Map(snapshot);
+            Assert.Equal(TrackFlag.Yellow, state.Flag);
+            Assert.Equal(Tier.Alert, state.Tier);
+            Assert.True(state.BlackFlag);
+            Assert.True(state.Meatball);
         }
 
         // Session vocabulary, per the mapping documented in
@@ -165,24 +204,36 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void CautionAndSectorsAreAlwaysCleared()
+        public void RefinerOnlyDimensionsAreAlwaysCleared()
         {
-            // The generic adapter has no raw-data layers (VSC/SC, sector
-            // yellows), so it must pin caution/sectors to None/Empty even
-            // when a refiner-less pipeline reuses a dirty state.
+            // The generic adapter has no raw-data layers, so it must pin
+            // caution/sectors/notices/advisories to their defaults even when
+            // a refiner-less pipeline reuses a dirty state.
             TelemetrySnapshot snapshot = Live();
             snapshot.FlagYellow = true;
-            var state = new RenderState
+            var state = new SignalState
             {
-                Flag = Flag.Red,
-                Wave = WaveLevel.Double,
+                Flag = TrackFlag.Red,
+                Tier = Tier.Urgent,
                 Session = Session.Replay,
                 Caution = Caution.SafetyCar,
                 Sectors = SectorSet.FromBits(0b111),
+                BlackDetail = BlackDetail.StopAndGo,
+                StartPhase = StartPhase.Set,
+                TimePenaltySeconds = 5,
+                CountdownLaps = 10,
+                Furled = true,
+                IncidentWarning = true,
             };
             new GenericAdapter().Map(snapshot, ref state);
             Assert.Equal(Caution.None, state.Caution);
             Assert.True(state.Sectors.IsEmpty);
+            Assert.Equal(BlackDetail.None, state.BlackDetail);
+            Assert.Equal(StartPhase.Off, state.StartPhase);
+            Assert.Equal(0, state.TimePenaltySeconds);
+            Assert.Equal(0, state.CountdownLaps);
+            Assert.False(state.Furled);
+            Assert.False(state.IncidentWarning);
         }
     }
 
@@ -218,22 +269,22 @@ namespace Uniflag.Tests
         [Fact]
         public void PausedStillCountsAsLive()
         {
-            // Paused maps to Session.Paused (race-idle marker), not to the
-            // connected-idle marker — the game is there, just held.
+            // Paused maps to Session.Paused (the static race idle), not to
+            // the connected-idle marker — the game is there, just held.
             Assert.True(Snapshot(running: true, inMenu: false, hasData: true, paused: true).HasLiveSession);
         }
     }
 
     public class AdapterPipelineTests
     {
-        /// <summary>Refiner stand-in: overrides the wave level for one game only.</summary>
-        private sealed class DoubleWaveRefiner : IGameAdapter
+        /// <summary>Refiner stand-in: overrides the tier for one game only.</summary>
+        private sealed class UrgentTierRefiner : IGameAdapter
         {
             public bool Matches(string gameName) => gameName == "IRacing";
 
-            public void Map(TelemetrySnapshot snapshot, ref RenderState state)
+            public void Map(TelemetrySnapshot snapshot, ref SignalState state)
             {
-                state.Wave = WaveLevel.Double;
+                state.Tier = Tier.Urgent;
             }
         }
 
@@ -252,30 +303,30 @@ namespace Uniflag.Tests
         [Fact]
         public void DefaultPipelineIsGenericOnly()
         {
-            RenderState state = new AdapterPipeline().Map(YellowSnapshot("Ac"));
-            Assert.Equal(Flag.Yellow, state.Flag);
-            Assert.Equal(WaveLevel.Single, state.Wave);
+            SignalState state = new AdapterPipeline().Map(YellowSnapshot("Ac"));
+            Assert.Equal(TrackFlag.Yellow, state.Flag);
+            Assert.Equal(Tier.Alert, state.Tier);
             Assert.Equal(Session.Racing, state.Session);
         }
 
         [Fact]
         public void MatchingRefinerOverridesTheGenericResult()
         {
-            var pipeline = new AdapterPipeline(new DoubleWaveRefiner());
-            RenderState state = pipeline.Map(YellowSnapshot("IRacing"));
-            // The refiner ran after the generic adapter: wave overridden,
+            var pipeline = new AdapterPipeline(new UrgentTierRefiner());
+            SignalState state = pipeline.Map(YellowSnapshot("IRacing"));
+            // The refiner ran after the generic adapter: tier overridden,
             // everything else kept.
-            Assert.Equal(WaveLevel.Double, state.Wave);
-            Assert.Equal(Flag.Yellow, state.Flag);
+            Assert.Equal(Tier.Urgent, state.Tier);
+            Assert.Equal(TrackFlag.Yellow, state.Flag);
             Assert.Equal(Session.Racing, state.Session);
         }
 
         [Fact]
         public void NonMatchingRefinerLeavesTheGenericResultAlone()
         {
-            var pipeline = new AdapterPipeline(new DoubleWaveRefiner());
-            RenderState state = pipeline.Map(YellowSnapshot("Ac"));
-            Assert.Equal(WaveLevel.Single, state.Wave);
+            var pipeline = new AdapterPipeline(new UrgentTierRefiner());
+            SignalState state = pipeline.Map(YellowSnapshot("Ac"));
+            Assert.Equal(Tier.Alert, state.Tier);
         }
     }
 

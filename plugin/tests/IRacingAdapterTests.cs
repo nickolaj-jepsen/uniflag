@@ -10,7 +10,7 @@
 using System.Collections.Generic;
 using GameReaderCommon;
 using Uniflag.Adapters;
-using Uniflag.Rendering;
+using Uniflag.Rendering.Grammar;
 using Xunit;
 
 namespace Uniflag.Tests
@@ -66,7 +66,7 @@ namespace Uniflag.Tests
             };
         }
 
-        private static RenderState MapThroughPipeline(TelemetrySnapshot snapshot)
+        private static SignalState MapThroughPipeline(TelemetrySnapshot snapshot)
         {
             return new AdapterPipeline(new IRacingAdapter()).Map(snapshot);
         }
@@ -74,28 +74,37 @@ namespace Uniflag.Tests
         [Fact]
         public void RedBitSurfacesTheRedFlagTheUnifiedLayerNeverHas()
         {
-            RenderState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagRed));
-            Assert.Equal(Flag.Red, state.Flag);
-            Assert.Equal(WaveLevel.None, state.Wave);
+            SignalState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagRed));
+            Assert.Equal(TrackFlag.Red, state.Flag);
+            Assert.Equal(Tier.Urgent, state.Tier);
         }
 
         [Fact]
-        public void DisplayedYellowLosesTheGenericSingleWaveGuess()
+        public void DisplayedYellowLosesTheGenericAlertGuess()
         {
             // Raw is better than unified here: a displayed (non-waving)
-            // yellow renders static instead of the generic Single heuristic.
-            RenderState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagYellow));
-            Assert.Equal(Flag.Yellow, state.Flag);
-            Assert.Equal(WaveLevel.None, state.Wave);
+            // yellow renders ambient instead of the generic Alert heuristic.
+            SignalState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagYellow));
+            Assert.Equal(TrackFlag.Yellow, state.Flag);
+            Assert.Equal(Tier.Ambient, state.Tier);
         }
 
         [Fact]
-        public void WavingYellowKeepsTheSingleWave()
+        public void WavingYellowEntersAtAlert()
         {
-            RenderState state = MapThroughPipeline(
+            SignalState state = MapThroughPipeline(
                 IRacingSnapshot(IRacingAdapter.FlagYellow | IRacingAdapter.FlagYellowWaving));
-            Assert.Equal(Flag.Yellow, state.Flag);
-            Assert.Equal(WaveLevel.Single, state.Wave);
+            Assert.Equal(TrackFlag.Yellow, state.Flag);
+            Assert.Equal(Tier.Alert, state.Tier);
+        }
+
+        [Fact]
+        public void WavingCautionEntersAtUrgent()
+        {
+            SignalState state = MapThroughPipeline(
+                IRacingSnapshot(IRacingAdapter.FlagCaution | IRacingAdapter.FlagCautionWaving));
+            Assert.Equal(TrackFlag.Yellow, state.Flag);
+            Assert.Equal(Tier.Urgent, state.Tier);
         }
 
         [Theory]
@@ -106,55 +115,63 @@ namespace Uniflag.Tests
         {
             // iRacing's full-course caution is a deployed pace car; it has
             // no VSC concept, so the SC board is always the right board.
-            RenderState state = MapThroughPipeline(IRacingSnapshot(bits));
+            SignalState state = MapThroughPipeline(IRacingSnapshot(bits));
             Assert.Equal(Caution.SafetyCar, state.Caution);
-            Assert.Equal(
-                RenderLayer.SafetyCarBoard,
-                Precedence.Select(state, connected: true));
+
+            Composition comp = Compositor.Select(state, connected: true);
+            Assert.Equal(FieldKind.Yellow, comp.Field);
+            Assert.Equal(BoardKind.SafetyCar, comp.Board);
         }
 
         [Fact]
-        public void RepairBitRaisesTheMeatballOverTheUnifiedOrange()
+        public void RepairBitRaisesTheMeatballField()
         {
-            RenderState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagRepair));
+            SignalState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagRepair));
             Assert.True(state.Meatball);
-            // The unified layer maps repair to Flag_Orange; the generic
-            // result keeps it, but precedence shows the meatball board.
-            Assert.Equal(Flag.Orange, state.Flag);
-            Assert.Equal(RenderLayer.MeatballBoard, Precedence.Select(state, connected: true));
+            // The unified layer maps repair to Flag_Orange, which the generic
+            // adapter routes to the same orthogonal Meatball dimension — the
+            // track flag stays None and the meatball takes the field.
+            Assert.Equal(TrackFlag.None, state.Flag);
+            Assert.Equal(FieldKind.Meatball, Compositor.Select(state, connected: true).Field);
         }
 
         [Fact]
-        public void FurledBitRaisesTheWarningAccentOnly()
+        public void FurledBitRaisesTheWarningFrameOnly()
         {
-            RenderState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagFurled));
+            SignalState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagFurled));
             Assert.True(state.Furled);
-            Assert.Equal(Flag.None, state.Flag);
-            // No fabricated slowdown: iRacing exposes no graded meter.
-            Assert.Equal(0, state.Slowdown);
-            Assert.True(Precedence.FurledAccentVisible(state, connected: true));
+            Assert.Equal(TrackFlag.None, state.Flag);
+            Assert.Equal(FrameKind.Furled, Compositor.Select(state, connected: true).Frame);
         }
 
         [Fact]
-        public void BlackBitStaysAPlainBlackFlag()
+        public void BlackBitStaysABareBlackFlag()
         {
-            RenderState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagBlack));
-            Assert.Equal(Flag.Black, state.Flag);
+            SignalState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagBlack));
+            Assert.True(state.BlackFlag);
             // No DT/SG distinction exists in iRacing telemetry — the detail
             // must stay None (never guess a service type).
-            Assert.Equal(BlackFlagDetail.None, state.BlackDetail);
+            Assert.Equal(BlackDetail.None, state.BlackDetail);
+            Assert.Equal(FieldKind.Black, Compositor.Select(state, connected: true).Field);
         }
 
         [Fact]
-        public void DisqualifyEnrichesToBlackOnlyWhenNothingElseClaimsTheBase()
+        public void DisqualifyIsOrthogonalAndSurvivesOtherFlags()
         {
-            RenderState alone = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagDisqualify));
-            Assert.Equal(Flag.Black, alone.Flag);
+            SignalState alone = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagDisqualify));
+            Assert.True(alone.BlackFlag);
+            Assert.Equal(BlackDetail.Disqualified, alone.BlackDetail);
 
-            // A unified-visible flag keeps its generic priority win.
-            RenderState withBlue = MapThroughPipeline(
+            // A concurrent blue keeps the track flag, but the DQ order is
+            // never discarded: the black family outranks blue in the field
+            // and the DQ board rides on top.
+            SignalState withBlue = MapThroughPipeline(
                 IRacingSnapshot(IRacingAdapter.FlagDisqualify | IRacingAdapter.FlagBlue));
-            Assert.Equal(Flag.Blue, withBlue.Flag);
+            Assert.Equal(TrackFlag.Blue, withBlue.Flag);
+            Assert.True(withBlue.BlackFlag);
+            Composition comp = Compositor.Select(withBlue, connected: true);
+            Assert.Equal(FieldKind.Black, comp.Field);
+            Assert.Equal(BoardKind.Disqualified, comp.Board);
         }
 
         [Fact]
@@ -165,15 +182,17 @@ namespace Uniflag.Tests
             // car inside the green-flag window — the unified layer reports
             // no blue at all. The adapter deliberately does NOT restore
             // blue from raw: green is the flag that matters there.
-            RenderState state = MapThroughPipeline(
+            SignalState state = MapThroughPipeline(
                 IRacingSnapshot(IRacingAdapter.FlagBlue | IRacingAdapter.FlagGreen));
-            Assert.Equal(Flag.Green, state.Flag);
+            Assert.Equal(TrackFlag.Green, state.Flag);
+            Assert.Equal(Tier.Alert, state.Tier);
 
-            // Without green, unified blue mirrors the raw bit and wins the
-            // generic priority over green-less lower flags as usual.
-            RenderState blueAlone = MapThroughPipeline(
+            // Without green, unified blue mirrors the raw bit and enters at
+            // Alert (a blue shown to you wants the attention pulse).
+            SignalState blueAlone = MapThroughPipeline(
                 IRacingSnapshot(IRacingAdapter.FlagBlue));
-            Assert.Equal(Flag.Blue, blueAlone.Flag);
+            Assert.Equal(TrackFlag.Blue, blueAlone.Flag);
+            Assert.Equal(Tier.Alert, blueAlone.Tier);
         }
 
         [Fact]
@@ -183,16 +202,16 @@ namespace Uniflag.Tests
             // real green arrives with the green bit. Showing green here made
             // the panel jump the start, so the bit folds into the gantry's
             // Set phase instead.
-            RenderState held = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagGreenHeld));
-            Assert.Equal(Flag.None, held.Flag);
-            Assert.Equal(StartLights.Set, held.StartLights);
-            Assert.Equal(RenderLayer.StartLightsBoard, Precedence.Select(held, connected: true));
+            SignalState held = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagGreenHeld));
+            Assert.Equal(TrackFlag.None, held.Flag);
+            Assert.Equal(StartPhase.Set, held.StartPhase);
+            Assert.Equal(BoardKind.StartGantry, Compositor.Select(held, connected: true).Board);
 
-            // The moment the green bit flies, the flag claims the base over
-            // the gantry board.
-            RenderState green = MapThroughPipeline(IRacingSnapshot(
+            // The moment the green bit flies, the flag claims the field.
+            SignalState green = MapThroughPipeline(IRacingSnapshot(
                 IRacingAdapter.FlagGreenHeld | IRacingAdapter.FlagGreen | IRacingAdapter.FlagStartGo));
-            Assert.Equal(Flag.Green, green.Flag);
+            Assert.Equal(TrackFlag.Green, green.Flag);
+            Assert.Equal(FieldKind.Green, Compositor.Select(green, connected: true).Field);
         }
 
         [Fact]
@@ -200,10 +219,10 @@ namespace Uniflag.Tests
         {
             TelemetrySnapshot snapshot = IRacingSnapshot(IRacingAdapter.FlagYellow);
             snapshot.HasRawSessionFlags = false; // e.g. raw shape drift
-            RenderState state = MapThroughPipeline(snapshot);
-            // Generic heuristic stands: yellow renders single-waved.
-            Assert.Equal(Flag.Yellow, state.Flag);
-            Assert.Equal(WaveLevel.Single, state.Wave);
+            SignalState state = MapThroughPipeline(snapshot);
+            // Generic heuristic stands: yellow enters at Alert.
+            Assert.Equal(TrackFlag.Yellow, state.Flag);
+            Assert.Equal(Tier.Alert, state.Tier);
         }
 
         [Fact]
@@ -211,64 +230,65 @@ namespace Uniflag.Tests
         {
             TelemetrySnapshot snapshot = IRacingSnapshot(IRacingAdapter.FlagRed);
             snapshot.GameName = "AssettoCorsaCompetizione";
-            RenderState state = MapThroughPipeline(snapshot);
+            SignalState state = MapThroughPipeline(snapshot);
             // Even with (impossible) raw data present, a non-iRacing game
             // gets the pure generic mapping — never a red flag.
-            Assert.NotEqual(Flag.Red, state.Flag);
+            Assert.NotEqual(TrackFlag.Red, state.Flag);
         }
 
         [Theory]
-        [InlineData(IRacingAdapter.FlagStartGo, StartLights.Go)]
-        [InlineData(IRacingAdapter.FlagStartSet, StartLights.Set)]
-        [InlineData(IRacingAdapter.FlagGreenHeld, StartLights.Set)]
-        [InlineData(IRacingAdapter.FlagStartReady, StartLights.Ready)]
-        [InlineData(IRacingAdapter.FlagOneLapToGreen, StartLights.Ready)]
-        [InlineData(IRacingAdapter.FlagGreenHeld | IRacingAdapter.FlagStartGo, StartLights.Go)]
-        [InlineData(IRacingAdapter.FlagStartHidden, StartLights.Off)]
-        [InlineData(0u, StartLights.Off)]
-        public void StartLightBitsMapToTheGantryPhase(uint bits, StartLights expected)
+        [InlineData(IRacingAdapter.FlagStartGo, StartPhase.Go)]
+        [InlineData(IRacingAdapter.FlagStartSet, StartPhase.Set)]
+        [InlineData(IRacingAdapter.FlagGreenHeld, StartPhase.Set)]
+        [InlineData(IRacingAdapter.FlagStartReady, StartPhase.Ready)]
+        [InlineData(IRacingAdapter.FlagOneLapToGreen, StartPhase.Ready)]
+        [InlineData(IRacingAdapter.FlagGreenHeld | IRacingAdapter.FlagStartGo, StartPhase.Go)]
+        [InlineData(IRacingAdapter.FlagStartHidden, StartPhase.Off)]
+        [InlineData(0u, StartPhase.Off)]
+        public void StartLightBitsMapToTheGantryPhase(uint bits, StartPhase expected)
         {
             // go > set > ready; the rolling-start oneLapToGreen folds into
             // Ready and greenHeld (furled green in hand) into Set;
             // startHidden and the unset case are Off.
-            Assert.Equal(expected, MapThroughPipeline(IRacingSnapshot(bits)).StartLights);
+            Assert.Equal(expected, MapThroughPipeline(IRacingSnapshot(bits)).StartPhase);
         }
 
         [Fact]
-        public void StartLightsBoardShowsOnlyWhileNoFlagClaimsTheBase()
+        public void GantryBoardRidesAnyFieldUnderTheCompositor()
         {
-            RenderState ready = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagStartReady));
-            Assert.Equal(StartLights.Ready, ready.StartLights);
-            Assert.Equal(RenderLayer.StartLightsBoard, Precedence.Select(ready, connected: true));
+            SignalState ready = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagStartReady));
+            Assert.Equal(BoardKind.StartGantry, Compositor.Select(ready, connected: true).Board);
 
-            // A real flag on the same tick supersedes the gantry.
-            RenderState withYellow = MapThroughPipeline(
+            // A flag on the same tick takes the field; the gantry keeps the
+            // board slot — the compositor stacks them instead of choosing.
+            SignalState withYellow = MapThroughPipeline(
                 IRacingSnapshot(IRacingAdapter.FlagStartReady | IRacingAdapter.FlagYellow));
-            Assert.Equal(StartLights.Ready, withYellow.StartLights);
-            Assert.Equal(RenderLayer.YellowFlag, Precedence.Select(withYellow, connected: true));
+            Composition comp = Compositor.Select(withYellow, connected: true);
+            Assert.Equal(FieldKind.Yellow, comp.Field);
+            Assert.Equal(BoardKind.StartGantry, comp.Board);
         }
 
         [Fact]
-        public void DebrisBitRaisesTheDebrisBoardOnlyWhenNoFlagWins()
+        public void DebrisBitIsTheLowestTrackFlag()
         {
-            RenderState alone = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagDebris));
-            Assert.True(alone.Debris);
-            Assert.Equal(Flag.None, alone.Flag);
-            Assert.Equal(RenderLayer.DebrisBoard, Precedence.Select(alone, connected: true));
+            SignalState alone = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagDebris));
+            Assert.Equal(TrackFlag.Debris, alone.Flag);
+            Assert.Equal(FieldKind.Debris, Compositor.Select(alone, connected: true).Field);
 
             // A unified flag (which already conveys caution) supersedes it.
-            RenderState withYellow = MapThroughPipeline(
+            SignalState withYellow = MapThroughPipeline(
                 IRacingSnapshot(IRacingAdapter.FlagDebris | IRacingAdapter.FlagYellow));
-            Assert.True(withYellow.Debris);
-            Assert.Equal(RenderLayer.YellowFlag, Precedence.Select(withYellow, connected: true));
+            Assert.Equal(TrackFlag.Yellow, withYellow.Flag);
         }
 
-        [Fact]
-        public void StartLightsOutrankDebrisInTheIdleArm()
+        [Theory]
+        [InlineData(IRacingAdapter.FlagTenToGo, 10)]
+        [InlineData(IRacingAdapter.FlagFiveToGo, 5)]
+        [InlineData(IRacingAdapter.FlagTenToGo | IRacingAdapter.FlagFiveToGo, 10)]
+        [InlineData(0u, 0)]
+        public void CountdownBitsMapToTheNoticeBoards(uint bits, int laps)
         {
-            RenderState state = MapThroughPipeline(
-                IRacingSnapshot(IRacingAdapter.FlagStartSet | IRacingAdapter.FlagDebris));
-            Assert.Equal(RenderLayer.StartLightsBoard, Precedence.Select(state, connected: true));
+            Assert.Equal(laps, MapThroughPipeline(IRacingSnapshot(bits)).CountdownLaps);
         }
 
         /// <summary>An iRacing snapshot carrying incident count/limit dimensions.</summary>

@@ -6,13 +6,13 @@
 // pipeline changes needed.
 
 using System;
-using Uniflag.Rendering;
+using Uniflag.Rendering.Grammar;
 
 namespace Uniflag.Adapters
 {
     /// <summary>
     /// Runs a <see cref="TelemetrySnapshot"/> through the adapter chain and
-    /// yields the <see cref="RenderState"/> for the renderer. Immutable
+    /// yields the <see cref="SignalState"/> for the renderer. Immutable
     /// after construction and allocation-free per <see cref="Map"/> call
     /// (it runs on SimHub's update thread at ~60 Hz).
     /// </summary>
@@ -43,16 +43,16 @@ namespace Uniflag.Adapters
         }
 
         /// <summary>
-        /// Map one snapshot: start from <see cref="RenderState.Default"/>,
+        /// Map one snapshot: start from <see cref="SignalState.Default"/>,
         /// let every matching adapter write its verdict in chain order.
         /// </summary>
-        public RenderState Map(TelemetrySnapshot snapshot)
+        public SignalState Map(TelemetrySnapshot snapshot)
         {
             if (snapshot == null)
             {
                 throw new ArgumentNullException(nameof(snapshot));
             }
-            RenderState state = RenderState.Default;
+            SignalState state = SignalState.Default;
             for (int i = 0; i < _adapters.Length; i++)
             {
                 if (_adapters[i].Matches(snapshot.GameName))

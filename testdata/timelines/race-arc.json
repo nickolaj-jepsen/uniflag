@@ -1,17 +1,17 @@
 {
-  "format": 1,
-  "source": "sim/scenarios/race-arc.txt (v1 ASCII scenario, transcribed at M7)",
+  "format": 2,
+  "source": "sim/scenarios/race-arc.txt (v1 ASCII scenario, transcribed at M7; schema-revved to the Grammar model at the flag-grammar cutover)",
   "description": "A short race arc: pre-race -> green start -> caution -> resume -> finish.",
   "steps": [
-    { "delay_ms": 0, "flag": "None", "wave": "None", "session": "PreRace", "caution": "None", "sectors": [] },
-    { "delay_ms": 3000, "flag": "Green", "wave": "None", "session": "Racing", "caution": "None", "sectors": [] },
-    { "delay_ms": 8000, "flag": "Yellow", "wave": "Single", "session": "Racing", "caution": "None", "sectors": [] },
-    { "delay_ms": 6000, "flag": "Yellow", "wave": "None", "session": "Racing", "caution": "None", "sectors": [] },
-    { "delay_ms": 4000, "flag": "None", "wave": "None", "session": "Racing", "caution": "None", "sectors": [] },
-    { "delay_ms": 2000, "flag": "Blue", "wave": "None", "session": "Racing", "caution": "None", "sectors": [] },
-    { "delay_ms": 3000, "flag": "None", "wave": "None", "session": "Racing", "caution": "None", "sectors": [], "note": "original line carried the stale P=1 field (v1 pit flag, nothing wire-worthy) - dropped at M7" },
-    { "delay_ms": 4000, "flag": "None", "wave": "None", "session": "Racing", "caution": "None", "sectors": [] },
-    { "delay_ms": 6000, "flag": "White", "wave": "None", "session": "Racing", "caution": "None", "sectors": [] },
-    { "delay_ms": 4000, "flag": "Checkered", "wave": "None", "session": "PostRace", "caution": "None", "sectors": [] }
+    { "delay_ms": 0, "flag": "None", "tier": "Ambient", "session": "PreRace", "caution": "None", "sectors": [] },
+    { "delay_ms": 3000, "flag": "Green", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [] },
+    { "delay_ms": 8000, "flag": "Yellow", "tier": "Alert", "session": "Racing", "caution": "None", "sectors": [] },
+    { "delay_ms": 6000, "flag": "Yellow", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [] },
+    { "delay_ms": 4000, "flag": "None", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [] },
+    { "delay_ms": 2000, "flag": "Blue", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [] },
+    { "delay_ms": 3000, "flag": "None", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [], "note": "original line carried the stale P=1 field (v1 pit flag, nothing wire-worthy) - dropped at M7" },
+    { "delay_ms": 4000, "flag": "None", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [] },
+    { "delay_ms": 6000, "flag": "White", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [] },
+    { "delay_ms": 4000, "flag": "Checkered", "tier": "Ambient", "session": "PostRace", "caution": "None", "sectors": [] }
   ]
 }

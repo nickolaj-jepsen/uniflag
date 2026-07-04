@@ -1,18 +1,18 @@
 {
-  "format": 1,
-  "source": "sim/scenarios/caution-and-sectors.txt (v1 ASCII scenario, transcribed at M7)",
-  "description": "Sector-yellow and caution scenarios: sector bands with and without a global flag, VSC, Safety Car, and red overriding VSC.",
+  "format": 2,
+  "source": "sim/scenarios/caution-and-sectors.txt (v1 ASCII scenario, transcribed at M7; schema-revved to the Grammar model at the flag-grammar cutover)",
+  "description": "Sector-yellow and caution scenarios: sector strips with and without a global flag, VSC, Safety Car, and red overriding VSC.",
   "steps": [
-    { "delay_ms": 0, "flag": "None", "wave": "None", "session": "Racing", "caution": "None", "sectors": [], "note": "Idle racing baseline." },
-    { "delay_ms": 3000, "flag": "None", "wave": "None", "session": "Racing", "caution": "None", "sectors": [2], "note": "Yellow ahead in sector 2 - sector band lights up; rest of the panel is the racing-idle splash since F=N." },
-    { "delay_ms": 3000, "flag": "Yellow", "wave": "Single", "session": "Racing", "caution": "None", "sectors": [2], "note": "Driver enters S2: now the global flag is yellow too, sector still lit." },
-    { "delay_ms": 3000, "flag": "Yellow", "wave": "Single", "session": "Racing", "caution": "None", "sectors": [2, 3], "note": "Yellow extends to S3 as well (host emits both bits while driver in S2)." },
-    { "delay_ms": 3000, "flag": "None", "wave": "None", "session": "Racing", "caution": "None", "sectors": [], "note": "Cleared." },
-    { "delay_ms": 2000, "flag": "None", "wave": "None", "session": "Racing", "caution": "VirtualSafetyCar", "sectors": [], "note": "VSC deployed - diagonal yellow/white stripes." },
-    { "delay_ms": 4000, "flag": "None", "wave": "None", "session": "Racing", "caution": "VirtualSafetyCar", "sectors": [2], "note": "VSC plus a sector hint (host telling us the trigger zone)." },
-    { "delay_ms": 4000, "flag": "None", "wave": "None", "session": "Racing", "caution": "SafetyCar", "sectors": [], "note": "Promoted to a real Safety Car - yellow base with a sweeping band." },
-    { "delay_ms": 3000, "flag": "Red", "wave": "None", "session": "Racing", "caution": "VirtualSafetyCar", "sectors": [2, 3], "note": "Red flag drops while VSC was still active. Red overrides caution; the sector band is also suppressed under red. Onset white flash plays." },
-    { "delay_ms": 4000, "flag": "None", "wave": "None", "session": "Racing", "caution": "None", "sectors": [], "note": "Restart after stoppage." },
-    { "delay_ms": 4000, "flag": "None", "wave": "None", "session": "PostRace", "caution": "None", "sectors": [], "note": "Done." }
+    { "delay_ms": 0, "flag": "None", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [], "note": "Idle racing baseline." },
+    { "delay_ms": 3000, "flag": "None", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [2], "note": "Yellow ahead in sector 2 - sector strip lights up over the racing idle." },
+    { "delay_ms": 3000, "flag": "Yellow", "tier": "Alert", "session": "Racing", "caution": "None", "sectors": [2], "note": "Driver enters S2: now the global flag is yellow too, sector still lit." },
+    { "delay_ms": 3000, "flag": "Yellow", "tier": "Alert", "session": "Racing", "caution": "None", "sectors": [2, 3], "note": "Yellow extends to S3 as well (host emits both bits while driver in S2)." },
+    { "delay_ms": 3000, "flag": "None", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [], "note": "Cleared." },
+    { "delay_ms": 2000, "flag": "None", "tier": "Ambient", "session": "Racing", "caution": "VirtualSafetyCar", "sectors": [], "note": "VSC deployed - caution-forced yellow field plus the VSC board." },
+    { "delay_ms": 4000, "flag": "None", "tier": "Ambient", "session": "Racing", "caution": "VirtualSafetyCar", "sectors": [2], "note": "VSC plus a sector hint (full-course state, so the strip is suppressed)." },
+    { "delay_ms": 4000, "flag": "None", "tier": "Ambient", "session": "Racing", "caution": "SafetyCar", "sectors": [], "note": "Promoted to a real Safety Car - yellow field with the SC board." },
+    { "delay_ms": 3000, "flag": "Red", "tier": "Urgent", "session": "Racing", "caution": "VirtualSafetyCar", "sectors": [2, 3], "note": "Red flag drops while VSC was still active. Red is a total takeover; boards, frames and the strip are all suppressed. Onset flash plays." },
+    { "delay_ms": 4000, "flag": "None", "tier": "Ambient", "session": "Racing", "caution": "None", "sectors": [], "note": "Restart after stoppage." },
+    { "delay_ms": 4000, "flag": "None", "tier": "Ambient", "session": "PostRace", "caution": "None", "sectors": [], "note": "Done." }
   ]
 }

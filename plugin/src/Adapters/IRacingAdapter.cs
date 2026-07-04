@@ -9,36 +9,43 @@
 // ("iRacing"), which holds the mapping contract; change doc and code together.
 
 using System;
-using Uniflag.Rendering;
+using Uniflag.Rendering.Grammar;
 
 namespace Uniflag.Adapters
 {
     /// <summary>
-    /// Refines the generic mapping with iRacing raw data. What raw is
-    /// better at (and what this adapter therefore touches):
+    /// Refines the generic mapping with iRacing raw data
+    /// (docs/flag-grammar.md §10). What raw is better at (and what this
+    /// adapter therefore touches):
     /// <list type="bullet">
     /// <item><b>Red flag</b> — the unified layer never surfaces red;
-    /// SessionFlags bit 0x10 does.</item>
-    /// <item><b>Wave level</b> — unified <c>Flag_Yellow</c> cannot tell a
+    /// SessionFlags bit 0x10 does. Enters at <see cref="Tier.Urgent"/>.</item>
+    /// <item><b>Yellow tier</b> — unified <c>Flag_Yellow</c> cannot tell a
     /// displayed yellow from a waved one (the generic adapter guesses
-    /// Single); <c>yellowWaving</c>/<c>cautionWaving</c> decide it.</item>
+    /// Alert); the raw bits decide it: <c>cautionWaving</c> → Urgent,
+    /// <c>yellowWaving</c>/<c>caution</c> → Alert, displayed-only →
+    /// Ambient. Blue and green firm up to Alert (a blue being shown to you
+    /// and a start/restart both want the attention pulse).</item>
     /// <item><b>Caution board</b> — <c>caution</c>/<c>cautionWaving</c>
     /// (0x4000/0x8000) map to the SC board: an iRacing full-course caution
     /// is a deployed pace car, and iRacing has no VSC concept.</item>
     /// <item><b>Penalties</b> — <c>repair</c> (0x100000) → meatball,
-    /// <c>furled</c> (0x80000) → furled warning accent,
-    /// <c>disqualify</c> (0x20000) → black flag when nothing else claims
-    /// the base. iRacing exposes <b>no</b> graded slow-down meter and no
-    /// DT-vs-SG distinction in telemetry (verified; third-party plugins
-    /// derive their "slow down" alerts from the same furled bit), so
-    /// <see cref="RenderState.Slowdown"/> and
-    /// <see cref="RenderState.BlackDetail"/> stay at their defaults here.</item>
-    /// <item><b>Start-lights</b> — <c>startReady</c>/<c>startSet</c>/
+    /// <c>furled</c> (0x80000) → furled warning frame, <c>disqualify</c>
+    /// (0x20000) → the black-family order with
+    /// <see cref="BlackDetail.Disqualified"/> (orthogonal — the demotion
+    /// rule keeps it visible under any track flag). iRacing exposes
+    /// <b>no</b> DT-vs-SG distinction in telemetry (verified), so a bare
+    /// <c>black</c> bit stays a bare black flag.</item>
+    /// <item><b>Start sequence</b> — <c>startReady</c>/<c>startSet</c>/
     /// <c>startGo</c> (+ rolling-start <c>oneLapToGreen</c> and
-    /// <c>greenHeld</c>) drive the start-light gantry board; the unified
-    /// layer has no start concept.</item>
-    /// <item><b>Debris</b> — <c>debris</c> (0x40) is a raw-only track flag the
-    /// unified layer never surfaces.</item>
+    /// <c>greenHeld</c>) drive the gantry board; the unified layer has no
+    /// start concept. iRacing has no light counts, so
+    /// <see cref="SignalState.StartLightsLit"/> stays 0 (= all five).</item>
+    /// <item><b>Countdown notices</b> — <c>tenToGo</c>/<c>fiveToGo</c> map
+    /// to <see cref="SignalState.CountdownLaps"/> (the 10/5 boards).</item>
+    /// <item><b>Debris</b> — <c>debris</c> (0x40) is a raw-only track flag
+    /// the unified layer never surfaces; it enters only when no other track
+    /// flag won (lowest precedence).</item>
     /// <item><b>Incident warning</b> — <c>PlayerCarMyIncidentCount</c> within
     /// <see cref="IncidentWarnMargin"/> of the session incident limit (read
     /// from the session-info dictionary; see <c>GameDataExtractor</c>).</item>
@@ -106,7 +113,7 @@ namespace Uniflag.Adapters
             string.Equals(gameName, IRacingGameName, StringComparison.OrdinalIgnoreCase);
 
         /// <inheritdoc />
-        public void Map(TelemetrySnapshot snapshot, ref RenderState state)
+        public void Map(TelemetrySnapshot snapshot, ref SignalState state)
         {
             // Incident-limit warning is independent of the SessionFlags mask
             // (it reads the incident count from telemetry and the limit from
@@ -128,12 +135,11 @@ namespace Uniflag.Adapters
             }
             uint bits = snapshot.RawSessionFlags;
 
-            // Red — raw-only. iRacing has no red wave levels; clear the
-            // wave so a simultaneous yellowWaving can't leak into red.
+            // Red — raw-only. Session stopped; maximum urgency.
             if ((bits & FlagRed) != 0)
             {
-                state.Flag = Flag.Red;
-                state.Wave = WaveLevel.None;
+                state.Flag = TrackFlag.Red;
+                state.Tier = Tier.Urgent;
             }
 
             // Full-course caution → SC board (pace car; no VSC in iRacing).
@@ -142,46 +148,51 @@ namespace Uniflag.Adapters
                 state.Caution = Caution.SafetyCar;
             }
 
-            // Wave refinement: only for a yellow base (never fabricate a
-            // flag here — SimHub's unified Flag_Yellow already ORs the
-            // yellow AND caution bits, so the generic adapter owns the
-            // flag choice). Waving bits → Single; displayed-only → None.
-            // iRacing has no double-waved concept, so Double never appears.
-            if (state.Flag == Flag.Yellow)
+            // Tier refinement (never fabricate a flag here — SimHub's
+            // unified Flag_Yellow already ORs the yellow AND caution bits,
+            // so the generic adapter owns the flag choice). Raw kills the
+            // generic waving guess for displayed-only yellows.
+            if (state.Flag == TrackFlag.Yellow)
             {
-                state.Wave = (bits & (FlagYellowWaving | FlagCautionWaving)) != 0
-                    ? WaveLevel.Single
-                    : WaveLevel.None;
+                state.Tier = (bits & FlagCautionWaving) != 0 ? Tier.Urgent
+                    : (bits & (FlagYellowWaving | FlagCaution)) != 0 ? Tier.Alert
+                    : Tier.Ambient;
+            }
+            else if (state.Flag == TrackFlag.Blue || state.Flag == TrackFlag.Green)
+            {
+                state.Tier = Tier.Alert;
             }
 
-            // Conservative enrichment when the unified layer mapped nothing:
-            // disqualify shows the black flag (the sim's own presentation).
-            // Never outranks a flag another bit already won — the generic
-            // priority order is the contract. greenHeld is deliberately NOT
-            // green: the flag is still furled in the starter's hand, so it
-            // feeds the gantry (MapStartLights) instead.
-            if (state.Flag == Flag.None && (bits & FlagDisqualify) != 0)
+            // Disqualify: the black-family order, orthogonal to the track
+            // flag — the compositor's demotion rule keeps it visible even
+            // while another flag holds the field.
+            if ((bits & FlagDisqualify) != 0)
             {
-                state.Flag = Flag.Black;
+                state.BlackFlag = true;
+                state.BlackDetail = BlackDetail.Disqualified;
             }
 
-            // Penalty dimensions (host-only; see RenderState). repair also
-            // sets unified Flag_Orange → the generic result keeps
-            // Flag.Orange, but the meatball board outranks the orange base
-            // in the precedence ladder, so the panel shows the meatball.
+            // Penalty dimensions. repair also sets unified Flag_Orange, so
+            // the generic adapter already raised Meatball — this just keeps
+            // raw and unified in lockstep. No DT/SG guessing: a bare black
+            // bit stays a bare black flag (see class doc).
             state.Meatball = (bits & FlagRepair) != 0;
             state.Furled = (bits & FlagFurled) != 0;
-            // state.Slowdown / state.BlackDetail: deliberately untouched —
-            // no iRacing telemetry source exists (see class doc).
 
-            // Debris / surface warning — a raw-only track flag the unified
-            // layer never surfaces. Rendered only when no flag claims the
-            // base (precedence), so a co-incident yellow supersedes it.
-            state.Debris = (bits & FlagDebris) != 0;
+            // Debris — lowest track state; only when nothing else won.
+            if (state.Flag == TrackFlag.None && (bits & FlagDebris) != 0)
+            {
+                state.Flag = TrackFlag.Debris;
+                state.Tier = Tier.Ambient;
+            }
 
-            // Start-light gantry. The end-of-race tenToGo/fiveToGo bits are
-            // NOT the standing-start sequence and stay unmapped.
-            state.StartLights = MapStartLights(bits);
+            // Countdown notices (the 10/5 boards).
+            state.CountdownLaps = (bits & FlagTenToGo) != 0 ? (byte)10
+                : (bits & FlagFiveToGo) != 0 ? (byte)5
+                : (byte)0;
+
+            // Start-sequence gantry. iRacing has no light counts.
+            state.StartPhase = MapStartPhase(bits);
         }
 
         /// <summary>
@@ -190,23 +201,23 @@ namespace Uniflag.Adapters
         /// Ready ("get ready, green next lap") and <c>greenHeld</c> folded
         /// into Set (furled green in the starter's hand — green imminent).
         /// <c>startHidden</c> and the unset case are
-        /// <see cref="StartLights.Off"/>.
+        /// <see cref="StartPhase.Off"/>.
         /// </summary>
-        private static StartLights MapStartLights(uint bits)
+        private static StartPhase MapStartPhase(uint bits)
         {
             if ((bits & FlagStartGo) != 0)
             {
-                return StartLights.Go;
+                return StartPhase.Go;
             }
             if ((bits & (FlagStartSet | FlagGreenHeld)) != 0)
             {
-                return StartLights.Set;
+                return StartPhase.Set;
             }
             if ((bits & (FlagStartReady | FlagOneLapToGreen)) != 0)
             {
-                return StartLights.Ready;
+                return StartPhase.Ready;
             }
-            return StartLights.Off;
+            return StartPhase.Off;
         }
     }
 }

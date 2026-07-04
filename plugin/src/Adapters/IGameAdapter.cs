@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // The layering seam of the adapter architecture: AdapterPipeline runs every
-// matching adapter in order over the same RenderState, so a game-specific
+// matching adapter in order over the same SignalState, so a game-specific
 // adapter (the iRacing raw-telemetry adapter, keyed on GameName) can sit
 // after the generic one and override or refine whatever the unified Flag_*
 // mapping produced.
 
-using Uniflag.Rendering;
+using Uniflag.Rendering.Grammar;
 
 namespace Uniflag.Adapters
 {
     /// <summary>
-    /// One stage of the snapshot → <see cref="RenderState"/> mapping.
+    /// One stage of the snapshot → <see cref="SignalState"/> mapping.
     /// Implementations must be pure (state in, state out — no I/O, no
     /// retained references to the snapshot) and allocation-free per call:
     /// <see cref="Map"/> runs on SimHub's update thread at ~60 Hz.
@@ -30,9 +30,9 @@ namespace Uniflag.Adapters
         /// Map or refine: write this adapter's verdict into
         /// <paramref name="state"/>. Called with the result of every earlier
         /// pipeline stage — a game-specific adapter may overwrite only the
-        /// fields it knows better (e.g. wave level, caution) and keep the
+        /// fields it knows better (e.g. urgency tier, caution) and keep the
         /// generic result for the rest.
         /// </summary>
-        void Map(TelemetrySnapshot snapshot, ref RenderState state);
+        void Map(TelemetrySnapshot snapshot, ref SignalState state);
     }
 }

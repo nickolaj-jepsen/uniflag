@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // The generic game adapter: maps SimHub's unified Flag_* layer to a
-// RenderState. The mapping contract is documented in
-// docs/simhub-flag-properties.md ("Generic adapter mapping") — doc and code
-// must state the same rules; change them together.
+// SignalState (docs/flag-grammar.md §10). The mapping contract is documented
+// in docs/simhub-flag-properties.md ("Generic adapter mapping") — doc and
+// code must state the same rules; change them together.
 
 using Uniflag.Rendering;
+using Uniflag.Rendering.Grammar;
+using Caution = Uniflag.Rendering.Grammar.Caution;
 
 namespace Uniflag.Adapters
 {
@@ -13,17 +15,24 @@ namespace Uniflag.Adapters
     /// Catch-all adapter over the unified <c>DataCorePlugin.GameData.Flag_*</c>
     /// properties. Contract:
     /// <list type="bullet">
-    /// <item><b>Flag priority</b> when several are set:
-    /// Yellow &gt; Blue &gt; Black &gt; White &gt; Checkered &gt; Green &gt;
-    /// Orange — parity with the v1 NCalc formula (simhub/README.md).</item>
-    /// <item><b>Wave heuristic</b>: Single when yellow wins, else None —
-    /// the unified layer cannot distinguish displayed from waved flags.</item>
+    /// <item><b>Track flag priority</b> when several are set:
+    /// Yellow &gt; Blue &gt; White &gt; Checkered &gt; Green. The unified
+    /// black and orange flags are NOT in this ladder — they map to the
+    /// orthogonal <see cref="SignalState.BlackFlag"/> /
+    /// <see cref="SignalState.Meatball"/> dimensions, so the compositor's
+    /// demotion rule can keep them visible under a winning track flag.</item>
+    /// <item><b>Tier heuristic</b>: yellow enters at
+    /// <see cref="Tier.Alert"/> (the marshal-is-waving guess — the unified
+    /// layer cannot distinguish displayed from waved); everything else at
+    /// <see cref="Tier.Ambient"/>.</item>
     /// <item><b>Session</b>: see <see cref="MapSession"/>.</item>
-    /// <item><b>Caution / sectors</b>: always None / Empty. VSC, SC and
-    /// sector-local yellows only exist in per-sim raw data.</item>
+    /// <item><b>Everything else</b> (caution, sectors, penalty details,
+    /// start sequence, notices, advisories) is pinned to its default —
+    /// those signals only exist in per-sim raw data and belong to the
+    /// refiners.</item>
     /// </list>
     /// The unified layer never surfaces a red flag, so this adapter never
-    /// emits <see cref="Flag.Red"/> either.
+    /// emits <see cref="TrackFlag.Red"/> either.
     /// </summary>
     public sealed class GenericAdapter : IGameAdapter
     {
@@ -31,52 +40,54 @@ namespace Uniflag.Adapters
         public bool Matches(string gameName) => true;
 
         /// <inheritdoc />
-        public void Map(TelemetrySnapshot snapshot, ref RenderState state)
+        public void Map(TelemetrySnapshot snapshot, ref SignalState state)
         {
-            Flag flag = MapFlag(snapshot);
+            TrackFlag flag = MapFlag(snapshot);
             state.Flag = flag;
-            state.Wave = flag == Flag.Yellow ? WaveLevel.Single : WaveLevel.None;
+            state.Tier = flag == TrackFlag.Yellow ? Tier.Alert : Tier.Ambient;
+            state.BlackFlag = snapshot.FlagBlack;
+            state.BlackDetail = BlackDetail.None;
+            state.Meatball = snapshot.FlagOrange;
             state.Session = MapSession(snapshot.SessionTypeName, snapshot.GamePaused);
             state.Caution = Caution.None;
             state.Sectors = SectorSet.Empty;
+            state.StartPhase = StartPhase.Off;
+            state.StartLightsLit = 0;
+            state.TimePenaltySeconds = 0;
+            state.CountdownLaps = 0;
+            state.Furled = false;
+            state.IncidentWarning = false;
         }
 
         /// <summary>
-        /// First-set-wins flag selection in the fixed priority order —
-        /// yellow (danger) above all, then the driver-directed flags, then
-        /// the informational ones.
+        /// First-set-wins track-flag selection in the fixed priority order —
+        /// yellow (danger) above all, then blue (traffic), then the
+        /// informational flags. Black/orange are handled as orthogonal
+        /// dimensions in <see cref="Map"/>, not here.
         /// </summary>
-        public static Flag MapFlag(TelemetrySnapshot snapshot)
+        public static TrackFlag MapFlag(TelemetrySnapshot snapshot)
         {
             if (snapshot.FlagYellow)
             {
-                return Flag.Yellow;
+                return TrackFlag.Yellow;
             }
             if (snapshot.FlagBlue)
             {
-                return Flag.Blue;
-            }
-            if (snapshot.FlagBlack)
-            {
-                return Flag.Black;
+                return TrackFlag.Blue;
             }
             if (snapshot.FlagWhite)
             {
-                return Flag.White;
+                return TrackFlag.White;
             }
             if (snapshot.FlagCheckered)
             {
-                return Flag.Checkered;
+                return TrackFlag.Checkered;
             }
             if (snapshot.FlagGreen)
             {
-                return Flag.Green;
+                return TrackFlag.Green;
             }
-            if (snapshot.FlagOrange)
-            {
-                return Flag.Orange;
-            }
-            return Flag.None;
+            return TrackFlag.None;
         }
 
         /// <summary>

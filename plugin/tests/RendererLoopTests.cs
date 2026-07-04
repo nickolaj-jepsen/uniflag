@@ -11,7 +11,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using Uniflag.Rendering;
+using Uniflag.Rendering.Grammar;
 using Xunit;
+using Session = Uniflag.Rendering.Session;
 
 namespace Uniflag.Tests
 {
@@ -171,13 +173,14 @@ namespace Uniflag.Tests
             Assert.All(dest, b => Assert.Equal((byte)0, b));
         }
 
-        // Input arbitration. The frame predicates below hold at EVERY frame
-        // index (static cloth-wave fills never strobe dark; the idle marker's
-        // breathe never leaves its range), so no animation timing is pinned.
+        // Input arbitration. The frame predicates below hold at every SETTLED
+        // frame (ambient cloth-wave fills never strobe dark; the idle
+        // beacon's breathe never leaves its range); the onset flash makes the
+        // first ~8 frames white, which the polling WaitForFrame simply skips.
 
-        private static RenderState LiveFlag(Flag flag)
+        private static SignalState LiveFlag(TrackFlag flag)
         {
-            RenderState state = RenderState.Default;
+            SignalState state = SignalState.Default;
             state.Flag = flag;
             state.Session = Session.Racing;
             return state;
@@ -211,9 +214,10 @@ namespace Uniflag.Tests
             return true;
         }
 
-        // Connected-idle (docs/effects-spec.md §7b): only (15,31) and
-        // (16,31) lit, both dim blue within the breathe range (0, 2..6,
-        // 8..24) — true at any frame.
+        // Connected-idle (docs/flag-grammar.md §7b): the teal docked beacon —
+        // cores (15,30)/(16,30), shoulders (14,30)/(17,30), halos
+        // (15,29)/(16,29), all dim teal (R == 0, faint G and B), everything
+        // else black — true at any frame.
         private static bool IsConnectedIdle(byte[] frame)
         {
             for (int p = 0; p < FrameBuffer.Width * FrameBuffer.Height; p++)
@@ -221,11 +225,12 @@ namespace Uniflag.Tests
                 int x = p % FrameBuffer.Width;
                 int y = p / FrameBuffer.Width;
                 int i = p * 3;
-                if (y == 31 && (x == 15 || x == 16))
+                bool beacon = (y == 30 && x >= 14 && x <= 17) || (y == 29 && (x == 15 || x == 16));
+                if (beacon)
                 {
                     if (frame[i] != 0
-                        || frame[i + 1] < 2 || frame[i + 1] > 6
-                        || frame[i + 2] < 8 || frame[i + 2] > 24)
+                        || frame[i + 1] < 1 || frame[i + 1] > 24
+                        || frame[i + 2] < 1 || frame[i + 2] > 18)
                     {
                         return false;
                     }
@@ -280,17 +285,17 @@ namespace Uniflag.Tests
             loop.AddSink(sink);
 
             // Normal input: live blue.
-            loop.SetState(LiveFlag(Flag.Blue), connected: true);
+            loop.SetState(LiveFlag(TrackFlag.Blue), connected: true);
             WaitForFrame(loop, IsBlueFill, "the normal-input blue frame");
 
             // Override with live yellow — must clobber the normal view.
-            loop.SetOverrideState(LiveFlag(Flag.Yellow), connected: true);
+            loop.SetOverrideState(LiveFlag(TrackFlag.Yellow), connected: true);
             WaitForFrame(loop, IsYellowFill, "the override yellow frame");
 
             // Normal input keeps updating underneath: it must NOT show.
             // Wait for at least two further ticks, then check the frame
             // painted after the normal-channel update is still the override.
-            loop.SetState(LiveFlag(Flag.Blue), connected: true);
+            loop.SetState(LiveFlag(TrackFlag.Blue), connected: true);
             var scratch = new byte[FrameBuffer.ByteLength];
             long seen = loop.CopyLatestFrame(scratch);
             WaitUntil(
@@ -312,7 +317,7 @@ namespace Uniflag.Tests
             var sink = new RecordingSink();
             loop.AddSink(sink);
 
-            loop.SetOverrideState(LiveFlag(Flag.Yellow), connected: true);
+            loop.SetOverrideState(LiveFlag(TrackFlag.Yellow), connected: true);
             WaitForFrame(loop, IsYellowFill, "the override yellow frame");
 
             // The normal channel was never fed: fall back to boot-dark.
@@ -331,7 +336,7 @@ namespace Uniflag.Tests
 
             // The DataUpdate arbitration case: cycler override active while
             // the telemetry path keeps reporting "no game".
-            loop.SetOverrideState(LiveFlag(Flag.Yellow), connected: true);
+            loop.SetOverrideState(LiveFlag(TrackFlag.Yellow), connected: true);
             loop.SetConnectedIdle();
             WaitForFrame(loop, IsYellowFill, "the override frame despite connected-idle on the normal channel");
 

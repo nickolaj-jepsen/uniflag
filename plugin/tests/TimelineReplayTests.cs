@@ -5,14 +5,15 @@
 // SYNTHETIC iRacing SessionFlags sequences through the generic+iRacing
 // layers.
 //
-// The timeline fixtures are game-agnostic RenderState scripts, so they run
-// through the GENERIC pipeline only: each step is projected onto a
+// The timeline fixtures are game-agnostic SignalState scripts (format 2 —
+// schema-revved from the M7 transcriptions at the flag-grammar cutover), so
+// they run through the GENERIC pipeline only: each step is projected onto a
 // telemetry snapshot (unified flags + a representative SessionTypeName)
 // and the expected output is the step folded through the documented
 // generic-adapter capability limits (docs/simhub-flag-properties.md,
 // "Generic adapter mapping"): the unified layer has no red flag, no
-// caution, no sectors, no wave levels (yellow always guesses Single), and
-// SessionTypeName keeps reading "Race" after the chequered flag, so
+// caution, no sectors, no urgency detail (yellow always guesses Alert),
+// and SessionTypeName keeps reading "Race" after the chequered flag, so
 // PostRace projects to Racing.
 //
 // The iRacing sequences are SYNTHETIC: they are derived from the
@@ -24,8 +25,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Uniflag.Adapters;
-using Uniflag.Rendering;
+using Uniflag.Rendering.Grammar;
 using Xunit;
+using SectorSet = Uniflag.Rendering.SectorSet;
+using Session = Uniflag.Rendering.Session;
 
 namespace Uniflag.Tests
 {
@@ -35,8 +38,8 @@ namespace Uniflag.Tests
         private sealed class Step
         {
             public long DelayMs;
-            public Flag Flag;
-            public WaveLevel Wave;
+            public TrackFlag Flag;
+            public Tier Tier;
             public Session Session;
             public Caution Caution;
             public SectorSet Sectors;
@@ -49,7 +52,7 @@ namespace Uniflag.Tests
         {
             string path = Path.Combine(TimelinesDir, fileName);
             var root = (Dictionary<string, object>)MiniJson.Parse(File.ReadAllText(path));
-            Assert.Equal(1L, (long)root["format"]);
+            Assert.Equal(2L, (long)root["format"]);
             description = (string)root["description"];
             var steps = new List<Step>();
             foreach (object stepObj in (List<object>)root["steps"])
@@ -63,8 +66,8 @@ namespace Uniflag.Tests
                 steps.Add(new Step
                 {
                     DelayMs = (long)entry["delay_ms"],
-                    Flag = (Flag)Enum.Parse(typeof(Flag), (string)entry["flag"]),
-                    Wave = (WaveLevel)Enum.Parse(typeof(WaveLevel), (string)entry["wave"]),
+                    Flag = (TrackFlag)Enum.Parse(typeof(TrackFlag), (string)entry["flag"]),
+                    Tier = (Tier)Enum.Parse(typeof(Tier), (string)entry["tier"]),
                     Session = (Session)Enum.Parse(typeof(Session), (string)entry["session"]),
                     Caution = (Caution)Enum.Parse(typeof(Caution), (string)entry["caution"]),
                     Sectors = sectors,
@@ -92,26 +95,20 @@ namespace Uniflag.Tests
             };
             switch (step.Flag)
             {
-                case Flag.Yellow:
+                case TrackFlag.Yellow:
                     snapshot.FlagYellow = true;
                     break;
-                case Flag.Blue:
+                case TrackFlag.Blue:
                     snapshot.FlagBlue = true;
                     break;
-                case Flag.Black:
-                    snapshot.FlagBlack = true;
-                    break;
-                case Flag.White:
+                case TrackFlag.White:
                     snapshot.FlagWhite = true;
                     break;
-                case Flag.Checkered:
+                case TrackFlag.Checkered:
                     snapshot.FlagCheckered = true;
                     break;
-                case Flag.Green:
+                case TrackFlag.Green:
                     snapshot.FlagGreen = true;
-                    break;
-                case Flag.Orange:
-                    snapshot.FlagOrange = true;
                     break;
                 default:
                     // None — and Red, which the unified layer cannot carry.
@@ -137,33 +134,33 @@ namespace Uniflag.Tests
 
         /// <summary>
         /// The step folded through the generic layer's documented limits:
-        /// red → None (unified never carries it), yellow → Single wave
-        /// (the heuristic), all other waves → None, caution/sectors →
+        /// red → None (unified never carries it), yellow → Alert tier (the
+        /// heuristic), all other flags → Ambient, caution/sectors →
         /// none/empty, PostRace → Racing (SessionTypeName still "Race").
         /// </summary>
-        private static RenderState ExpectedGenericProjection(Step step)
+        private static SignalState ExpectedGenericProjection(Step step)
         {
-            RenderState expected = RenderState.Default;
-            expected.Flag = step.Flag == Flag.Red ? Flag.None : step.Flag;
-            expected.Wave = expected.Flag == Flag.Yellow ? WaveLevel.Single : WaveLevel.None;
+            SignalState expected = SignalState.Default;
+            expected.Flag = step.Flag == TrackFlag.Red ? TrackFlag.None : step.Flag;
+            expected.Tier = expected.Flag == TrackFlag.Yellow ? Tier.Alert : Tier.Ambient;
             expected.Session = step.Session == Session.PostRace ? Session.Racing : step.Session;
             expected.Caution = Caution.None;
             expected.Sectors = SectorSet.Empty;
             return expected;
         }
 
-        private static void AssertStatesEqual(RenderState want, RenderState got, string context)
+        private static void AssertStatesEqual(SignalState want, SignalState got, string context)
         {
             Assert.True(want.Flag == got.Flag, $"{context}: flag {got.Flag}, want {want.Flag}");
-            Assert.True(want.Wave == got.Wave, $"{context}: wave {got.Wave}, want {want.Wave}");
+            Assert.True(want.Tier == got.Tier, $"{context}: tier {got.Tier}, want {want.Tier}");
             Assert.True(want.Session == got.Session, $"{context}: session {got.Session}, want {want.Session}");
             Assert.True(want.Caution == got.Caution, $"{context}: caution {got.Caution}, want {want.Caution}");
             Assert.True(want.Sectors.Equals(got.Sectors), $"{context}: sector masks differ");
-            Assert.True(want.Slowdown == got.Slowdown, $"{context}: slowdown {got.Slowdown}, want {want.Slowdown}");
-            Assert.True(want.Meatball == got.Meatball, $"{context}: meatball {got.Meatball}, want {want.Meatball}");
+            Assert.True(want.BlackFlag == got.BlackFlag, $"{context}: black {got.BlackFlag}, want {want.BlackFlag}");
             Assert.True(
                 want.BlackDetail == got.BlackDetail,
                 $"{context}: black detail {got.BlackDetail}, want {want.BlackDetail}");
+            Assert.True(want.Meatball == got.Meatball, $"{context}: meatball {got.Meatball}, want {want.Meatball}");
             Assert.True(want.Furled == got.Furled, $"{context}: furled {got.Furled}, want {want.Furled}");
         }
 
@@ -183,7 +180,7 @@ namespace Uniflag.Tests
             {
                 Step step = steps[i];
                 Assert.True(step.DelayMs >= 0, $"step {i}: negative delay");
-                RenderState got = pipeline.Map(SnapshotOf(step));
+                SignalState got = pipeline.Map(SnapshotOf(step));
                 AssertStatesEqual(ExpectedGenericProjection(step), got, $"{fileName} step {i}");
             }
         }
@@ -193,9 +190,9 @@ namespace Uniflag.Tests
         {
             // Sanity on the projection itself: every step whose fixture
             // state IS reachable through the unified layer (non-red flag,
-            // yellow-single-or-none wave, no caution/sectors, session in
-            // the generic vocabulary) must round-trip identically — the
-            // projection only ever bends the documented limit cases.
+            // the yellow-Alert-else-Ambient tier, no caution/sectors,
+            // session in the generic vocabulary) must round-trip identically
+            // — the projection only ever bends the documented limit cases.
             foreach (string fileName in new[] { "race-arc.json", "caution-and-sectors.json" })
             {
                 List<Step> steps = LoadTimeline(fileName, out _);
@@ -204,19 +201,19 @@ namespace Uniflag.Tests
                 for (int i = 0; i < steps.Count; i++)
                 {
                     Step step = steps[i];
-                    bool reachable = step.Flag != Flag.Red
+                    bool reachable = step.Flag != TrackFlag.Red
                         && step.Caution == Caution.None
                         && step.Sectors.IsEmpty
-                        && (step.Flag == Flag.Yellow
-                            ? step.Wave == WaveLevel.Single
-                            : step.Wave == WaveLevel.None)
+                        && (step.Flag == TrackFlag.Yellow
+                            ? step.Tier == Tier.Alert
+                            : step.Tier == Tier.Ambient)
                         && step.Session != Session.PostRace;
                     if (!reachable)
                     {
                         continue;
                     }
-                    RenderState got = pipeline.Map(SnapshotOf(step));
-                    Assert.True(step.Flag == got.Flag && step.Wave == got.Wave
+                    SignalState got = pipeline.Map(SnapshotOf(step));
+                    Assert.True(step.Flag == got.Flag && step.Tier == got.Tier
                         && step.Session == got.Session,
                         $"{fileName} step {i}: reachable step did not round-trip");
                     exact++;
@@ -235,24 +232,31 @@ namespace Uniflag.Tests
     {
         private sealed class Expect
         {
-            public Expect(uint mask, Flag flag, WaveLevel wave, Caution caution,
-                bool meatball = false, bool furled = false, string because = null)
+            public Expect(uint mask, TrackFlag flag, Tier tier, Caution caution,
+                bool blackFlag = false, bool meatball = false, bool furled = false,
+                StartPhase startPhase = StartPhase.Off, byte countdown = 0, string because = null)
             {
                 Mask = mask;
                 Flag = flag;
-                Wave = wave;
+                Tier = tier;
                 Caution = caution;
+                BlackFlag = blackFlag;
                 Meatball = meatball;
                 Furled = furled;
+                StartPhase = startPhase;
+                Countdown = countdown;
                 Because = because ?? string.Empty;
             }
 
             public uint Mask { get; }
-            public Flag Flag { get; }
-            public WaveLevel Wave { get; }
+            public TrackFlag Flag { get; }
+            public Tier Tier { get; }
             public Caution Caution { get; }
+            public bool BlackFlag { get; }
             public bool Meatball { get; }
             public bool Furled { get; }
+            public StartPhase StartPhase { get; }
+            public byte Countdown { get; }
             public string Because { get; }
         }
 
@@ -265,83 +269,99 @@ namespace Uniflag.Tests
             // mask is synthetic (built from the verified bit values).
             Expect[] sequence =
             {
-                new Expect(IRacingAdapter.FlagGreenHeld, Flag.None, WaveLevel.None, Caution.None,
+                new Expect(IRacingAdapter.FlagGreenHeld, TrackFlag.None, Tier.Ambient, Caution.None,
+                    startPhase: StartPhase.Set,
                     because: "greenHeld: green still furled — gantry Set, no flag yet"),
-                new Expect(IRacingAdapter.FlagGreen, Flag.Green, WaveLevel.None, Caution.None),
-                new Expect(0, Flag.None, WaveLevel.None, Caution.None),
-                new Expect(IRacingAdapter.FlagYellow, Flag.Yellow, WaveLevel.None, Caution.None,
-                    because: "displayed yellow: raw kills the generic Single guess"),
+                new Expect(IRacingAdapter.FlagGreen, TrackFlag.Green, Tier.Alert, Caution.None),
+                new Expect(0, TrackFlag.None, Tier.Ambient, Caution.None),
+                new Expect(IRacingAdapter.FlagYellow, TrackFlag.Yellow, Tier.Ambient, Caution.None,
+                    because: "displayed yellow: raw kills the generic Alert guess"),
                 new Expect(IRacingAdapter.FlagYellow | IRacingAdapter.FlagYellowWaving,
-                    Flag.Yellow, WaveLevel.Single, Caution.None),
+                    TrackFlag.Yellow, Tier.Alert, Caution.None),
                 new Expect(IRacingAdapter.FlagCaution | IRacingAdapter.FlagCautionWaving
                         | IRacingAdapter.FlagYellowWaving,
-                    Flag.Yellow, WaveLevel.Single, Caution.SafetyCar,
-                    because: "full-course caution deploys the SC board over the yellow base"),
+                    TrackFlag.Yellow, Tier.Urgent, Caution.SafetyCar,
+                    because: "waving full-course caution: SC board over an urgent yellow field"),
                 new Expect(IRacingAdapter.FlagOneLapToGreen | IRacingAdapter.FlagCaution,
-                    Flag.Yellow, WaveLevel.None, Caution.SafetyCar,
-                    because: "one-to-green: caution still up, no waving bits left"),
-                new Expect(0, Flag.None, WaveLevel.None, Caution.None),
-                new Expect(IRacingAdapter.FlagFurled, Flag.None, WaveLevel.None, Caution.None,
+                    TrackFlag.Yellow, Tier.Alert, Caution.SafetyCar,
+                    startPhase: StartPhase.Ready,
+                    because: "one-to-green: caution still up, gantry arms on the rolling restart"),
+                new Expect(0, TrackFlag.None, Tier.Ambient, Caution.None),
+                new Expect(IRacingAdapter.FlagFurled, TrackFlag.None, Tier.Ambient, Caution.None,
                     furled: true),
-                new Expect(IRacingAdapter.FlagRepair, Flag.Orange, WaveLevel.None, Caution.None,
+                new Expect(IRacingAdapter.FlagRepair, TrackFlag.None, Tier.Ambient, Caution.None,
                     meatball: true,
-                    because: "repair: unified orange + the meatball board"),
-                new Expect(IRacingAdapter.FlagBlack, Flag.Black, WaveLevel.None, Caution.None),
-                new Expect(IRacingAdapter.FlagRed, Flag.Red, WaveLevel.None, Caution.None),
-                new Expect(IRacingAdapter.FlagWhite, Flag.White, WaveLevel.None, Caution.None),
-                new Expect(IRacingAdapter.FlagCheckered, Flag.Checkered, WaveLevel.None, Caution.None),
+                    because: "repair: the meatball field (unified orange maps to the orthogonal dimension)"),
+                new Expect(IRacingAdapter.FlagBlack, TrackFlag.None, Tier.Ambient, Caution.None,
+                    blackFlag: true),
+                new Expect(IRacingAdapter.FlagTenToGo, TrackFlag.None, Tier.Ambient, Caution.None,
+                    countdown: 10),
+                new Expect(IRacingAdapter.FlagRed, TrackFlag.Red, Tier.Urgent, Caution.None),
+                new Expect(IRacingAdapter.FlagWhite, TrackFlag.White, Tier.Ambient, Caution.None),
+                new Expect(IRacingAdapter.FlagCheckered, TrackFlag.Checkered, Tier.Ambient, Caution.None),
             };
 
             var pipeline = new AdapterPipeline(new IRacingAdapter());
             for (int i = 0; i < sequence.Length; i++)
             {
                 Expect expect = sequence[i];
-                RenderState got = pipeline.Map(IRacingAdapterTests.IRacingSnapshot(expect.Mask));
+                SignalState got = pipeline.Map(IRacingAdapterTests.IRacingSnapshot(expect.Mask));
                 string context = $"step {i} (mask 0x{expect.Mask:X}) {expect.Because}";
                 Assert.True(expect.Flag == got.Flag, $"{context}: flag {got.Flag}, want {expect.Flag}");
-                Assert.True(expect.Wave == got.Wave, $"{context}: wave {got.Wave}, want {expect.Wave}");
+                Assert.True(expect.Tier == got.Tier, $"{context}: tier {got.Tier}, want {expect.Tier}");
                 Assert.True(expect.Caution == got.Caution,
                     $"{context}: caution {got.Caution}, want {expect.Caution}");
+                Assert.True(expect.BlackFlag == got.BlackFlag,
+                    $"{context}: black {got.BlackFlag}, want {expect.BlackFlag}");
                 Assert.True(expect.Meatball == got.Meatball,
                     $"{context}: meatball {got.Meatball}, want {expect.Meatball}");
                 Assert.True(expect.Furled == got.Furled,
                     $"{context}: furled {got.Furled}, want {expect.Furled}");
+                Assert.True(expect.StartPhase == got.StartPhase,
+                    $"{context}: start phase {got.StartPhase}, want {expect.StartPhase}");
+                Assert.True(expect.Countdown == got.CountdownLaps,
+                    $"{context}: countdown {got.CountdownLaps}, want {expect.Countdown}");
                 // Never fabricated from iRacing telemetry:
-                Assert.Equal(0, got.Slowdown);
-                Assert.Equal(BlackFlagDetail.None, got.BlackDetail);
+                Assert.True(got.BlackDetail == BlackDetail.None
+                    || got.BlackDetail == BlackDetail.Disqualified,
+                    $"{context}: DT/SG must never be guessed for iRacing");
             }
         }
 
         [Fact]
-        public void RedDuringCautionRendersRedAndSuppressesTheBoard()
+        public void RedDuringCautionIsATotalTakeover()
         {
             // Red + caution simultaneously: the adapter reports both; the
-            // precedence ladder (not the adapter) resolves red on top —
-            // mirroring the caution-and-sectors fixture's red-over-VSC step.
+            // compositor resolves red on top and suppresses the board.
             var pipeline = new AdapterPipeline(new IRacingAdapter());
-            RenderState state = pipeline.Map(IRacingAdapterTests.IRacingSnapshot(
+            SignalState state = pipeline.Map(IRacingAdapterTests.IRacingSnapshot(
                 IRacingAdapter.FlagRed | IRacingAdapter.FlagCaution));
-            Assert.Equal(Flag.Red, state.Flag);
+            Assert.Equal(TrackFlag.Red, state.Flag);
             Assert.Equal(Caution.SafetyCar, state.Caution);
-            Assert.Equal(RenderLayer.RedFlag, Precedence.Select(state, connected: true));
-            Assert.False(Precedence.SectorBandVisible(state, connected: true));
-            Assert.False(Precedence.FurledAccentVisible(state, connected: true));
+
+            Composition comp = Compositor.Select(state, connected: true);
+            Assert.Equal(FieldKind.Red, comp.Field);
+            Assert.Equal(BoardKind.None, comp.Board);
+            Assert.False(comp.SectorStrip);
         }
 
         [Fact]
-        public void PenaltyBitsComposeWithTheCautionLadder()
+        public void PenaltyBitsComposeWithTheCautionRegime()
         {
-            // Meatball + furled during a caution: adapter carries all three
-            // dimensions; the board still wins the base layer and the
-            // accent overlays it.
+            // Meatball + furled during a caution: the adapter carries all
+            // three dimensions; the compositor stacks the yellow field, the
+            // SC board and the furled frame.
             var pipeline = new AdapterPipeline(new IRacingAdapter());
-            RenderState state = pipeline.Map(IRacingAdapterTests.IRacingSnapshot(
+            SignalState state = pipeline.Map(IRacingAdapterTests.IRacingSnapshot(
                 IRacingAdapter.FlagCaution | IRacingAdapter.FlagRepair | IRacingAdapter.FlagFurled));
             Assert.Equal(Caution.SafetyCar, state.Caution);
             Assert.True(state.Meatball);
             Assert.True(state.Furled);
-            Assert.Equal(RenderLayer.SafetyCarBoard, Precedence.Select(state, connected: true));
-            Assert.True(Precedence.FurledAccentVisible(state, connected: true));
+
+            Composition comp = Compositor.Select(state, connected: true);
+            Assert.Equal(FieldKind.Yellow, comp.Field);
+            Assert.Equal(BoardKind.SafetyCar, comp.Board);
+            Assert.Equal(FrameKind.Furled, comp.Frame);
         }
     }
 }

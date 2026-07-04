@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // Debug state-cycler: steps the renderer's OVERRIDE input through a
-// deterministic tour of the full flag/wave/caution/sector vocabulary so the
-// preview animates with zero hardware and zero game — and keeps animating
-// even while DataUpdate feeds the normal input at 60 Hz. Deliberately
-// WPF-free so the sequence and stepping logic are unit-testable from plain
-// xunit.
+// deterministic tour of the full Grammar signal vocabulary
+// (docs/flag-grammar.md §6-§7) so the preview animates with zero hardware
+// and zero game — and keeps animating even while DataUpdate feeds the
+// normal input at 60 Hz. Each 2 s dwell shows a signal's onset flash and
+// attention-window motion (the envelope re-arms on every state change).
+// Deliberately WPF-free so the sequence and stepping logic are
+// unit-testable from plain xunit.
 
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using Uniflag.Rendering;
+using Uniflag.Rendering.Grammar;
+using Caution = Uniflag.Rendering.Grammar.Caution;
 
 namespace Uniflag
 {
@@ -25,12 +29,12 @@ namespace Uniflag
     /// </summary>
     public sealed class StateCycler : IDisposable
     {
-        /// <summary>Dwell time per state — long enough to see every strobe/sweep.</summary>
+        /// <summary>Dwell time per state — long enough to see the onset flash and the tier motion.</summary>
         public const int StepMilliseconds = 2000;
 
-        private readonly Action<RenderState, bool> _applyOverride;
+        private readonly Action<SignalState, bool> _applyOverride;
         private readonly Action _clearOverride;
-        private readonly IReadOnlyList<RenderState> _sequence;
+        private readonly IReadOnlyList<SignalState> _sequence;
         private readonly object _gate = new object();
         private Timer _timer;
         private int _index;
@@ -45,14 +49,14 @@ namespace Uniflag
         /// Core constructor. Used directly by tests to observe the applied
         /// sequence without a renderer.
         /// </summary>
-        public StateCycler(Action<RenderState, bool> applyOverride, Action clearOverride)
+        public StateCycler(Action<SignalState, bool> applyOverride, Action clearOverride)
         {
             _applyOverride = applyOverride ?? throw new ArgumentNullException(nameof(applyOverride));
             _clearOverride = clearOverride ?? throw new ArgumentNullException(nameof(clearOverride));
             _sequence = BuildSequence();
         }
 
-        private static Action<RenderState, bool> OverrideOf(RendererLoop renderer)
+        private static Action<SignalState, bool> OverrideOf(RendererLoop renderer)
         {
             if (renderer == null)
             {
@@ -137,7 +141,7 @@ namespace Uniflag
         {
             lock (_gate)
             {
-                RenderState next = _sequence[_index];
+                SignalState next = _sequence[_index];
                 _index = (_index + 1) % _sequence.Count;
                 _applyOverride(next, true);
             }
@@ -156,112 +160,109 @@ namespace Uniflag
                 {
                     return;
                 }
-                RenderState next = _sequence[_index];
+                SignalState next = _sequence[_index];
                 _index = (_index + 1) % _sequence.Count;
                 _applyOverride(next, true);
             }
         }
 
         /// <summary>
-        /// The deterministic tour over the full state vocabulary. Pure — two
-        /// calls yield identical sequences.
+        /// The deterministic tour over the full Grammar vocabulary — every
+        /// field at its tiers, the black-flag family with demotions, the
+        /// regime boards, sector strips, notice boards, the gantry phases,
+        /// the frame advisories and both idles. Pure — two calls yield
+        /// identical sequences.
         /// </summary>
-        public static IReadOnlyList<RenderState> BuildSequence()
+        public static IReadOnlyList<SignalState> BuildSequence()
         {
-            var sequence = new List<RenderState>
+            return new List<SignalState>
             {
-                Make(Flag.None, WaveLevel.None, Session.PreRace, Caution.None, SectorSet.Empty),
-                Make(Flag.None, WaveLevel.None, Session.Racing, Caution.None, SectorSet.Empty),
+                // Idles: violet session flankers, then the static race ticks.
+                Make(session: Session.PreRace),
+                Make(),
+
+                // Track-state fields through the tier ladder.
+                Make(flag: TrackFlag.Yellow, tier: Tier.Ambient),
+                Make(flag: TrackFlag.Yellow, tier: Tier.Alert),
+                Make(flag: TrackFlag.Yellow, tier: Tier.Urgent),
+                Make(flag: TrackFlag.Blue, tier: Tier.Ambient),
+                Make(flag: TrackFlag.Blue, tier: Tier.Alert),
+                Make(flag: TrackFlag.White),
+                Make(flag: TrackFlag.Green, tier: Tier.Alert),
+                Make(flag: TrackFlag.Red),
+                Make(flag: TrackFlag.Checkered),
+                Make(flag: TrackFlag.Debris),
+
+                // The black-flag family, its details, and the demotions.
+                Make(blackFlag: true),
+                Make(blackFlag: true, blackDetail: BlackDetail.DriveThrough),
+                Make(blackFlag: true, blackDetail: BlackDetail.StopAndGo),
+                Make(blackDetail: BlackDetail.Disqualified),
+                Make(meatball: true),
+                Make(flag: TrackFlag.Yellow, tier: Tier.Alert, blackFlag: true),
+                Make(blackFlag: true, meatball: true),
+
+                // Neutralisation regimes: yellow field + board.
+                Make(caution: Caution.SafetyCar),
+                Make(caution: Caution.VirtualSafetyCar),
+                Make(caution: Caution.FullCourseYellow),
+
+                // Sector strips under a local yellow.
+                Make(flag: TrackFlag.Yellow, tier: Tier.Alert, sectors: SectorSet.FromBits(0b001)),
+                Make(flag: TrackFlag.Yellow, tier: Tier.Alert, sectors: SectorSet.FromBits(0b101)),
+                Make(flag: TrackFlag.Yellow, tier: Tier.Urgent, sectors: SectorSet.FromBits(0b111)),
+
+                // Notice boards.
+                Make(timePenaltySeconds: 5),
+                Make(countdownLaps: 10),
+                Make(countdownLaps: 5),
+
+                // Start-sequence gantry.
+                Make(startPhase: StartPhase.Ready),
+                Make(startPhase: StartPhase.Set),
+                Make(startPhase: StartPhase.Set, startLightsLit: 3),
+                Make(startPhase: StartPhase.Go),
+
+                // Frame advisories, alone and riding a field.
+                Make(furled: true),
+                Make(incidentWarning: true),
+                Make(flag: TrackFlag.Yellow, tier: Tier.Alert, incidentWarning: true),
             };
-
-            // Every flag at every wave level. Order puts a non-red flag
-            // before red and a non-green before green, so both onset
-            // animations (flag-age resets) are visible each lap of the tour.
-            Flag[] flags =
-            {
-                Flag.Yellow, Flag.Blue, Flag.Black, Flag.White,
-                Flag.Red, Flag.Green, Flag.Checkered, Flag.Orange,
-            };
-            WaveLevel[] waves = { WaveLevel.None, WaveLevel.Single, WaveLevel.Double };
-            foreach (Flag flag in flags)
-            {
-                foreach (WaveLevel wave in waves)
-                {
-                    sequence.Add(Make(flag, wave, Session.Racing, Caution.None, SectorSet.Empty));
-                }
-            }
-
-            sequence.Add(Make(Flag.None, WaveLevel.None, Session.Racing, Caution.VirtualSafetyCar, SectorSet.Empty));
-            sequence.Add(Make(Flag.None, WaveLevel.None, Session.Racing, Caution.SafetyCar, SectorSet.Empty));
-
-            for (byte bits = 1; bits <= 7; bits++)
-            {
-                sequence.Add(Make(Flag.None, WaveLevel.None, Session.Racing, Caution.None, SectorSet.FromBits(bits)));
-            }
-
-            // 4 Hz sector band over a double-waved yellow strobe.
-            sequence.Add(Make(Flag.Yellow, WaveLevel.Double, Session.Racing, Caution.None, SectorSet.FromBits(0b111)));
-
-            // Penalty suite — the WPF-preview review path for the C#-authored
-            // golden corpus.
-            sequence.Add(MakePenalty(slowdown: 1));
-            sequence.Add(MakePenalty(slowdown: 2));
-            sequence.Add(MakePenalty(slowdown: 3));
-            sequence.Add(MakePenalty(meatball: true));
-            sequence.Add(MakePenalty(flag: Flag.Black, blackDetail: BlackFlagDetail.DriveThrough));
-            sequence.Add(MakePenalty(flag: Flag.Black, blackDetail: BlackFlagDetail.StopAndGo));
-            sequence.Add(MakePenalty(furled: true));
-            sequence.Add(MakePenalty(flag: Flag.Yellow, furled: true));
-
-            // iRacing extension effects — same WPF-preview review path: the
-            // start-light gantry, the debris board, and the incident-limit
-            // warning frame (alone and riding over a yellow base).
-            sequence.Add(MakePenalty(startLights: StartLights.Ready));
-            sequence.Add(MakePenalty(startLights: StartLights.Set));
-            sequence.Add(MakePenalty(startLights: StartLights.Go));
-            sequence.Add(MakePenalty(debris: true));
-            sequence.Add(MakePenalty(incidentWarning: true));
-            sequence.Add(MakePenalty(flag: Flag.Yellow, incidentWarning: true));
-
-            return sequence;
         }
 
-        private static RenderState Make(
-            Flag flag, WaveLevel wave, Session session, Caution caution, SectorSet sectors)
+        private static SignalState Make(
+            TrackFlag flag = TrackFlag.None,
+            Tier tier = Tier.Ambient,
+            bool blackFlag = false,
+            BlackDetail blackDetail = BlackDetail.None,
+            bool meatball = false,
+            Session session = Session.Racing,
+            Caution caution = Caution.None,
+            SectorSet sectors = default,
+            StartPhase startPhase = StartPhase.Off,
+            byte startLightsLit = 0,
+            byte timePenaltySeconds = 0,
+            byte countdownLaps = 0,
+            bool furled = false,
+            bool incidentWarning = false)
         {
-            return new RenderState
+            return new SignalState
             {
                 Flag = flag,
-                Wave = wave,
+                Tier = tier,
+                BlackFlag = blackFlag,
+                BlackDetail = blackDetail,
+                Meatball = meatball,
                 Session = session,
                 Caution = caution,
                 Sectors = sectors,
+                StartPhase = startPhase,
+                StartLightsLit = startLightsLit,
+                TimePenaltySeconds = timePenaltySeconds,
+                CountdownLaps = countdownLaps,
+                Furled = furled,
+                IncidentWarning = incidentWarning,
             };
-        }
-
-        /// <summary>
-        /// A penalty-suite tour step: <see cref="Session.Racing"/> base with
-        /// the given penalty dimensions.
-        /// </summary>
-        private static RenderState MakePenalty(
-            Flag flag = Flag.None,
-            byte slowdown = 0,
-            bool meatball = false,
-            BlackFlagDetail blackDetail = BlackFlagDetail.None,
-            bool furled = false,
-            StartLights startLights = StartLights.Off,
-            bool debris = false,
-            bool incidentWarning = false)
-        {
-            RenderState state = Make(flag, WaveLevel.None, Session.Racing, Caution.None, SectorSet.Empty);
-            state.Slowdown = slowdown;
-            state.Meatball = meatball;
-            state.BlackDetail = blackDetail;
-            state.Furled = furled;
-            state.StartLights = startLights;
-            state.Debris = debris;
-            state.IncidentWarning = incidentWarning;
-            return state;
         }
     }
 }
