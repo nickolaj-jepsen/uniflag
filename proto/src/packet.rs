@@ -27,7 +27,7 @@ use crate::{cobs, crc};
 
 /// Protocol version carried in the [`Packet::Hello`] /
 /// [`Packet::HelloAck`] handshake. The plugin requires exact equality and
-/// refuses to drive the device on mismatch â€” bump on any wire-visible
+/// refuses to drive the device on mismatch — bump on any wire-visible
 /// change.
 pub const PROTOCOL_VERSION: u8 = 1;
 
@@ -54,8 +54,8 @@ pub const MAX_RAW_LEN: usize = 1 + FRAME_PAYLOAD_LEN + 2;
 /// Sizes the firmware RX accumulator.
 pub const MAX_WIRE_LEN: usize = cobs::max_encoded_len(MAX_RAW_LEN) + 1;
 
-/// Packet type bytes. Hostâ†’device types have the high bit clear,
-/// deviceâ†’host types have it set.
+/// Packet type bytes. Host→device types have the high bit clear,
+/// device→host types have it set.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum PacketType {
@@ -89,11 +89,11 @@ pub enum Error {
     BufferTooSmall,
     /// Raw packet shorter than type + CRC.
     TooShort,
-    /// CRC mismatch â€” drop the packet and resync.
+    /// CRC mismatch — drop the packet and resync.
     BadCrc,
     /// Known packet type whose payload length doesn't match the frozen
     /// layout (or, on the encode side, an over-long `fw_version`).
-    /// Receivers drop such packets â€” same posture as [`Error::BadCrc`].
+    /// Receivers drop such packets — same posture as [`Error::BadCrc`].
     BadLength,
     /// COBS layer rejected the bytes.
     Cobs(cobs::Error),
@@ -125,7 +125,7 @@ pub fn encode(
 ) -> Result<usize, Error> {
     let raw_len = write_raw(ty, payload, scratch)?;
     // An undersized `wire` reports BufferTooSmall regardless of whether the
-    // COBS layer or the delimiter byte ran out of room â€” one caller
+    // COBS layer or the delimiter byte ran out of room — one caller
     // mistake, one error value.
     let enc_len = cobs::encode(&scratch[..raw_len], wire).map_err(|e| match e {
         cobs::Error::BufferTooSmall => Error::BufferTooSmall,
@@ -142,7 +142,7 @@ pub fn encode(
 /// payload). The type byte is returned raw so callers can ignore unknown
 /// types explicitly (forward compat) rather than erroring here.
 ///
-/// The payload length is **not** validated against the type â€” a valid-CRC
+/// The payload length is **not** validated against the type — a valid-CRC
 /// `Frame` with 5 bytes of payload parses fine. Callers must length-check
 /// before use (e.g. a Frame payload must be exactly
 /// [`FRAME_PAYLOAD_LEN`]); [`parse_packet`] / [`Packet::from_payload`]
@@ -161,8 +161,8 @@ pub fn parse_raw(raw: &[u8]) -> Result<(u8, &[u8]), Error> {
 
 // ---------------------------------------------------------------------
 // Typed layer. One variant per assigned type; the payload
-// layouts are immutable wire contracts â€” golden vectors under
-// `testdata/proto/` and `docs/protocol.md` Â§"Payload layouts" pin the
+// layouts are immutable wire contracts — golden vectors under
+// `testdata/proto/` and `docs/protocol.md` §"Payload layouts" pin the
 // exact bytes. All multi-byte values are little-endian (today only the
 // framing-layer CRC is multi-byte; every payload field is a single byte
 // or a byte string).
@@ -174,27 +174,27 @@ pub const HELLO_PAYLOAD_LEN: usize = 1;
 pub const BRIGHTNESS_PAYLOAD_LEN: usize = 1;
 /// Fixed payload length of [`Packet::ButtonEvent`].
 pub const BUTTON_EVENT_PAYLOAD_LEN: usize = 2;
-/// Minimum payload length of [`Packet::HelloAck`] â€” the 3-byte header
+/// Minimum payload length of [`Packet::HelloAck`] — the 3-byte header
 /// without the variable firmware-version tail.
 pub const HELLO_ACK_MIN_PAYLOAD_LEN: usize = 3;
 
 /// Encoder-side cap on the `HelloAck` firmware-version string; sizes the
-/// stack buffer inside [`Packet::encode`]. **Not** a wire limit â€” parsers
+/// stack buffer inside [`Packet::encode`]. **Not** a wire limit — parsers
 /// accept any length the framing allows (see
 /// `hello_ack_parse_accepts_fw_longer_than_encoder_cap`).
 pub const MAX_FW_VERSION_LEN: usize = 32;
 
-/// Button ids carried in [`Packet::ButtonEvent`]. The id space is open â€”
+/// Button ids carried in [`Packet::ButtonEvent`]. The id space is open —
 /// unassigned bytes still parse (forward compat), so interpret via
 /// [`Button::from_byte`] and ignore `None`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Button {
-    /// GPIO 21 â€” brightness up.
+    /// GPIO 21 — brightness up.
     BrightnessUp = 0,
-    /// GPIO 26 â€” brightness down.
+    /// GPIO 26 — brightness down.
     BrightnessDown = 1,
-    /// GPIO 27 â€” sleep.
+    /// GPIO 27 — sleep.
     Sleep = 2,
 }
 
@@ -243,20 +243,20 @@ impl PressKind {
 /// ([`Error::BadLength`]).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Packet<'a> {
-    /// Hostâ†’device, `0x01`. Opens the handshake on every (re)connect;
+    /// Host→device, `0x01`. Opens the handshake on every (re)connect;
     /// carries the host's [`PROTOCOL_VERSION`]. Exactly
     /// [`HELLO_PAYLOAD_LEN`] byte.
     Hello { protocol_version: u8 },
-    /// Hostâ†’device, `0x02`. One full panel: RGB888, row-major from the
+    /// Host→device, `0x02`. One full panel: RGB888, row-major from the
     /// top-left, 3 bytes per pixel (pixel `(x, y)` channel `c` at offset
     /// `(y*32 + x)*3 + c`, channels R, G, B). Exactly
     /// [`FRAME_PAYLOAD_LEN`] bytes.
     Frame { pixels: &'a [u8; FRAME_PAYLOAD_LEN] },
-    /// Hostâ†’device, `0x03`. Display brightness multiplier `0..=255`,
+    /// Host→device, `0x03`. Display brightness multiplier `0..=255`,
     /// applied by the device pre-gamma to each channel as
     /// `(c * (value + 1)) >> 8`. Exactly [`BRIGHTNESS_PAYLOAD_LEN`] byte.
     Brightness { value: u8 },
-    /// Deviceâ†’host, `0x81`. Handshake reply. At least
+    /// Device→host, `0x81`. Handshake reply. At least
     /// [`HELLO_ACK_MIN_PAYLOAD_LEN`] bytes:
     /// `[protocol_version][width][height][fw_versionâ€¦]`.
     HelloAck {
@@ -268,16 +268,16 @@ pub enum Packet<'a> {
         /// Firmware version: ASCII, no NUL terminator, may be empty.
         fw_version: &'a [u8],
     },
-    /// Deviceâ†’host, `0x82`. Exactly [`BUTTON_EVENT_PAYLOAD_LEN`] bytes.
+    /// Device→host, `0x82`. Exactly [`BUTTON_EVENT_PAYLOAD_LEN`] bytes.
     /// `button` / `kind` stay raw `u8`s so unassigned ids pass through
-    /// parsing (forward compat) â€” interpret via [`Button`] /
+    /// parsing (forward compat) — interpret via [`Button`] /
     /// [`PressKind`].
     ButtonEvent { button: u8, kind: u8 },
 }
 
 /// Outcome of [`parse_packet`] on a CRC-valid raw packet. An unassigned
-/// type byte is **not** an error â€” forward compat says receivers ignore
-/// such packets â€” so it surfaces as [`Parsed::Unknown`] for the caller to
+/// type byte is **not** an error — forward compat says receivers ignore
+/// such packets — so it surfaces as [`Parsed::Unknown`] for the caller to
 /// skip explicitly.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Parsed<'a> {
@@ -299,7 +299,7 @@ impl<'a> Packet<'a> {
 
     /// Typed view over the two halves [`parse_raw`] returns (known type +
     /// CRC-validated payload). [`Error::BadLength`] when the payload
-    /// doesn't match the frozen layout â€” receivers drop the packet.
+    /// doesn't match the frozen layout — receivers drop the packet.
     pub fn from_payload(ty: PacketType, payload: &'a [u8]) -> Result<Self, Error> {
         match ty {
             PacketType::Hello => match payload {
@@ -368,9 +368,9 @@ impl<'a> Packet<'a> {
 
 /// Validate a raw packet (via [`parse_raw`]) and type it. Framing
 /// problems (short, bad CRC) come back as `Err`; an unassigned type byte
-/// is `Ok(`[`Parsed::Unknown`]`)` â€” ignore it, never treat it as an
+/// is `Ok(`[`Parsed::Unknown`]`)` — ignore it, never treat it as an
 /// error; a known type with a wrong-length payload is
-/// [`Error::BadLength`] â€” drop it like a CRC failure.
+/// [`Error::BadLength`] — drop it like a CRC failure.
 pub fn parse_packet(raw: &[u8]) -> Result<Parsed<'_>, Error> {
     let (ty, payload) = parse_raw(raw)?;
     match PacketType::from_byte(ty) {
@@ -504,7 +504,7 @@ mod tests {
 
     #[test]
     fn unknown_type_is_parseable_for_caller_side_ignoring() {
-        // A valid-CRC packet with an unassigned type byte parses fine â€”
+        // A valid-CRC packet with an unassigned type byte parses fine —
         // ignoring it is the caller's job (forward compat).
         let mut raw = [0u8; 8];
         raw[0] = 0x7E;
@@ -524,8 +524,8 @@ mod tests {
     const ALL_BUTTONS: [Button; 3] = [Button::BrightnessUp, Button::BrightnessDown, Button::Sleep];
     const ALL_PRESS_KINDS: [PressKind; 2] = [PressKind::Short, PressKind::Long];
 
-    /// Push `pkt` through the full stack â€” typed encode â†’ COBS decode â†’
-    /// typed parse â€” asserting the wire invariants on the way, and return
+    /// Push `pkt` through the full stack — typed encode → COBS decode →
+    /// typed parse — asserting the wire invariants on the way, and return
     /// the parsed-back packet (borrowing `raw`).
     fn full_stack<'a>(pkt: &Packet<'_>, raw: &'a mut [u8; MAX_RAW_LEN]) -> Packet<'a> {
         let mut scratch = [0u8; MAX_RAW_LEN];
@@ -652,7 +652,7 @@ mod tests {
     #[test]
     fn payload_layouts_are_frozen() {
         // Byte-exact golden layouts (mirrors docs/protocol.md
-        // Â§"Payload layouts"). Changing any assertion here is a
+        // §"Payload layouts"). Changing any assertion here is a
         // wire-protocol break.
         let mut raw = [0u8; MAX_RAW_LEN];
         assert_eq!(
@@ -692,7 +692,7 @@ mod tests {
             ),
             [0x81, 0x01, 0x20, 0x20, b'0', b'.', b'1']
         );
-        // Frame: type byte, then the 3072 payload bytes verbatim â€”
+        // Frame: type byte, then the 3072 payload bytes verbatim —
         // row-major RGB, pixel (x, y) channel c at body[1 + (y*32+x)*3 + c].
         let mut pixels = [0u8; FRAME_PAYLOAD_LEN];
         let (x, y) = (5usize, 7usize);
@@ -708,7 +708,7 @@ mod tests {
 
     #[test]
     fn wrong_length_known_packets_are_rejected() {
-        // A wrong-length payload for a *known* type is BadLength â€” the
+        // A wrong-length payload for a *known* type is BadLength — the
         // receiver drops it like a CRC failure. One under and one over
         // per fixed-size type; every below-minimum length for HelloAck.
         let cases: &[(PacketType, usize)] = &[
@@ -741,7 +741,7 @@ mod tests {
     #[test]
     fn unknown_type_surfaces_as_unknown_not_error() {
         // Forward compat: a valid-CRC packet with an unassigned type byte
-        // is Parsed::Unknown, never an error â€” receivers skip it.
+        // is Parsed::Unknown, never an error — receivers skip it.
         let mut raw = [0u8; 8];
         raw[0] = 0x7E;
         raw[1] = 0x42;
@@ -799,7 +799,7 @@ mod tests {
 
     #[test]
     fn button_event_with_unassigned_ids_still_parses() {
-        // The 2-byte length is frozen but the id space is open â€” a future
+        // The 2-byte length is frozen but the id space is open — a future
         // firmware button must not kill old parsers.
         let mut raw = [0u8; 8];
         let raw_len = write_raw(PacketType::ButtonEvent, &[7, 9], &mut raw).expect("write_raw");
@@ -825,7 +825,7 @@ mod tests {
 
     #[test]
     fn typed_encode_matches_low_level_encode() {
-        // Packet::encode is a thin wrapper over packet::encode â€” the wire
+        // Packet::encode is a thin wrapper over packet::encode — the wire
         // bytes must be identical.
         let pkt = Packet::HelloAck {
             protocol_version: 1,
