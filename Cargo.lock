@@ -1705,7 +1705,6 @@ version = "2.0.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
- "critical-section",
  "embassy-executor",
  "embassy-futures",
  "embassy-rp",
@@ -1714,7 +1713,6 @@ dependencies = [
  "embassy-usb",
  "heapless 0.8.0",
  "pio",
- "pio-proc",
  "portable-atomic",
  "proto",
  "static_cell",

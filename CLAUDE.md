@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `overlay/` — the browser virtual-panel page (`index.html`, embedded into the plugin assembly at build time) + the DashStudio dash under `overlay/dash/`.
 - `simhub/` — end-user plugin install / setup / troubleshooting guide.
 - `testdata/` — the frozen cross-language golden fixtures (see Golden fixtures below). Top-level so the C# tests reach it by relative path.
+- `packaging/` — release-zip assembly: `package.ps1` (run by `just package` and the release workflow) and the `INSTALL.md` shipped inside the zip.
 - `docs/` — protocol + effects specifications, SimHub / Cosmic Unicorn references, historical v2 plan ([index](docs/README.md)).
 
 The Rust host crates (`proto`, `uniflag-cli`) are workspace `default-members`. To touch the firmware crate from the root, use `--manifest-path firmware/Cargo.toml` or `cd firmware && cargo ...`.
@@ -34,6 +35,7 @@ All wrapped by `just` (run `just` to list). The justfile works on both Linux and
 | `just plugin-build` / `just plugin-test` | build / test the SimHub plugin (Windows only; `dotnet` against `plugin/UniflagPlugin.sln`). |
 | `just overlay-serve` | serve `overlay/` over http:// for page iteration outside SimHub. |
 | `just golden-regen` | regenerate the *regenerable* fixtures only — see Golden fixtures. Deliberate, reviewed commits only. |
+| `just package` | assemble the release zip locally (Windows; same layout + only-one-DLL audit as the CI release job, via `packaging/package.ps1`). |
 
 Run a single host test: `cargo test -p proto -- hello` (or `-p uniflag-cli`). Single plugin test: `dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir=..." --filter "FullyQualifiedName~GoldenFrameTests"`.
 
@@ -88,7 +90,7 @@ Both the Rust and C# suites consume the same files; **neither side ever generate
 
 - `clippy.toml` warns on `unwrap_used` workspace-wide (allowed in tests). Don't reintroduce naked `.unwrap()` in non-test code.
 - Firmware is `no_std`, no `alloc`. `heapless` for buffers; `static_cell` / `StaticCell` for `'static` allocations needed by USB descriptors. RP2040 has no atomic CAS — `portable-atomic` with the `critical-section` feature emulates it via embassy-rp's `critical-section-impl`. Don't pull in dependencies that assume native atomics.
-- The `pio` / `pio-proc` versions must match the version `embassy-rp` re-exports (currently 0.3) — bumping one without the other breaks `Common::load_program`.
+- The `pio` version must match what `embassy-rp` uses (currently 0.3) — a mismatched `Program` type breaks `Common::load_program`. (`pio-proc` is not a direct dep; `pio::pio_asm!` re-exports it.)
 - No on-device logging or debugger support: firmware doesn't pull in `defmt` / `defmt-rtt` / `panic-probe`, and there's no `probe-rs` runner. Errors are silently swallowed; panic spins until the watchdog resets. Don't reintroduce these without a reason — the maintainer doesn't own a debugger.
 - Dev profile uses `opt-level = 1` because async generators inflate badly at `0`. Don't change without a reason.
 - `testdata/**` is immutable outside `just golden-regen`: never edit fixtures by hand, never let a test write them (regen paths are env-var-gated), and treat any diff under `testdata/frames/` as a bug — that corpus has no regen path anymore. The one sanctioned hand-authored path is adding *new* scenario files under `testdata/timelines/` (see Golden fixtures).

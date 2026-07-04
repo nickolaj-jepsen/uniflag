@@ -115,7 +115,7 @@
             export PKG_CONFIG_PATH="${pkgs.udev.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
             echo "uniflag devShell ready."
             echo "  just --list           → available recipes"
-            echo "  just build            → build firmware UF2"
+            echo "  just img              → build firmware UF2"
             echo "  just cli              → stream a test pattern to the device"
           '';
         };

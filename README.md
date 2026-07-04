@@ -45,6 +45,8 @@ install both from the same zip. Full guide:
   them), plus C#-only adapter timeline scripts
 - `docs/` — protocol + effects specifications, SimHub and Cosmic Unicorn
   references ([index](docs/README.md))
+- `packaging/` — release-zip assembly (`package.ps1`) and the `INSTALL.md`
+  shipped inside the zip
 - `justfile` — task runner (see below)
 
 ## Toolchain
