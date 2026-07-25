@@ -36,7 +36,6 @@ use embassy_sync::zerocopy_channel::Receiver as FrameReceiver;
 use embassy_time::{Duration, Instant, Ticker};
 
 use crate::display::Display;
-use crate::screens;
 use crate::{FrameBuf, TestToggleChannel, BUTTON_REPORTING, FW_VERSION};
 
 /// Local-screen animation tick. 16 ms — the same "60 fps" convention the

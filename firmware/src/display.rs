@@ -321,7 +321,8 @@ impl Display {
     }
 
     /// Write a pixel. Coordinates are panel-logical: `(0,0)` is the
-    /// top-left corner.
+    /// top-left corner. Out-of-range coordinates are silently ignored —
+    /// the local screens clip by painting past the edge.
     pub fn set_pixel(&mut self, x: i32, y: i32, r: u8, g: u8, b: u8) {
         if !(0..WIDTH as i32).contains(&x) || !(0..HEIGHT as i32).contains(&y) {
             return;
@@ -372,6 +373,16 @@ impl Display {
                 self.set_pixel(x as i32, y as i32, rgb[i], rgb[i + 1], rgb[i + 2]);
             }
         }
+    }
+}
+
+/// Lets the `screens` crate paint the panel. The crate is generic over this
+/// trait so the same code the device runs can be exercised on the host.
+impl screens::Canvas for Display {
+    fn set_pixel(&mut self, x: i32, y: i32, r: u8, g: u8, b: u8) {
+        // Inherent methods win method resolution over trait methods, so this
+        // dispatches to `Display::set_pixel` above, not back into itself.
+        self.set_pixel(x, y, r, g, b);
     }
 }
 

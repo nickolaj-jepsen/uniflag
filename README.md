@@ -36,6 +36,8 @@ install both from the same zip. Full guide:
   game adapters, USB device connection, web overlay server, settings UI
 - `firmware/` — embedded firmware (Rust + embassy-rs, RP2040): receives
   frames over USB CDC and puts them on the panel
+- `screens/` — the firmware's local screens (the no-host fallback and the
+  button test pattern), split out so they can be tested on the host
 - `cli/` — host-side bring-up CLI (`uniflag-cli`): test-pattern streamer
   and protocol diagnostic for the panel
 - `overlay/` — the browser virtual-panel page + the DashStudio dash file

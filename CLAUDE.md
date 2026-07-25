@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `proto/` — the frozen v2 binary wire protocol (`no_std`, allocation-free): `packet` (typed packets + `PROTOCOL_VERSION`, `USB_VID`/`USB_PID`, panel geometry), `cobs`, `crc`. Golden-vector conformance tests in `proto/tests/golden_vectors.rs` pin the bytes under `testdata/proto/`.
 - `firmware/` — embedded firmware (`thumbv6m-none-eabi`, embassy-rs): blits streamed frames, paints the local fallback/test screens, reports button events. Excluded from workspace `default-members` so a bare `cargo check` from the root doesn't try to cross-compile.
+- `screens/` — the firmware's local screens (`no_std`, depends only on `proto` for geometry): the §7a roaming-ember fallback and the button test pattern. A separate crate purely so it builds and is **tested** on the host — the firmware binary is `test = false`, so anything left inside it has no test coverage at all. Paints through a `Canvas` trait that `Display` implements.
 - `cli/` — `uniflag-cli`, host-side test-pattern streamer and protocol diagnostic (stream/loopback/emit modes). Conformance tests pin its emitted bytes against `testdata/proto/`.
 - `plugin/` — the SimHub plugin (C#, .NET Framework 4.8): `plugin/src/` (Rendering, Adapters, Device, Protocol, Web, settings UI) + `plugin/tests/` (xunit). Built via `plugin/UniflagPlugin.sln`; needs SimHub's reference DLLs (see Common commands).
 - `overlay/` — the browser virtual-panel page (`index.html`, embedded into the plugin assembly at build time) + the DashStudio dash under `overlay/dash/`.
@@ -18,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `packaging/` — release-zip assembly: `package.ps1` (run by `just package` and the release workflow) and the `INSTALL.md` shipped inside the zip.
 - `docs/` — protocol + effects specifications, SimHub / Cosmic Unicorn references, historical v2 plan ([index](docs/README.md)).
 
-The Rust host crates (`proto`, `uniflag-cli`) are workspace `default-members`. To touch the firmware crate from the root, use `--manifest-path firmware/Cargo.toml` or `cd firmware && cargo ...`.
+The Rust host crates (`proto`, `screens`, `uniflag-cli`) are workspace `default-members`. To touch the firmware crate from the root, use `--manifest-path firmware/Cargo.toml` or `cd firmware && cargo ...`.
 
 ## Common commands
 
@@ -65,7 +66,7 @@ Plus `run_usb`, `cdc_rx_loop` (COBS-accumulate → parse → dispatch: Frame to 
 
 **Display driver** (`display.rs`) — the Cosmic Unicorn is **not** HUB75: column shift-registers + 4-to-16 row decoder, one PIO SM with a self-chaining DMA pair, double-buffered bitstreams, per-pixel 14-bit-BCM gamma. See `docs/cosmic-unicorn-hardware.md` / `docs/cosmic-unicorn-pio.md`.
 
-The firmware deliberately does **not** render effects and does not link any render code — the fallback/test screens in `screens.rs` implement `docs/flag-grammar.md` §7 state (a) bit-exactly with embedded literals and LUT-free integer math. The device stores no settings; brightness persists host-side in the plugin.
+The firmware deliberately does **not** render effects and does not link any render code — the fallback/test screens live in the `screens` crate and implement `docs/flag-grammar.md` §7 state (a) bit-exactly with embedded literals and LUT-free integer math. That crate is firmware-only and is never linked by the plugin, which is what keeps the §7a constants independent of the render palette (the grammar forbids deriving one from the other). Its host-side tests assert §7a *behaviourally* — period, triangle symmetry, travel endpoints, margin containment, conserved luminance, the 24/255 ceiling — rather than pinning frames. The device stores no settings; brightness persists host-side in the plugin.
 
 ### Plugin (`plugin/src/`)
 

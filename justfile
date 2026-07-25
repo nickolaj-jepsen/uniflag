@@ -30,12 +30,13 @@ fmt-check:
 
 # Mirror CI: clippy on host crates, then on firmware (different target).
 clippy:
-    cargo clippy -p proto -p uniflag-cli --all-targets -- -D warnings
+    cargo clippy -p proto -p screens -p uniflag-cli --all-targets -- -D warnings
     cargo clippy --all-targets --manifest-path firmware/Cargo.toml --target thumbv6m-none-eabi -- -D warnings
 
-# Tests on host crates only (firmware is no_std, `test = false`).
+# Tests on host crates only (the firmware binary is no_std, `test = false`
+# — `screens` is the firmware's paint code, split out so it can be tested).
 test:
-    cargo test -p proto -p uniflag-cli --all-targets
+    cargo test -p proto -p screens -p uniflag-cli --all-targets
 
 # Build the firmware ELF (release).
 build:

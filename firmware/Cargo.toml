@@ -13,6 +13,9 @@ bench = false
 
 [dependencies]
 proto = { path = "../proto" }
+# The local fallback/test screens. A separate crate purely so it builds —
+# and is tested — on the host; this binary has `test = false`.
+screens = { path = "../screens" }
 
 # Embassy — versions match embassy-rs/embassy stable as of May 2026.
 embassy-rp        = { version = "0.10.0", features = ["unstable-pac", "time-driver", "critical-section-impl", "rp2040"] }
