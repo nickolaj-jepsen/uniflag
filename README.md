@@ -40,9 +40,9 @@ install both from the same zip. Full guide:
   and protocol diagnostic for the panel
 - `overlay/` — the browser virtual-panel page + the DashStudio dash file
 - `simhub/` — end-user plugin install / setup / troubleshooting guide
-- `testdata/` — frozen golden fixtures: cross-language protocol byte
-  vectors and golden frames (the Rust and C# suites both verify against
-  them), plus C#-only adapter timeline scripts
+- `testdata/` — frozen golden fixtures: the cross-language protocol byte
+  vectors (the Rust and C# suites both verify against them), plus
+  C#-only adapter timeline scripts
 - `docs/` — protocol + effects specifications, SimHub and Cosmic Unicorn
   references ([index](docs/README.md))
 - `packaging/` — release-zip assembly (`package.ps1`) and the `INSTALL.md`

@@ -3,8 +3,9 @@
 // Painter tests for the Grammar renderer (docs/flag-grammar.md §4–§8):
 // envelope phases (flash whiteout, tier modulation, fade dimming), field
 // geometry (X, disc, sweeps, stripes), board chrome, frame rings, the
-// sector strip, and the Watchline idles. The frames-grammar golden corpus
-// pins exact bytes; these tests pin structure and dispatch.
+// sector strip, and the Watchline idles. These pin structure and dispatch at
+// specific pixels; GrammarSmokeTests covers whole-scenario replay. Nothing
+// pins the frame wholesale — see docs/flag-grammar.md §11.
 
 using Uniflag.Rendering;
 using Uniflag.Rendering.Grammar;

@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Scenario ledger for the Grammar golden corpus (testdata/frames-grammar/,
-// docs/flag-grammar.md §11). Because the envelope makes rendering a function
-// of state HISTORY, each golden is a script — a sequence of (frame, state)
-// steps replayed through the compositor and envelope tracker from frame 0 —
-// plus the frame to sample. Names are unique and append-only; regeneration
-// only via the env-gated GrammarGoldenDumper in reviewed commits.
+// The Grammar scenario catalogue: a curated tour of the signal vocabulary
+// (docs/flag-grammar.md §6-§7), each entry a script — a sequence of
+// (frame, state) steps replayed through the compositor and envelope from
+// frame 0 — plus the frame that best discriminates the signal.
+//
+// Because the envelope makes rendering a function of state HISTORY, a
+// scenario cannot be reduced to a single state; the script is the unit.
+// Sample frames are chosen deliberately: strobe on/off phases, breathe
+// peaks and mid-points, sweep positions, flash blend weights, fade depths.
+//
+// This is dev tooling, not a fixture. It drives the smoke pass
+// (GrammarSmokeTests) and the frame viewer; nothing here pins bytes.
 
 using System.Collections.Generic;
-using System.Text;
 using Uniflag.Rendering;
 using Uniflag.Rendering.Grammar;
 using Caution = Uniflag.Rendering.Grammar.Caution;
@@ -17,7 +22,7 @@ using Session = Uniflag.Rendering.Session;
 
 namespace Uniflag.Tests
 {
-    internal static class GrammarGoldenScenarios
+    internal static class ScenarioCatalogue
     {
         internal delegate void StateMutator(ref SignalState s);
 
@@ -47,8 +52,8 @@ namespace Uniflag.Tests
             public string Description { get; }
             public uint SampleFrame { get; }
             public Step[] Steps { get; }
-            public string File => Name + ".rgb";
 
+            /// <summary>The state in force at <paramref name="frame"/>.</summary>
             public SignalState StateAt(uint frame)
             {
                 SignalState current = Steps[0].State;
@@ -73,11 +78,7 @@ namespace Uniflag.Tests
         private static Scenario Sc(string name, string description, uint sampleFrame, params Step[] steps) =>
             new Scenario(name, description, sampleFrame, steps);
 
-        /// <summary>
-        /// The ledger. Sample frames are chosen to discriminate: strobe
-        /// on/off phases, breathe peaks/mid-points, sweep positions, flash
-        /// blend weights and fade depths.
-        /// </summary>
+        /// <summary>The catalogue. Names are unique.</summary>
         internal static readonly IReadOnlyList<Scenario> Table = new[]
         {
             Sc("yellow_t0_ambient", "settled yellow cloth wave", 400,
@@ -163,86 +164,42 @@ namespace Uniflag.Tests
                 St(0, (ref SignalState s) => { s.Session = Session.Unknown; })),
         };
 
-        /// <summary>Replay a scenario's script from frame 0 and render the sampled frame.</summary>
-        internal static byte[] Render(Scenario sc)
+        /// <summary>Look a scenario up by name, or null if there is no such scenario.</summary>
+        internal static Scenario Find(string name)
+        {
+            foreach (Scenario sc in Table)
+            {
+                if (sc.Name == name)
+                {
+                    return sc;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Replay a scenario's script from frame 0 and render its sample frame.</summary>
+        internal static byte[] Render(Scenario sc) => Render(sc, sc.SampleFrame);
+
+        /// <summary>
+        /// Replay a scenario's script from frame 0 and render <paramref name="frame"/>.
+        /// Replay always starts at 0: the envelope is a function of state history,
+        /// so a frame rendered from a cold tracker is a different frame.
+        /// </summary>
+        internal static byte[] Render(Scenario sc, uint frame)
         {
             var tracker = new EnvelopeTracker();
             var buf = new FrameBuffer();
-            for (uint f = 0; f <= sc.SampleFrame; f++)
+            for (uint f = 0; f <= frame; f++)
             {
                 SignalState state = sc.StateAt(f);
                 var comp = Compositor.Select(state, true);
                 var env = tracker.Update(comp, state, f);
-                if (f == sc.SampleFrame)
+                if (f == frame)
                 {
                     Painter.Paint(buf, comp, env, state, f);
                 }
             }
             return (byte[])buf.Pixels.Clone();
-        }
-
-        /// <summary>Serialize the ledger as the manifest JSON (LF endings, trailing newline).</summary>
-        internal static string BuildManifestJson()
-        {
-            var sb = new StringBuilder();
-            sb.Append("[\n");
-            for (int i = 0; i < Table.Count; i++)
-            {
-                Scenario sc = Table[i];
-                sb.Append("  {\n");
-                sb.Append($"    \"name\": \"{sc.Name}\",\n");
-                sb.Append($"    \"file\": \"{sc.File}\",\n");
-                sb.Append($"    \"description\": \"{sc.Description}\",\n");
-                sb.Append($"    \"sample_frame\": {sc.SampleFrame},\n");
-                sb.Append("    \"script\": [\n");
-                for (int j = 0; j < sc.Steps.Length; j++)
-                {
-                    Step step = sc.Steps[j];
-                    sb.Append("      {\n");
-                    sb.Append($"        \"frame\": {step.Frame},\n");
-                    sb.Append("        \"state\": {\n");
-                    AppendState(sb, step.State);
-                    sb.Append("        }\n");
-                    sb.Append(j + 1 < sc.Steps.Length ? "      },\n" : "      }\n");
-                }
-                sb.Append("    ]\n");
-                sb.Append(i + 1 < Table.Count ? "  },\n" : "  }\n");
-            }
-            sb.Append("]\n");
-            return sb.ToString();
-        }
-
-        private static void AppendState(StringBuilder sb, SignalState s)
-        {
-            sb.Append($"          \"flag\": \"{s.Flag}\",\n");
-            sb.Append($"          \"tier\": \"{s.Tier}\",\n");
-            sb.Append($"          \"black_flag\": {Bool(s.BlackFlag)},\n");
-            sb.Append($"          \"black_detail\": \"{s.BlackDetail}\",\n");
-            sb.Append($"          \"meatball\": {Bool(s.Meatball)},\n");
-            sb.Append($"          \"session\": \"{s.Session}\",\n");
-            sb.Append($"          \"caution\": \"{s.Caution}\",\n");
-            sb.Append($"          \"sectors\": {Sectors(s.Sectors)},\n");
-            sb.Append($"          \"start_phase\": \"{s.StartPhase}\",\n");
-            sb.Append($"          \"start_lights_lit\": {s.StartLightsLit},\n");
-            sb.Append($"          \"time_penalty_seconds\": {s.TimePenaltySeconds},\n");
-            sb.Append($"          \"countdown_laps\": {s.CountdownLaps},\n");
-            sb.Append($"          \"furled\": {Bool(s.Furled)},\n");
-            sb.Append($"          \"incident_warning\": {Bool(s.IncidentWarning)}\n");
-        }
-
-        private static string Bool(bool b) => b ? "true" : "false";
-
-        private static string Sectors(SectorSet sectors)
-        {
-            var parts = new List<string>(3);
-            for (int i = 1; i <= 3; i++)
-            {
-                if (sectors.Contains(i))
-                {
-                    parts.Add(i.ToString());
-                }
-            }
-            return "[" + string.Join(", ", parts) + "]";
         }
     }
 }

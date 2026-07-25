@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The 7×11 pixel font, carried over from the ported renderer and now pinned
-// through the Grammar boards by testdata/frames-grammar/. All glyphs share
-// one style: 2-px strokes, rounded caps, bit 6 = leftmost column, one byte
-// per row.
+// The 7×11 pixel font, carried over from the ported renderer and rendered
+// through the Grammar boards. All glyphs share one style: 2-px strokes,
+// rounded caps, bit 6 = leftmost column, one byte per row — match it when
+// adding one, or the new glyph reads as a different typeface on the panel.
 
 namespace Uniflag.Rendering
 {
@@ -222,9 +222,8 @@ namespace Uniflag.Rendering
         };
 
         // ---------------------------------------------------------------
-        // Grammar-suite glyphs (docs/flag-grammar.md §8) — pinned by the
-        // testdata/frames-grammar/ corpus. Same style: 2-px strokes, bit 6
-        // = leftmost column.
+        // Grammar-suite glyphs (docs/flag-grammar.md §8). Same style: 2-px
+        // strokes, bit 6 = leftmost column.
         // ---------------------------------------------------------------
 
         /// <summary>F (FCY board).</summary>

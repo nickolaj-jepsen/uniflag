@@ -9,9 +9,9 @@ corpora were retired (docs/effects-spec.md is historical, like the v1
 on a live-verification session) remain open.
 
 Codename **Grammar**: the C# implementation lives in
-`plugin/src/Rendering/Grammar/` (`Uniflag.Rendering.Grammar` namespace), its
-golden corpus in `testdata/frames-grammar/`. Nothing here touches the wire
-protocol: frames on the wire don't care what painted them.
+`plugin/src/Rendering/Grammar/` (`Uniflag.Rendering.Grammar` namespace); how
+it is verified is §11. Nothing here touches the wire protocol: frames on the
+wire don't care what painted them.
 
 ---
 
@@ -313,20 +313,40 @@ severity→tier · penalty events→DT/SG/TimePenaltySeconds.
 
 ## 11. Conformance strategy
 
-- **New corpus `testdata/frames-grammar/`** — C#-authored, regenerable via a
-  new `just golden-regen` grammar leg (env-gated like
-  `UNIFLAG_REGEN_PLUGIN_GOLDENS`). Because the envelope makes rendering a
-  function of state *history*, manifest entries are scripts:
-  `{ name, file, script: [{frame, state}, …], sample_frame }` — the test
-  replays the script through the compositor/envelope and compares the sampled
-  frame byte-for-byte. No tolerance.
-- **The legacy ported-parity corpus** (`testdata/frames/`) and
-  `GoldenFrameTests` stay green and untouched until cutover, then are
-  **retired whole** (deleted, never rewritten) in phase 1e — the same
-  precedent as the `render/` crate at M11.
-- **Timelines** (`testdata/timelines/`) get a schema-rev commit when
-  `SignalState` lands in the adapter pipeline (C#-only, hand-authored;
-  the freeze protects against silent drift, not versioned evolution).
+**The renderer has no byte corpus.** `testdata/frames-grammar/` existed
+briefly and was retired: pinning 41 binaries made every deliberate visual
+tweak a 41-file regeneration, and the diff a reviewer saw was
+`Binary files differ` — churn bought with unreviewable commits. While the
+design is still moving, byte-exactness is the wrong contract for the
+painters. (The bytes live in git history if a future freeze wants them.)
+
+What replaces it:
+
+- **The scenario catalogue** (`plugin/tools/ScenarioCatalogue.cs`) survives
+  the corpus and is the durable asset: ~40 curated scripts covering the
+  signal vocabulary, each a `{ name, description, script: [{frame, state}, …],
+  sample_frame }` replayed from frame 0 (the envelope makes rendering a
+  function of state *history*, so the script — not a lone state — is the unit).
+  Sample frames are chosen to discriminate: strobe phases, breathe peaks,
+  sweep positions, flash blend weights, fade depths.
+- **A smoke pass** (`GrammarSmokeTests`) replays every catalogue scenario and
+  asserts only what stays true across visual tuning: no throw, a whole 3072-byte
+  frame, deterministic output, a survivable window either side of the sample
+  frame, and darkness exactly where darkness is the signal. It catches
+  compositor/envelope interaction bugs that per-painter unit tests miss, and it
+  never needs regenerating.
+- **Per-painter unit tests** (`GrammarPainterTests`, `GrammarCompositorTests`,
+  `GrammarEnvelopeTests`) keep asserting specific pixels and specific
+  slot/phase decisions — targeted, hand-authored, and cheap to update when a
+  decision deliberately changes.
+- **Visual review is a tool, not a test.** `just frames-sheet` renders the whole
+  catalogue to one labelled contact sheet and `just frames <scenario>` renders
+  a single frame to PNG, so "does this still look right" is answered by looking.
+- **Timelines** (`testdata/timelines/`) remain the adapter-side contract:
+  C#-only, hand-authored, schema-revved in deliberate commits.
+- **The wire protocol keeps its golden vectors.** `testdata/proto/` is frozen
+  and does not churn — that contract is about bytes, so bytes are the right
+  fixture. Nothing here changes it.
 - No user-facing legacy/Grammar toggle: the redesign replaces.
 
 ## 12. Implementation plan

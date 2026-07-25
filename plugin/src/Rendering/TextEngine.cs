@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // Layout + stamping helpers for the 7×11 pixel font. The Grammar boards
-// render through these helpers and are pinned by the goldens in
-// testdata/frames-grammar/ (integer division everywhere; do not "improve"
-// the rounding).
+// render through these helpers: integer division everywhere, and the
+// centering is tuned against that truncation — do not "improve" the
+// rounding, it moves every board glyph a pixel.
 
 namespace Uniflag.Rendering
 {

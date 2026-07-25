@@ -3,8 +3,8 @@
 // Integer-only animation primitives, originally ported per
 // docs/effects-spec.md §2 and now the Grammar renderer's primitive library
 // (docs/flag-grammar.md §4/§6). Must stay float-free and every division
-// truncates (u32/u16 semantics) so the golden frames in
-// testdata/frames-grammar/ reproduce byte-exactly.
+// truncates (u32/u16 semantics): the painters are tuned against this exact
+// rounding, so "improving" it silently shifts every animation that uses it.
 
 using System;
 

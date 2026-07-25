@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// 32×32 RGB888 paint target. Byte layout matches the golden-frame format
-// (testdata/frames-grammar/) exactly: row-major, pixel (x, y) at byte offset
-// (y * 32 + x) * 3, channel order R, G, B — 3072 bytes total.
+// 32×32 RGB888 paint target. Byte layout matches the Frame packet's payload
+// exactly (docs/protocol.md): row-major, pixel (x, y) at byte offset
+// (y * 32 + x) * 3, channel order R, G, B — 3072 bytes total, so a finished
+// buffer goes on the wire without a repack.
 
 namespace Uniflag.Rendering
 {

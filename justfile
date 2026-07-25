@@ -97,18 +97,12 @@ overlay-serve:
 # Regenerate the regenerable golden fixtures (testdata/proto byte vectors).
 # Only ever run this deliberately, in a reviewed commit — the proto vectors
 # are the frozen wire contract both the Rust and C# suites must match
-# byte-exactly.
-[unix]
+# byte-exactly, so a regen that changes anything IS a protocol change.
+#
+# This is the whole of it: the renderer has no byte corpus. Visual work is
+# reviewed by eye through `just frames-sheet`, not by regenerating fixtures.
 golden-regen:
     cargo test -p proto --test golden_vectors -- --ignored regen
-
-# The [windows] leg additionally regenerates the Grammar renderer's
-# conformance corpus at testdata/frames-grammar/ (docs/flag-grammar.md §11)
-# via the env-gated GrammarGoldenDumper xunit tool.
-[windows]
-golden-regen:
-    cargo test -p proto --test golden_vectors -- --ignored regen
-    $env:UNIFLAG_REGEN_GRAMMAR_GOLDENS = '1'; dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir={{simhub_dir}}" --filter "FullyQualifiedName~GrammarGoldenDumper"
 
 # Build the SimHub plugin (override the SimHub location with $env:UNIFLAG_SIMHUB_DIR).
 [windows]
