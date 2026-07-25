@@ -24,7 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `simhub/` — end-user plugin install / setup / troubleshooting guide.
 - `testdata/` — the frozen cross-language golden fixtures (see Golden fixtures below). Top-level so the C# tests reach it by relative path.
 - `packaging/` — release-zip assembly: `package.ps1` (run by `just package` and the release workflow) and the `INSTALL.md` shipped inside the zip.
-- `docs/` — protocol + effects specifications, SimHub / Cosmic Unicorn references, historical v2 plan ([index](docs/README.md)).
+- `docs/` — the protocol and flag-grammar specifications, SimHub / Cosmic Unicorn references, and the historical v2 plan + superseded effects spec ([index](docs/README.md)).
 
 The Rust host crates (`proto`, `screens`, `uniflag-cli`) are workspace `default-members`. To touch the firmware crate from the root, use `--manifest-path firmware/Cargo.toml` or `cd firmware && cargo ...`.
 
@@ -57,13 +57,13 @@ The plugin build resolves SimHub's proprietary reference assemblies (`SimHub.Plu
 
 CI mirrors `just fmt-check`, `just clippy` (both legs), `just test`, and `just core-test` — keep them green. The Windows plugin job is isolated and non-gating by design (installer flakiness must never red the Rust pipeline); that's exactly why the renderer and the C# codec were moved into `core-test`, which *is* gating.
 
-Toolchain: stable rustc with `thumbv6m-none-eabi` (pinned in `rust-toolchain.toml`); `nix develop` provides rustup and `elf2uf2-rs`. Plugin side: .NET Framework 4.8 developer pack + a SimHub install (Windows).
+Toolchain: stable rustc with `thumbv6m-none-eabi` (pinned in `rust-toolchain.toml`); `nix develop` provides rustup and `elf2uf2-rs`. C# side: a .NET SDK is enough for `Uniflag.Core`, its tests and the frame viewer on any OS; the net48 plugin half additionally needs the .NET Framework 4.8 developer pack and a SimHub install (Windows). `just doctor` reports which of these you actually have.
 
 ## Architecture
 
 ### Wire protocol (`proto/`)
 
-Binary, COBS-framed, CRC-16/CCITT-FALSE, one trailing `0x00` delimiter per packet. Five packet types: Hello / HelloAck (handshake carrying `PROTOCOL_VERSION`, firmware version, panel size), Frame (3072 B RGB888, row-major), Brightness, ButtonEvent. The full layout lives in `docs/protocol.md`; `proto/src/packet.rs` is the Rust source of truth, mirrored by hand in C# under `plugin/src/Protocol/`.
+Binary, COBS-framed, CRC-16/CCITT-FALSE, one trailing `0x00` delimiter per packet. Five packet types: Hello / HelloAck (handshake carrying `PROTOCOL_VERSION`, firmware version, panel size), Frame (3072 B RGB888, row-major), Brightness, ButtonEvent. The full layout lives in `docs/protocol.md`; `proto/src/packet.rs` is the Rust source of truth, mirrored by hand in C# under `plugin/core/Protocol/`.
 
 **Frozen as of M6** — any wire-visible change bumps `PROTOCOL_VERSION`, changes both codecs *and* the prose *and* regenerates `testdata/proto/` in one reviewed commit. Forward-compat posture: unknown packet types ignored; bad CRC / wrong length dropped silently; receivers resync at the next `0x00`. The USB identity (`USB_VID`/`USB_PID` in `proto`, mirrored in `plugin/src/Device/DeviceDiscovery.cs`) is single-sourced — the plugin accepts both the test PID `0x0001` and the registered `0xF1A6` during the pid.codes transition (`docs/v2-tracking.md`).
 
@@ -83,7 +83,7 @@ The firmware deliberately does **not** render effects and does not link any rend
 
 ### Plugin (`plugin/src/`)
 
-- **Rendering** — the renderer core: `RendererLoop` runs a dedicated thread ticking the **60 fps internal frame counter** all animation math assumes, painting through the **Grammar renderer** (`Rendering/Grammar/`: `Compositor` → `EnvelopeTracker` → `Painter`, spec `docs/flag-grammar.md`) or `Idles.PaintConnectedIdle` (stream alive, no game), publishing 3072-byte frames to registered `IFrameSink`s. Sinks *sample* that clock (USB at 30 fps by parity decimation, web overlay at 30 fps, WPF preview at display cadence) — never rebase the counter to a sink rate; that would halve every strobe rate. The thread runs only while ≥ 1 sink is registered. `Rendering/` must stay WPF-free (loadable from plain xunit).
+- **Rendering** — the renderer core: `RendererLoop` runs a dedicated thread ticking the **60 fps internal frame counter** all animation math assumes, painting through the **Grammar renderer** (`Rendering/Grammar/`: `Compositor` → `EnvelopeTracker` → `Painter`, spec `docs/flag-grammar.md`) or `Idles.PaintConnectedIdle` (stream alive, no game), publishing 3072-byte frames to registered `IFrameSink`s. Sinks *sample* that clock (USB at 30 fps by parity decimation, web overlay at 30 fps, WPF preview at display cadence) — never rebase the counter to a sink rate; that would halve every strobe rate. The thread runs only while ≥ 1 sink is registered. Lives in `Uniflag.Core` (`plugin/core/Rendering/`) and must stay WPF-free, SimHub-free and Windows-API-free — that constraint is now enforced by the compiler, since Core targets netstandard2.0 and references neither.
 - **Adapters** — telemetry → `SignalState`: `GenericAdapter` (unified `Flag_*` properties, priority/tier + session mapping documented in `docs/simhub-flag-properties.md`) with the iRacing raw-telemetry refiner layered after it (tiers, SC regime, penalties, start sequence, countdown notices). One reused snapshot, immutable pipeline — no avoidable allocation on the 60 Hz SimHub data thread.
 - **Device** — `DeviceConnectionManager`: VID/PID discovery (manual COM override bypasses the filter but never the handshake), Hello/HelloAck validation (protocol-version / panel-size mismatch → *Refused* with message, never silent), 30 fps frame streaming, reconnects; `BrightnessPolicy` owns the slider + device-button policy and persists into SimHub settings.
 - **Web** — `OverlayWebServer`: localhost-only (`127.0.0.1:8972`), hand-rolled HTTP + WebSocket, newest-frame-wins per client. Contracts in `docs/web-overlay.md`.

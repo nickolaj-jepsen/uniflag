@@ -10,7 +10,7 @@ SimHub, written down because upstream doesn't).
 | File | Subject |
 |------|---------|
 | [`protocol.md`](./protocol.md) | The v2 binary wire protocol: COBS framing, CRC-16, packet layouts, USB identity, handshake. **Frozen (M6)** — byte vectors in `testdata/proto/` are the conformance fixtures. |
-| [`flag-grammar.md`](./flag-grammar.md) | **The normative renderer spec** — the second-generation signal language: the six grammar rules, tiers and the envelope, slots/precedence/suppression, the signal catalogue, the idle family, `SignalState`, adapter contracts. Implemented by `plugin/src/Rendering/Grammar/`; §7a is implemented by the firmware fallback screen. |
+| [`flag-grammar.md`](./flag-grammar.md) | **The normative renderer spec** — the second-generation signal language: the six grammar rules, tiers and the envelope, slots/precedence/suppression, the signal catalogue, the idle family, `SignalState`, adapter contracts. Implemented by `plugin/core/Rendering/Grammar/`; §7a is implemented by the firmware fallback screen. |
 | [`web-overlay.md`](./web-overlay.md) | The browser/overlay virtual panel: `OverlayWebServer`, the LED-dot page, the DashStudio dash, and the design contracts (localhost-only, newest-frame-wins, 30 fps). |
 
 ## External references

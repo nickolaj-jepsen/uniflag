@@ -1,5 +1,5 @@
 //! uniflag v2 wire protocol — the frozen binary packet layer shared by the
-//! firmware, `uniflag-cli`, and (as a C# mirror in `plugin/src/Protocol/`)
+//! firmware, `uniflag-cli`, and (as a C# mirror in `plugin/core/Protocol/`)
 //! the SimHub plugin.
 //!
 //! The crate is `no_std` and allocation-free. Three modules:

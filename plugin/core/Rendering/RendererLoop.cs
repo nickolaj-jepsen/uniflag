@@ -8,7 +8,7 @@
 // rebased to a sink's rate (30 fps USB, the overlay's measured fps, WPF's
 // display cadence) — that would halve every strobe rate.
 //
-// WPF-free by contract: plugin/src/Rendering/ must stay loadable from plain
+// WPF-free by contract: plugin/core/Rendering/ must stay loadable from plain
 // xunit with no SimHub-assembly or System.Windows dependency.
 
 using System;

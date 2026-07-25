@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // The settings-tab preview sink: the WPF side of the sink boundary. The
-// rendering core in plugin/src/Rendering/ stays WPF-free; only this layer
+// rendering core in plugin/core/Rendering/ stays WPF-free; only this layer
 // touches System.Windows.*.
 
 using System;

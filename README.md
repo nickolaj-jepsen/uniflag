@@ -64,11 +64,14 @@ nix develop      # devShell with rustup, elf2uf2-rs
 Without Nix: install rustup, add the `thumbv6m-none-eabi` target, and
 install `elf2uf2-rs` from cargo.
 
-Plugin side (Windows): .NET Framework 4.8 developer pack plus a SimHub
-install for the reference assemblies (`SimHub.Plugins.dll` etc. —
-never redistributed). The build defaults to
-`C:\Program Files (x86)\SimHub`; override with
-`$env:UNIFLAG_SIMHUB_DIR`.
+C# side: a .NET SDK on any OS is enough to build and test the renderer
+and wire codec (`just core-test`) and to run the frame viewer. The
+SimHub half additionally needs Windows, the .NET Framework 4.8 developer
+pack, and a SimHub install for the reference assemblies
+(`SimHub.Plugins.dll` etc. — never redistributed); the build defaults to
+`C:\Program Files (x86)\SimHub`, override with `$env:UNIFLAG_SIMHUB_DIR`.
+
+`just doctor` reports which of all this you have and what's missing.
 
 ## Common tasks
 
@@ -95,6 +98,22 @@ with no arguments to list them.
 | `just overlay-serve` | serve the overlay page from disk for iteration outside SimHub            |
 | `just golden-regen`  | regenerate the protocol byte vectors — deliberate commits only            |
 | `just package`       | assemble the release zip locally (Windows; same layout + audit as CI)     |
+
+## Seeing what it renders
+
+The panel is a picture, so there's a tool for looking at one — no SimHub,
+no game, no hardware, any OS:
+
+```bash
+just frames-sheet
+```
+
+writes `target/frames/contact-sheet.png` (the whole signal vocabulary on
+one grid) and a labelled `contact-sheet.html`. `just frames-list` names
+the scenarios, `just frames <name>` renders one to a PNG, and
+`just frames-ansi <name>` draws it straight into the terminal. For a
+frame captured off the wire, `uniflag-cli view <frame.rgb>` does the
+same.
 
 ## Flashing
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Unit tests for the animation primitives (plugin/src/Rendering/Anim.cs),
+// Unit tests for the animation primitives (plugin/core/Rendering/Anim.cs),
 // pinned against docs/effects-spec.md §2 / render/src/anim.rs. The golden
 // corpus verifies these transitively; the anchors here make a primitive
 // regression fail with a readable message instead of 40 opaque frame diffs.

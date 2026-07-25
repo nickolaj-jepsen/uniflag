@@ -9,7 +9,7 @@ corpora were retired (docs/effects-spec.md is historical, like the v1
 on a live-verification session) remain open.
 
 Codename **Grammar**: the C# implementation lives in
-`plugin/src/Rendering/Grammar/` (`Uniflag.Rendering.Grammar` namespace); how
+`plugin/core/Rendering/Grammar/` (`Uniflag.Rendering.Grammar` namespace); how
 it is verified is §11. Nothing here touches the wire protocol: frames on the
 wire don't care what painted them.
 
