@@ -1,29 +1,28 @@
 # uniflag v2 wire protocol
 
-> **Status: FROZEN (M6).** The byte
-> vectors under `testdata/proto/` are the frozen conformance fixtures
-> that both the Rust and C# codecs must round-trip. Layouts here are
-> implemented in `proto/src/{crc,cobs,packet}.rs`; this document, the
-> code, and the vectors must agree — any wire-visible change bumps
-> `PROTOCOL_VERSION`.
+> **Status: settled for now, not set in stone.** This is a prerelease
+> hobby project and the protocol will keep moving. Nothing here is sacred
+> — it just costs a version bump to change, because the firmware and the
+> plugin have to agree about what a byte means, and they ship separately.
+>
+> So when you change something wire-visible: bump `PROTOCOL_VERSION`,
+> update both codecs and this document, and regenerate `testdata/proto/`,
+> all in the same commit. Those vectors are what the two codecs get
+> checked against; the layouts here live in
+> `proto/src/{crc,cobs,packet}.rs`.
 
 ## Transport
 
 USB CDC-ACM (virtual serial). Baud is ignored (native USB). Device
-identity: VID `0x1209`, PID `0x0001` (pid.codes **test PID** — the
-registered PID `0xF1A6` replaces it once granted; see
-[v2-tracking.md](v2-tracking.md)).
+identity: VID `0x1209`, PID `0x0001`.
 
-> **PID gate — M12 decision, 2026-07-04:** the pid.codes registration
-> for `0xF1A6` is still pending (PR filing maintainer-deferred), so
-> **v2.0 ships on the test PID `0x1209:0x0001`** — an explicit
-> decision, not a slip. Follow-up once the registration is granted:
-> swap the PID constant in `proto/src/packet.rs` (`USB_PID`), its C#
-> mirror (`plugin/src/Device/DeviceDiscovery.cs`), this section, and
-> `simhub/README.md` to `0xF1A6`, and re-run the proto/plugin constant
-> tests. No flag-day: the plugin's discovery filter already accepts
-> both PIDs, so field devices keep working through the swap and are
-> collapsed to the registered PID only after a reflash cycle.
+`0x0001` is the pid.codes **shared test PID**, which must not ship on
+redistributed devices; `0x1209:0xF1A6` is requested and pending. When it
+is granted, swap `USB_PID` in `proto/src/packet.rs`, its C# mirror in
+`plugin/src/Device/DeviceDiscovery.cs`, this section, and
+`simhub/README.md`. There is no flag day: the plugin's discovery filter
+accepts both PIDs, so fielded devices keep working until they are
+reflashed and the filter collapses to the registered PID.
 
 ## Framing
 
@@ -113,7 +112,7 @@ RGB888, row-major from the top-left, 3 bytes per pixel. With `(x, y)`
 | 0 | 1 | `button` | 0 = GPIO 21 (brightness up), 1 = GPIO 26 (brightness down), 2 = GPIO 27 (sleep) |
 | 1 | 1 | `kind` | 0 = short press (classified on release), 1 = long press. A long press never *also* fires a short press |
 
-Only the 2-byte length is frozen; the `button`/`kind` id spaces are open.
+Only the 2-byte length is fixed; the `button`/`kind` id spaces are open.
 Receivers must ignore unassigned values rather than reject the packet, so
 future firmware buttons don't break older hosts.
 
@@ -154,77 +153,9 @@ changed; there are no frame acks. The stream doubles as the liveness
 signal: after ~1.5 s without a decodable Frame the device drops to its
 local idle/fallback screen.
 
-## M2b spike measurements (2026-07-03, dev box → Cosmic Unicorn)
-
-Setup: `uniflag-sim --stream` (30 fps, monotonic-deadline pacing, one
-whole encoded frame per `write`) → Windows 11 USB FS → spike firmware
-(`spike/m2b-cdc-streaming` branch: COBS accumulator + zerocopy
-double-buffer + `set_pixel` blit + `present`).
-
-- Visual: scrolling gradient + 1 px/frame cursor confirmed smooth at
-  30 fps; no tearing, no colour-order errors, no visible latency
-  growth. *(maintainer-verified)*
-- 12-minute soak: **21,600 frames in 720.000 s = exactly 30.000 fps;
-  0 late writes, 0 ns max pacing slip, 0 reconnects.** The Windows
-  write path never back-pressured; CDC bulk throughput has large
-  headroom over the ~93 KB/s the stream needs.
-- Garbage-injection resync (device kept powered throughout — with a
-  bus-powered panel a cable yank is a power cycle and proves nothing
-  about the decoder):
-  - 1,500 non-zero delimiter-less bytes injected (stale partial frame
-    in the accumulator), then a fresh 600-frame stream: clean, 0
-    reconnects (a firmware crash would surface as a watchdog reset and
-    re-enumeration). The merged garbage+frame packet dies at the CRC;
-    everything after renders.
-  - 5,000 non-zero bytes (> the 3,089 B accumulator → forced overflow
-    path, drop-until-delimiter), then 600 frames: clean, 0 reconnects.
-- Cable yank / host reconnect (Windows stale-COM-handle path): **not
-  live-tested in M2b** — the CLI's reopen-retry loop exists and
-  open-failure handling was exercised (port contention with SimHub),
-  but no mid-stream physical yank was performed. Deliberately deferred
-  to the M8 hardware checklist, which repeats the yank/replug soak on
-  the hardened firmware, and to M9 (risk #17) where the .NET
-  reconnect path is the one that ships.
-- **Verdict for M6/M8: GO.** 30 fps whole-frame writes over CDC are
-  comfortably sustainable on this stack; 0x00-delimiter resync
-  recovers from partial frames and accumulator overflow without a
-  power cycle. Heartbeat timing (~1.5 s) and the HelloAck/ButtonEvent
-  TX path remain M8 scope.
-
-Known non-goals of the spike: Hello/HelloAck, Brightness, ButtonEvent,
-idle fallback, and the CDC TX path — all M6/M8 scope.
-
-## M8 bring-up measurements (2026-07-04, dev box → Cosmic Unicorn)
-
-Setup: production M8 firmware (commit `ba52794`, fw 0.1.0) flashed via
-`just flash`; `uniflag-cli stream` (30 fps, epoch-anchored deadlines)
-over Windows 11 USB FS on COM5. Everything the M2b spike left as
-non-goals is now covered.
-
-- **Handshake**: Hello → HelloAck round-trip on every (re)connect;
-  device reports `fw 0.1.0, protocol v1, panel 32x32`. Brightness
-  accepted and re-sent by the CLI per (re)connect.
-- **30-minute soak**: **54,000 frames in 1800.0006 s = 30.000 fps
-  exactly; 0 skipped deadlines, 0 link errors, 0 watchdog resets.**
-  (3× the M2b spike duration, on the full dispatcher instead of the
-  Frame-only spike path.)
-- **Patterns** *(maintainer-verified visually)*: solid, gradient,
-  checkerboard, moving-pixel, and the brightness sweep all render
-  correctly at 30 fps.
-- **ButtonEvents**: 12 short presses across all three buttons
-  (GPIO 21/26/27) and 2 long presses received host-side with correct
-  ids/kinds. Classify-on-release verified on hardware: long presses
-  produced **no** accompanying short event.
-- **Local screens** *(maintainer-verified visually)*: §7a amber
-  heartbeat at (0,0) on boot and within ~1.5 s of stream end;
-  long-press toggles the test-pattern + version screen and back while
-  frames keep streaming underneath.
-- **Reconnect**: an unplanned mid-stream link loss (cable strain,
-  `os error 22`) exercised the real recovery path: the CLI detected the
-  dead write, waited for COM5 to re-enumerate, reopened, re-handshook,
-  re-sent Brightness, and resumed at 30 fps — no process restart, no
-  device power cycle beyond the fault itself.
-- **Deferred**: the forced-panic watchdog-recovery flash test (panic →
-  spin → 8 s watchdog reset). The panic/watchdog design is unchanged
-  from v1 and the feed task survived the rework; revisit if a hang is
-  ever observed in the field.
+30 fps whole-frame writes are comfortably sustainable on this stack: a
+30-minute hardware soak held 30.000 fps exactly with no skipped
+deadlines, link errors or watchdog resets, and CDC bulk throughput has
+large headroom over the ~93 KB/s the stream needs. Delimiter resync was
+exercised against both a stale partial frame and a forced accumulator
+overflow without a power cycle.

@@ -11,10 +11,9 @@
 //!   forbids deriving them from shared render code, and this crate keeps
 //!   that true by construction: it is firmware-only and is never linked
 //!   by the plugin renderer.
-//! - The glyph row-bitmap encoding (one byte per row, MSB side = leftmost
-//!   column) follows the plugin's caution-glyph format; at 7×11 those are
-//!   far too wide to fit a version string on a 32-px panel — so the 3×5
-//!   font below is firmware-original data in that same format, not a copy.
+//! - The 3×5 font below reuses the plugin's glyph row-bitmap *format* but
+//!   none of its data: the plugin's 7×11 glyphs are far too wide to fit a
+//!   version string on a 32-px panel.
 //!
 //! Painting goes through [`Canvas`] rather than the firmware's `Display`
 //! so this crate builds — and is tested — on the host. The firmware's
@@ -103,10 +102,6 @@ pub const EMBER_AMBER: Rgb = (255, 120, 8);
 /// Frames in one full round trip of the ember (8 s at 60 fps).
 pub const EMBER_PERIOD: u32 = 480;
 
-// =============================================================================
-// Screens
-// =============================================================================
-
 /// Scale a colour by an 8-bit brightness multiplier: per channel
 /// `(c * (m + 1)) >> 8` — the plugin renderer's `ScaleRgb` idiom, embedded.
 fn scale(c: Rgb, m: u32) -> Rgb {
@@ -175,10 +170,6 @@ pub fn paint_test<C: Canvas>(d: &mut C, fw_version: &str) {
     draw_text(d, x, 25, fw_version, WHITE);
 }
 
-// =============================================================================
-// Paint helpers
-// =============================================================================
-
 /// Fill the whole panel with one colour.
 pub fn fill<C: Canvas>(d: &mut C, c: Rgb) {
     rect(d, 0, 0, PANEL_WIDTH as i32, PANEL_HEIGHT as i32, c);
@@ -199,12 +190,8 @@ pub fn dot<C: Canvas>(d: &mut C, x: i32, y: i32, c: Rgb) {
     d.set_pixel(x, y, c.0, c.1, c.2);
 }
 
-// =============================================================================
-// Minimal pixel font: digits, 'v', '.'
-// =============================================================================
-
-// One byte per glyph row, leftmost column on the MSB side — here bit 2 =
-// column 0 for the 3-wide glyphs.
+// Minimal pixel font (digits, 'v', '.'): one byte per glyph row, leftmost
+// column on the MSB side — so bit 2 is column 0 for the 3-wide glyphs.
 
 const FONT_W: i32 = 3;
 

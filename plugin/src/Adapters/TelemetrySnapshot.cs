@@ -14,10 +14,8 @@ namespace Uniflag.Adapters
     /// properties are <c>int</c> 0/1 on <c>StatusDataBase</c> (converted to
     /// bools here). The raw layer adds the iRacing SessionFlags bitmask, read
     /// out of <c>StatusDataBase.GetRawDataObject()</c> only while the running
-    /// game is iRacing. (<c>SafetyCarActive</c> is NOT an iRacing-reader
-    /// field — a binary sweep of every SimHub 9.11.21 assembly finds it in
-    /// RfactorReader.dll only, per docs/simhub-flag-properties.md; iRacing's
-    /// pace car is detected from raw data instead.)
+    /// game is iRacing. Note there is no <c>SafetyCarActive</c> here: it is an
+    /// rFactor-reader field, not an iRacing one (docs/simhub-flag-properties.md).
     /// </summary>
     public sealed class TelemetrySnapshot
     {
@@ -110,7 +108,7 @@ namespace Uniflag.Adapters
         public int IncidentLimit { get; set; }
 
         /// <summary>
-        /// The no-game predicate (docs/effects-spec.md §7b trigger): a live
+        /// The no-game predicate (docs/flag-grammar.md §7b trigger): a live
         /// game session needs the game process running, the player out of
         /// the menus, and a telemetry block present. <c>GamePaused</c>
         /// deliberately still counts as live — a paused session maps to

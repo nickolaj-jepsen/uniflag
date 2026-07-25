@@ -1,7 +1,7 @@
-//! Cross-language golden-vector conformance suite (docs/v2-plan.md M6).
+//! Cross-language golden-vector conformance suite.
 //!
 //! `testdata/proto/` (top-level, so the C# plugin suite reaches it by
-//! relative path without entering a Rust crate) holds the frozen byte
+//! relative path without entering a Rust crate) holds the committed byte
 //! vectors described by `testdata/proto/manifest.json`. The normal tests
 //! here load those exact files and assert:
 //!
@@ -34,10 +34,9 @@ use proto::packet::{
 };
 use proto::{cobs, crc};
 
-// ---------------------------------------------------------------------
-// Frozen vector inputs. Changing anything here changes the golden files —
-// regenerate via `just golden-regen` in a deliberate, reviewed commit.
-// ---------------------------------------------------------------------
+// Vector inputs. Changing anything here changes the golden files — regenerate
+// via `just golden-regen`, and on purpose: a regen that moves bytes is a
+// protocol change.
 
 /// Brightness set-point carried by the `brightness` vector.
 const BRIGHTNESS_VALUE: u8 = 200;
@@ -168,7 +167,7 @@ const BOUNDARY_PURPOSE: &str =
      Exact raw bytes, re-derivable: [0x7E, 0x51, tweak, 0x00, 0x01, 0x02, .., 0xFC, \
      crc_lo, crc_hi] where tweak is the smallest value in 0x00..=0xFF for which \
      neither CRC-16/CCITT-FALSE byte of the whole preceding sequence is zero; in this \
-     frozen file tweak = 0x00, giving 252 ascending pattern bytes + 2 CRC bytes = 254 \
+     committed file tweak = 0x00, giving 252 ascending pattern bytes + 2 CRC bytes = 254 \
      zero-free trailing bytes after the 0x00 at raw offset 3";
 
 const RESYNC_PURPOSE: &str =
@@ -177,10 +176,12 @@ const RESYNC_PURPOSE: &str =
      segment and recover exactly the two embedded packets in order";
 
 const MANIFEST_DESCRIPTION: &str =
-    "Frozen cross-language golden vectors for the uniflag v2 binary protocol \
-     (docs/protocol.md; docs/v2-plan.md M6). The Rust conformance suite \
-     (proto/tests/golden_vectors.rs) and the C# plugin suite load these exact files; \
-     neither side generates its own fixtures. Regenerate only via just golden-regen.";
+    "Cross-language golden vectors for the uniflag v2 binary protocol \
+     (docs/protocol.md): the bytes the Rust and C# codecs are both checked \
+     against. The Rust conformance suite (proto/tests/golden_vectors.rs) and \
+     the C# plugin suite load these exact files; neither side generates its own \
+     fixtures. Regenerate only via just golden-regen, and only on purpose: a \
+     regen that moves bytes is a protocol change.";
 
 const READING_RAW: &str =
     "type byte, then payload, then CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF, no \
@@ -205,9 +206,7 @@ const GITATTRIBUTES: &str = "# Golden vectors are byte-exact cross-language fixt
                              # git would otherwise treat it as text under autocrlf).\n\
                              * -text\n";
 
-// ---------------------------------------------------------------------
 // Deterministic builders — pure functions of the constants above.
-// ---------------------------------------------------------------------
 
 /// Byte `i` of the 3072-byte frame payload. Piecewise so the framing layer
 /// sees zero bytes, a long 0xFF run, and 254+ zero-free runs (the manifest
@@ -232,7 +231,7 @@ fn frame_pixels() -> [u8; FRAME_PAYLOAD_LEN] {
     core::array::from_fn(frame_pixel)
 }
 
-/// The frozen payload layout of each positive vector, written out longhand
+/// The payload layout of each positive vector, written out longhand
 /// and independently of [`Packet::encode`] so the tests cross-check the
 /// two statements of the layout against each other.
 fn payload_of(name: &str, pixels: &[u8; FRAME_PAYLOAD_LEN]) -> Vec<u8> {
@@ -300,7 +299,7 @@ fn wire_of_raw(raw: &[u8]) -> Vec<u8> {
 /// raw bytes end in exactly 254 non-zero bytes (252 pattern bytes + 2 CRC
 /// bytes) immediately after a `0x00`. The tweak byte deterministically
 /// walks up from zero until neither CRC byte is zero, so the trailing run
-/// is guaranteed zero-free; the first hit is what the frozen file holds.
+/// is guaranteed zero-free; the first hit is what the committed file holds.
 fn boundary_raw() -> Vec<u8> {
     for tweak in 0..=u8::MAX {
         let mut raw = vec![BOUNDARY_TYPE_BYTE, 0x51, tweak, 0x00];
@@ -354,10 +353,8 @@ fn resync_stream(pixels: &[u8; FRAME_PAYLOAD_LEN]) -> Vec<u8> {
     stream
 }
 
-// ---------------------------------------------------------------------
 // Manifest rendering. Plain string building keeps `proto` free of a JSON
 // dependency; `json_str` refuses anything that would need escaping.
-// ---------------------------------------------------------------------
 
 fn json_str(value: &str) -> String {
     assert!(
@@ -492,7 +489,7 @@ fn manifest_json() -> String {
     m
 }
 
-/// Every file under `testdata/proto/`, by name, with its frozen content.
+/// Every file under `testdata/proto/`, by name, with its expected content.
 /// The single source both for [`regen`] and for the currency check.
 fn all_files() -> Vec<(String, Vec<u8>)> {
     let pixels = frame_pixels();
@@ -514,9 +511,7 @@ fn all_files() -> Vec<(String, Vec<u8>)> {
     files
 }
 
-// ---------------------------------------------------------------------
 // Test plumbing.
-// ---------------------------------------------------------------------
 
 fn testdata_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -595,9 +590,7 @@ fn longest_run(bytes: &[u8], pred: impl Fn(u8) -> bool) -> usize {
     best
 }
 
-// ---------------------------------------------------------------------
-// Normal tests — run against the frozen files on disk.
-// ---------------------------------------------------------------------
+// Normal tests — run against the committed files on disk.
 
 /// Every file on disk is byte-identical to its generator, and the
 /// directory holds nothing else. Because manifest.json is one of those
@@ -772,7 +765,7 @@ fn cobs_boundary_254_wire_is_the_canonical_listing_1_form() {
     // The non-canonical (Wikipedia) form — the same bytes minus the
     // trailing 0x01 header — decodes to the identical raw packet. That
     // round-trip blindness is exactly why only the byte-exact comparison
-    // against this frozen wire catches a Wikipedia-derived encoder port.
+    // against this committed wire catches a Wikipedia-derived encoder port.
     let mut raw2 = vec![0u8; MAX_RAW_LEN];
     let m = cobs::decode(&wire[..len - 2], &mut raw2).expect("decode non-canonical form");
     assert_bytes_eq(
@@ -837,14 +830,12 @@ fn resync_stream_recovers_exactly_the_embedded_packets() {
     );
 }
 
-// ---------------------------------------------------------------------
 // Regeneration — deliberately #[ignore]d so it never runs as a test side
 // effect. Only `just golden-regen` invokes it, via
 // `cargo test -p proto --test golden_vectors -- --ignored regen`.
-// ---------------------------------------------------------------------
 
 #[test]
-#[ignore = "rewrites the frozen golden vectors; run only via just golden-regen"]
+#[ignore = "rewrites the golden vectors; run only via just golden-regen"]
 fn regen() {
     let dir = testdata_dir();
     fs::create_dir_all(&dir).expect("create testdata/proto");

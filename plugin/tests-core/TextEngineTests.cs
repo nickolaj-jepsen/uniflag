@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Text-engine unit tests: the layout math must reproduce the
-// caution-board placement constants of docs/effects-spec.md §5.9 exactly
-// (the 40 ported-parity goldens are the byte-level referee for the VSC/SC
-// migration; these tests pin the arithmetic at the unit level so a
-// placement regression names the culprit directly), plus glyph-store
-// invariants and the bit-order contract of DrawGlyph.
+// Text-engine unit tests: board placement arithmetic, glyph-store invariants
+// and the bit-order contract of DrawGlyph. Pinned at the unit level so a
+// placement regression names the culprit directly.
 
 using Uniflag.Rendering;
 using Xunit;
@@ -29,7 +26,7 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void CenteringMatchesTheFrozenBoardPlacement()
+        public void CenteringMatchesTheBoardPlacement()
         {
             // Centring math with the truncating division biasing odd
             // leftovers one pixel left (three glyphs gap 1 → x 4; two

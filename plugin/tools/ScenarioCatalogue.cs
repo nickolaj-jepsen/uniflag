@@ -10,10 +10,9 @@
 // Sample frames are chosen deliberately: strobe on/off phases, breathe
 // peaks and mid-points, sweep positions, flash blend weights, fade depths.
 //
-// This is dev tooling, not a fixture — it pins nothing. It drives the frame
-// viewer and the GrammarSmokeTests whole-scenario replay. It outlived the
-// byte corpus it was written for (docs/flag-grammar.md §11) because the
-// curation is the valuable part: these are the states worth looking at.
+// This is dev tooling, not a fixture — it pins nothing (docs/flag-grammar.md
+// §11). It drives the frame viewer and the GrammarSmokeTests whole-scenario
+// replay; the curation is the value: these are the states worth looking at.
 
 using System.Collections.Generic;
 using Uniflag.Rendering;

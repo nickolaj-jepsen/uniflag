@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// 8-bit-per-channel RGB triple (docs/effects-spec.md §1).
+// 8-bit-per-channel RGB triple.
 
 using System;
 

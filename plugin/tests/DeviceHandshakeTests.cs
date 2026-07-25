@@ -30,7 +30,7 @@ namespace Uniflag.Tests
             Perform(connection);
             // The codec's wire bytes are themselves pinned by the M6 golden
             // vectors (ProtoConformanceTests), so equality here is
-            // byte-exactness against the frozen protocol.
+            // byte-exactness against the committed protocol bytes.
             Assert.Equal(
                 new HelloPacket(PacketCodec.ProtocolVersion).EncodeWire(),
                 connection.TxBytes);

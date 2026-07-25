@@ -52,10 +52,8 @@ namespace Uniflag.Protocol
     /// </summary>
     public enum PressKind : byte
     {
-        /// <summary>Short press, classified on release.</summary>
         Short = 0,
 
-        /// <summary>Long press.</summary>
         Long = 1,
     }
 

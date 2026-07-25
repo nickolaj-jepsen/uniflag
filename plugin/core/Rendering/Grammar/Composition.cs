@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // The Grammar compositor — docs/flag-grammar.md §5. Pure dispatch, separate
-// from the painters so slot selection is unit-testable in isolation (same
-// posture as the legacy Precedence class). Three slots render concurrently:
+// from the painters so slot selection is unit-testable in isolation. Three
+// slots render concurrently:
 // one field, at most one board, at most one frame accent, plus the sector
 // strip painted last. Precedence works WITHIN slots; red and checkered are
 // field-exclusive takeovers.

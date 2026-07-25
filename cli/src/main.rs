@@ -184,10 +184,7 @@ fn main() -> Result<()> {
     }
 }
 
-// =============================================================================
 // Sink: writes wire bytes to either a serial port or stdout.
-// =============================================================================
-
 enum Sink {
     Serial(Box<dyn serialport::SerialPort>),
     Stdout(io::Stdout),
@@ -235,10 +232,6 @@ fn reopen_serial(cli: &Cli, timeout: Duration) -> Sink {
         }
     }
 }
-
-// =============================================================================
-// Stream mode
-// =============================================================================
 
 /// How one attempt to send on the sink ended. Serial failures are lost
 /// links (the caller reopens and re-handshakes); stdout failures are
@@ -476,10 +469,6 @@ fn describe_button_event(button: u8, kind: u8) -> String {
     format!("{button_name}, {kind_name}")
 }
 
-// =============================================================================
-// Loopback mode
-// =============================================================================
-
 /// Generate the exact stream bytes (handshake Hello included — see
 /// [`wire::loopback_stream`]) and decode them in-process. Every packet
 /// summary goes to stdout; any decode failure exits non-zero.
@@ -527,10 +516,6 @@ fn run_loopback(args: &LoopbackArgs) -> Result<()> {
     Ok(())
 }
 
-// =============================================================================
-// Emit mode
-// =============================================================================
-
 fn run_emit(cli: &Cli, packet: &EmitPacket) -> Result<()> {
     let (bytes, what) = match packet {
         EmitPacket::Hello => (wire::hello()?, "Hello".to_string()),
@@ -551,10 +536,6 @@ fn run_emit(cli: &Cli, packet: &EmitPacket) -> Result<()> {
     eprintln!("emitted {what} ({} wire bytes)", bytes.len());
     Ok(())
 }
-
-// =============================================================================
-// View mode
-// =============================================================================
 
 fn run_view(args: &ViewArgs) -> Result<()> {
     let raw = if args.file.as_os_str() == "-" {

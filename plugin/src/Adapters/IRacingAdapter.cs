@@ -15,54 +15,21 @@ namespace Uniflag.Adapters
 {
     /// <summary>
     /// Refines the generic mapping with iRacing raw data
-    /// (docs/flag-grammar.md §10). What raw is better at (and what this
-    /// adapter therefore touches):
-    /// <list type="bullet">
-    /// <item><b>Red flag</b> — the unified layer never surfaces red;
-    /// SessionFlags bit 0x10 does. Enters at <see cref="Tier.Urgent"/>.</item>
-    /// <item><b>Yellow tier</b> — unified <c>Flag_Yellow</c> cannot tell a
-    /// displayed yellow from a waved one (the generic adapter guesses
-    /// Alert); the raw bits decide it: <c>cautionWaving</c> → Urgent,
-    /// <c>yellowWaving</c>/<c>caution</c> → Alert, displayed-only →
-    /// Ambient. Blue and green firm up to Alert (a blue being shown to you
-    /// and a start/restart both want the attention pulse).</item>
-    /// <item><b>Caution board</b> — <c>caution</c>/<c>cautionWaving</c>
-    /// (0x4000/0x8000) map to the SC board: an iRacing full-course caution
-    /// is a deployed pace car, and iRacing has no VSC concept.</item>
-    /// <item><b>Penalties</b> — <c>repair</c> (0x100000) → meatball,
-    /// <c>furled</c> (0x80000) → furled warning frame, <c>disqualify</c>
-    /// (0x20000) → the black-family order with
-    /// <see cref="BlackDetail.Disqualified"/> (orthogonal — the demotion
-    /// rule keeps it visible under any track flag). iRacing exposes
-    /// <b>no</b> DT-vs-SG distinction in telemetry (verified), so a bare
-    /// <c>black</c> bit stays a bare black flag.</item>
-    /// <item><b>Start sequence</b> — <c>startReady</c>/<c>startSet</c>/
-    /// <c>startGo</c> (+ rolling-start <c>oneLapToGreen</c> and
-    /// <c>greenHeld</c>) drive the gantry board; the unified layer has no
-    /// start concept. iRacing has no light counts, so
-    /// <see cref="SignalState.StartLightsLit"/> stays 0 (= all five).</item>
-    /// <item><b>Countdown notices</b> — <c>tenToGo</c>/<c>fiveToGo</c> map
-    /// to <see cref="SignalState.CountdownLaps"/> (the 10/5 boards).</item>
-    /// <item><b>Debris</b> — <c>debris</c> (0x40) is a raw-only track flag
-    /// the unified layer never surfaces; it enters only when no other track
-    /// flag won (lowest precedence).</item>
-    /// <item><b>Incident warning</b> — <c>PlayerCarMyIncidentCount</c> within
-    /// <see cref="IncidentWarnMargin"/> of the session incident limit (read
-    /// from the session-info dictionary; see <c>GameDataExtractor</c>).</item>
-    /// </list>
-    /// Checkered / white / green / black are single raw bits that the
-    /// unified layer already mirrors 1:1 (IL-verified). Blue is <b>not</b> a
-    /// pure mirror: SimHub derives <c>Flag_Blue = blue &amp;&amp; !green</c>
-    /// (a set green bit suppresses unified blue — its deliberate fix for the
-    /// spurious start-window blues of SimHub issue #436). This adapter
-    /// deliberately does <b>not</b> restore blue from raw during that
-    /// overlap: green is the flag that matters at a start/restart, and
-    /// honouring the suppression keeps the panel consistent with every other
-    /// SimHub-driven display. <c>greenHeld</c> (0x400) is likewise never a
-    /// green flag: iRacing raises it while the starter still holds the green
-    /// <em>furled</em> (start/restart imminent), so it folds into the gantry's
-    /// Set phase — the panel goes green only when the <c>green</c> bit flies.
-    /// Pure and allocation-free per call (runs at ~60 Hz).
+    /// (docs/flag-grammar.md §10). Pure and allocation-free per call (~60 Hz).
+    ///
+    /// <para>Checkered / white / green / black are single raw bits the unified
+    /// layer already mirrors 1:1 (IL-verified), so they are left alone. Blue
+    /// is <b>not</b> a pure mirror: SimHub derives
+    /// <c>Flag_Blue = blue &amp;&amp; !green</c>, its fix for the spurious
+    /// start-window blues of SimHub issue #436. This adapter deliberately does
+    /// <b>not</b> restore blue from raw during that overlap — green is the
+    /// flag that matters at a start/restart, and honouring the suppression
+    /// keeps the panel consistent with every other SimHub-driven display.</para>
+    ///
+    /// <para>Two absences worth knowing: iRacing exposes no DT-vs-SG
+    /// distinction in telemetry (verified), so a bare <c>black</c> bit stays a
+    /// bare black flag; and it has no start-light counts, so
+    /// <see cref="SignalState.StartLightsLit"/> stays 0 (= all five).</para>
     /// </summary>
     public sealed class IRacingAdapter : IGameAdapter
     {

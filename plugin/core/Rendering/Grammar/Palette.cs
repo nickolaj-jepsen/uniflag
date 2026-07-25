@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Grammar palette (docs/flag-grammar.md §6) — the LED-tuned hues carried
-// over from the legacy renderer plus the idle-family hues. Hue = identity
-// (grammar rule R1): these are never repurposed.
+// Grammar palette (docs/flag-grammar.md §6) — the LED-tuned flag hues plus
+// the idle family's. Hue = identity (grammar rule R1): never repurposed.
 
 namespace Uniflag.Rendering.Grammar
 {

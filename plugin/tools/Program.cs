@@ -2,12 +2,11 @@
 //
 // uniflag-frames — look at what the renderer actually paints.
 //
-// The panel is a picture, but until this existed the only ways to see one
-// were to run SimHub, flash hardware, or open the web overlay — all of which
-// need a Windows SimHub install. That made renderer iteration a guessing
-// game and made a visual regression invisible until someone plugged a panel
-// in. This tool renders any catalogue scenario straight to PNG (or to the
-// terminal) on any OS, with no SimHub, no hardware, and no game.
+// The panel is a picture, and every other way to see one — SimHub, hardware,
+// the web overlay — needs a Windows SimHub install, which makes renderer
+// iteration a guessing game and a visual regression invisible until someone
+// plugs a panel in. This renders any catalogue scenario straight to PNG (or
+// the terminal) on any OS, with no SimHub, no hardware, and no game.
 //
 // Usage:
 //   list                                 catalogue names + descriptions

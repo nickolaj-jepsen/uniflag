@@ -24,7 +24,7 @@ namespace Uniflag.Rendering
         private readonly byte[] _pixels = new byte[ByteLength];
 
         /// <summary>
-        /// Backing store in golden-frame layout. Exposed directly for
+        /// Backing store, already in wire layout. Exposed directly for
         /// zero-copy streaming; treat as read-only outside the renderer.
         /// </summary>
         public byte[] Pixels => _pixels;

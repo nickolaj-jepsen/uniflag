@@ -53,7 +53,7 @@ interface IWPFSettingsV2 : IWPFSettings
 Note the exact name `GetWPFSettingsControl` — plural "Settings". Related
 optional interfaces exist (`IPluginV2.PluginManagerLoaded`,
 `IWPFSettingsNoTitle`, `IRTDataPlugin`) but the trio above is the whole
-v2 surface we need.
+surface we need.
 
 Type metadata attributes (constructor args are positional strings):
 

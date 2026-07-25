@@ -1,7 +1,7 @@
 //! Inbound decode pipeline: a `0x00`-delimited COBS byte stream in, typed
 //! packets out.
 //!
-//! Mirrors the receiver posture frozen in docs/protocol.md: malformed
+//! Mirrors the receiver posture in docs/protocol.md: malformed
 //! COBS, bad CRCs, wrong-length known types, and oversized accumulations
 //! are dropped and the decoder realigns at the next delimiter;
 //! back-to-back delimiters are no-ops; CRC-valid packets with unassigned

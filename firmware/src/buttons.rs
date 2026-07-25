@@ -73,13 +73,11 @@ pub async fn run(
             } else {
                 PressKind::Short
             };
-            // Report only while a handshaken host is live (see
-            // BUTTON_REPORTING in main.rs) — a press queued with nobody
-            // reading would flush ahead of the next session's HelloAck.
-            // Stale presses are worthless to a future host, so drop, not
-            // defer. try_send for the same reason: if the queue fills,
-            // drop the event rather than stall the poll loop (and with
-            // it the test-screen toggle).
+            // Only while a handshaken host is live: a press queued with
+            // nobody reading would flush ahead of the next session's
+            // HelloAck, and is worthless to that host anyway. `try_send`
+            // for the same reason — a full queue must not stall the poll
+            // loop, and with it the test-screen toggle.
             if BUTTON_REPORTING.load(Ordering::Relaxed) {
                 let _ = tx.try_send(TxEvent::Button {
                     button: button.to_byte(),

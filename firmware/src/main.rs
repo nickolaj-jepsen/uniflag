@@ -103,14 +103,12 @@ pub type TxChannel = Channel<CriticalSectionRawMutex, TxEvent, 8>;
 static TX_CHANNEL: TxChannel = Channel::new();
 
 /// Gates ButtonEvent queueing on a live, handshaken host. Armed by a
-/// `Hello` (right after its `HelloAck` is queued, so any event stays
-/// behind the ack in the FIFO); disarmed when the host goes away — USB
-/// endpoint disable here, or stream silence past `CONNECT_TIMEOUT` in
-/// `runtime.rs`. Without the gate, presses made with nobody reading
-/// (`Sender::wait_connection` fires at USB enumeration, not COM open)
-/// would queue up and flush ahead of the next session's HelloAck,
-/// violating docs/protocol.md §Handshake, which sequences ButtonEvent
-/// strictly after HelloAck.
+/// `Hello` (right after its `HelloAck` is queued, so events stay behind the
+/// ack in the FIFO); disarmed on USB endpoint disable here or stream silence
+/// in `runtime.rs`. Without it, presses made with nobody reading
+/// (`Sender::wait_connection` fires at USB enumeration, not COM open) flush
+/// ahead of the next session's HelloAck, which docs/protocol.md §Handshake
+/// forbids.
 pub static BUTTON_REPORTING: AtomicBool = AtomicBool::new(false);
 
 /// Long-press notifications from the buttons task to the runtime (each
@@ -135,19 +133,12 @@ const WATCHDOG_FEED_INTERVAL: Duration = Duration::from_secs(2);
 async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
 
-    // ------------------------------------------------------------------
-    // Watchdog
-    // ------------------------------------------------------------------
-    // Set up first so a hang anywhere downstream (display init, USB
-    // bring-up, the runtime itself) eventually triggers a chip reset
-    // instead of a permanently-frozen panel. The feed task is spawned
-    // further down once the executor is up.
+    // Started first so a hang anywhere downstream (display init, USB
+    // bring-up, the runtime) eventually resets the chip instead of leaving
+    // a permanently-frozen panel. The feed task is spawned further down.
     let mut watchdog = Watchdog::new(p.WATCHDOG);
     watchdog.start(WATCHDOG_TIMEOUT);
 
-    // ------------------------------------------------------------------
-    // Display
-    // ------------------------------------------------------------------
     let display = Display::new(
         p.PIO0,
         p.DMA_CH0,
@@ -165,9 +156,6 @@ async fn main(spawner: Spawner) {
         },
     );
 
-    // ------------------------------------------------------------------
-    // USB device + CDC ACM
-    // ------------------------------------------------------------------
     let driver = Driver::new(p.USB, UsbIrqs);
 
     let mut config = embassy_usb::Config::new(packet::USB_VID, packet::USB_PID);
@@ -202,9 +190,6 @@ async fn main(spawner: Spawner) {
     let (sender, receiver) = class.split();
     let usb = builder.build();
 
-    // ------------------------------------------------------------------
-    // Frame double-buffer channel + workers
-    // ------------------------------------------------------------------
     let slots = FRAME_SLOTS.init([[0; packet::FRAME_PAYLOAD_LEN]; 2]);
     let channel = FRAME_CHANNEL.init(zerocopy_channel::Channel::new(slots));
     let (frame_tx, frame_rx) = channel.split();
@@ -216,30 +201,23 @@ async fn main(spawner: Spawner) {
     );
     spawner.spawn(watchdog_feed(watchdog).expect("spawn watchdog feed task"));
 
-    // The remaining three futures borrow `'static` resources but aren't
-    // tasks (they're awaited here in `main`'s top-level `join3`). Doing it
-    // this way avoids the lifetime gymnastics of moving `Receiver` /
-    // `Sender` / `UsbDevice` into `#[embassy_executor::task]` functions —
-    // which works, but adds noise.
+    // Joined here rather than spawned: moving `Receiver` / `Sender` /
+    // `UsbDevice` into `#[embassy_executor::task]` functions works but costs
+    // `'static` lifetime gymnastics.
     let usb_fut = run_usb(usb);
     let rx_fut = cdc_rx_loop(receiver, frame_tx);
     let tx_fut = cdc_tx_loop(sender, &TX_CHANNEL);
     join3(usb_fut, rx_fut, tx_fut).await;
 }
 
-// =============================================================================
-// USB / CDC futures
-// =============================================================================
-
 async fn run_usb(mut usb: embassy_usb::UsbDevice<'static, Driver<'static, USB>>) {
     usb.run().await;
 }
 
 /// Accumulate COBS-framed bytes; on each `0x00` delimiter decode, verify,
-/// and dispatch. Any malformed packet, CRC failure, oversized
-/// accumulation, or mid-frame disconnect ends with the accumulator
-/// cleared and the stream realigned at the next delimiter — that is the
-/// whole resync story.
+/// and dispatch. Every failure — malformed packet, bad CRC, overflow,
+/// mid-frame disconnect — clears the accumulator and realigns at the next
+/// delimiter. That is the whole resync story.
 async fn cdc_rx_loop(
     mut rx: Receiver<'static, Driver<'static, USB>>,
     mut frames: zerocopy_channel::Sender<'static, CriticalSectionRawMutex, FrameBuf>,
@@ -266,8 +244,7 @@ async fn cdc_rx_loop(
                             accum.clear();
                             overflow = false;
                         } else if !overflow && accum.push(byte).is_err() {
-                            // Oversized: drop everything until the next
-                            // delimiter realigns us.
+                            // Drop everything until the next delimiter.
                             accum.clear();
                             overflow = true;
                         }
@@ -287,10 +264,9 @@ async fn cdc_rx_loop(
     }
 }
 
-/// Decode and dispatch one delimiter-to-delimiter span. Every failure
-/// mode (COBS, CRC, wrong length for a known type) is a silent drop;
-/// unknown packet types are ignored (forward compat) — exactly the
-/// receiver posture `docs/protocol.md` §Framing specifies.
+/// Decode and dispatch one delimiter-to-delimiter span, with the receiver
+/// posture `docs/protocol.md` §Framing specifies: every failure mode is a
+/// silent drop, unknown packet types are ignored.
 async fn dispatch(
     encoded: &[u8],
     raw: &mut [u8; packet::MAX_RAW_LEN],
@@ -304,17 +280,16 @@ async fn dispatch(
     };
     match parsed {
         Parsed::Known(Packet::Hello { .. }) => {
-            // A Hello opens a fresh session: drop anything queued for a
-            // previous one so stale ButtonEvents can't flush ahead of
-            // this session's HelloAck (docs/protocol.md §Handshake).
-            // Dropping a not-yet-sent HelloAck is fine too — its payload
-            // is identical for every Hello of a given build.
+            // A Hello opens a fresh session: drop the previous session's
+            // queue so stale ButtonEvents can't flush ahead of this
+            // session's HelloAck. Dropping an unsent HelloAck is harmless —
+            // its payload is identical for every Hello of a given build.
             TX_CHANNEL.clear();
-            // Always ack, whatever version the host claims — version
-            // policy (refuse-with-message on mismatch) is the host's job.
+            // Ack whatever version the host claims; refusing on mismatch is
+            // the host's job.
             TX_CHANNEL.send(TxEvent::HelloAck).await;
-            // Arm button reporting only now that the ack is queued: the
-            // FIFO keeps any subsequent ButtonEvent behind it.
+            // Armed only now the ack is queued, so the FIFO keeps any
+            // subsequent ButtonEvent behind it.
             BUTTON_REPORTING.store(true, Ordering::Relaxed);
         }
         Parsed::Known(Packet::Frame { pixels }) => {
@@ -340,9 +315,7 @@ async fn cdc_tx_loop(
     mut tx: Sender<'static, Driver<'static, USB>>,
     events: &'static TxChannel,
 ) -> ! {
-    // Largest device→host packet is a HelloAck: 1 type + 3 header +
-    // ≤ MAX_FW_VERSION_LEN payload + 2 CRC = 38 raw bytes, ≤ 40 on the
-    // wire with COBS + delimiter. 64 gives slack either way.
+    // Largest device→host packet is a HelloAck: ≤ 40 wire bytes.
     let mut scratch = [0u8; 64];
     let mut wire = [0u8; 64];
 
@@ -360,13 +333,12 @@ async fn cdc_tx_loop(
                 TxEvent::Button { button, kind } => Packet::ButtonEvent { button, kind },
             };
             // Can't fail for the packets above (fw_version length is
-            // compile-time checked); drop rather than unwrap if it
-            // somehow does.
+            // compile-time checked); drop rather than unwrap if it does.
             let Ok(wire_len) = pkt.encode(&mut scratch, &mut wire) else {
                 continue;
             };
-            // Chunked to the CDC packet size. Today's packets fit one
-            // chunk; the loop keeps this correct if one ever doesn't.
+            // Today's packets fit one CDC chunk; the loop keeps this
+            // correct if one ever doesn't.
             let mut sent = 0;
             while sent < wire_len {
                 let chunk = (wire_len - sent).min(64);
@@ -381,10 +353,6 @@ async fn cdc_tx_loop(
     }
 }
 
-// =============================================================================
-// Runtime task
-// =============================================================================
-
 #[embassy_executor::task]
 async fn runtime_task(
     display: Display,
@@ -393,14 +361,9 @@ async fn runtime_task(
     runtime::run(display, frames, &BRIGHTNESS_SIGNAL, &TEST_TOGGLE).await
 }
 
-// =============================================================================
-// Watchdog feed task
-// =============================================================================
-
-// Passive liveness check: if the executor or any task it cooperates with
-// wedges, this timer stops firing and the chip resets. Deliberately not
-// gated on a "liveness signal" from other tasks — at this code size, the
-// extra plumbing buys nothing.
+// Passive liveness check: if the executor wedges, this timer stops firing
+// and the chip resets. Deliberately not gated on per-task liveness signals —
+// at this code size the extra plumbing buys nothing.
 #[embassy_executor::task]
 async fn watchdog_feed(mut wd: Watchdog) -> ! {
     loop {

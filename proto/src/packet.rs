@@ -12,16 +12,16 @@
 //! computed over the raw bytes *before* COBS so it also guards against
 //! COBS-layer bugs, and appended little-endian.
 //!
-//! Forward-compat posture (carried over from the ASCII protocol): a
-//! receiver **ignores packets with unknown type bytes** and **drops
+//! Forward-compat posture: a receiver **ignores packets with unknown type
+//! bytes** and **drops
 //! packets with bad CRCs**, resynchronizing on the next `0x00` delimiter.
 //! A *known* type with a wrong-length payload is also dropped
 //! ([`Error::BadLength`]).
 //!
-//! Payload schemas are frozen: the typed [`Packet`] layer below is the
-//! Rust source of truth, mirrored in prose by `docs/protocol.md` and in
-//! bytes by the golden vectors under `testdata/proto/`. Any wire-visible
-//! change bumps [`PROTOCOL_VERSION`].
+//! The typed [`Packet`] layer below is where the payload layouts are
+//! defined, mirrored in prose by `docs/protocol.md` and in bytes by the
+//! golden vectors under `testdata/proto/`. Any wire-visible change bumps
+//! [`PROTOCOL_VERSION`] and updates all three together.
 
 use crate::{cobs, crc};
 
@@ -37,8 +37,8 @@ pub const PROTOCOL_VERSION: u8 = 1;
 pub const USB_VID: u16 = 0x1209;
 
 /// USB product id. `0x0001` is the pid.codes **test PID**; the registered
-/// PID `0xF1A6` replaces it once granted (docs/v2-tracking.md). Hosts
-/// should accept both during the transition.
+/// PID `0xF1A6` replaces it once granted (docs/protocol.md §Transport).
+/// Hosts should accept both during the transition.
 pub const USB_PID: u16 = 0x0001;
 
 pub const PANEL_WIDTH: usize = 32;
@@ -91,7 +91,7 @@ pub enum Error {
     TooShort,
     /// CRC mismatch — drop the packet and resync.
     BadCrc,
-    /// Known packet type whose payload length doesn't match the frozen
+    /// Known packet type whose payload length doesn't match its declared
     /// layout (or, on the encode side, an over-long `fw_version`).
     /// Receivers drop such packets — same posture as [`Error::BadCrc`].
     BadLength,
@@ -159,14 +159,10 @@ pub fn parse_raw(raw: &[u8]) -> Result<(u8, &[u8]), Error> {
     Ok((body[0], &body[1..]))
 }
 
-// ---------------------------------------------------------------------
-// Typed layer. One variant per assigned type; the payload
-// layouts are immutable wire contracts — golden vectors under
-// `testdata/proto/` and `docs/protocol.md` §"Payload layouts" pin the
-// exact bytes. All multi-byte values are little-endian (today only the
-// framing-layer CRC is multi-byte; every payload field is a single byte
-// or a byte string).
-// ---------------------------------------------------------------------
+// Typed layer, one variant per assigned type. These layouts are what both
+// ends agree on — `testdata/proto/` and `docs/protocol.md` §"Payload layouts"
+// pin the exact bytes. Multi-byte values are
+// little-endian, though today only the framing-layer CRC is multi-byte.
 
 /// Fixed payload length of [`Packet::Hello`].
 pub const HELLO_PAYLOAD_LEN: usize = 1;
@@ -218,9 +214,7 @@ impl Button {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum PressKind {
-    /// Short press, classified on release.
     Short = 0,
-    /// Long press.
     Long = 1,
 }
 
@@ -238,8 +232,8 @@ impl PressKind {
     }
 }
 
-/// Typed, borrow-based view of one packet. Variants document their frozen
-/// payload layout; wrong-length payloads never construct a `Packet`
+/// Typed, borrow-based view of one packet. Variants document their payload
+/// layout; wrong-length payloads never construct a `Packet`
 /// ([`Error::BadLength`]).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Packet<'a> {
@@ -258,7 +252,7 @@ pub enum Packet<'a> {
     Brightness { value: u8 },
     /// Device→host, `0x81`. Handshake reply. At least
     /// [`HELLO_ACK_MIN_PAYLOAD_LEN`] bytes:
-    /// `[protocol_version][width][height][fw_versionâ€¦]`.
+    /// `[protocol_version][width][height][fw_version...]`.
     HelloAck {
         protocol_version: u8,
         /// Panel width in pixels (32 on the Cosmic Unicorn).
@@ -299,7 +293,7 @@ impl<'a> Packet<'a> {
 
     /// Typed view over the two halves [`parse_raw`] returns (known type +
     /// CRC-validated payload). [`Error::BadLength`] when the payload
-    /// doesn't match the frozen layout — receivers drop the packet.
+    /// doesn't match the declared layout — receivers drop the packet.
     pub fn from_payload(ty: PacketType, payload: &'a [u8]) -> Result<Self, Error> {
         match ty {
             PacketType::Hello => match payload {
@@ -385,7 +379,7 @@ mod tests {
 
     #[test]
     fn constants_are_stable() {
-        // Wire-frozen numbers; changing any of these is a protocol break.
+        // Wire-visible numbers; changing any of these is a protocol break.
         assert_eq!(FRAME_PAYLOAD_LEN, 3072);
         assert_eq!(MAX_RAW_LEN, 3075);
         assert_eq!(MAX_WIRE_LEN, 3089);
@@ -442,8 +436,7 @@ mod tests {
     #[test]
     fn empty_payload_packet_round_trips() {
         // The raw layer doesn't length-check payloads (the typed layer
-        // does - a real Hello carries exactly 1 byte), so an empty
-        // payload is legal here.
+        // does), so an empty payload is legal here.
         let mut scratch = [0u8; 8];
         let mut wire = [0u8; 16];
         let wire_len = encode(PacketType::Hello, &[], &mut scratch, &mut wire).expect("encode");
@@ -517,9 +510,7 @@ mod tests {
         assert_eq!(PacketType::from_byte(ty), None);
     }
 
-    // ------------------------------------------------------------------
     // Typed layer
-    // ------------------------------------------------------------------
 
     const ALL_BUTTONS: [Button; 3] = [Button::BrightnessUp, Button::BrightnessDown, Button::Sleep];
     const ALL_PRESS_KINDS: [PressKind; 2] = [PressKind::Short, PressKind::Long];
@@ -650,10 +641,9 @@ mod tests {
     }
 
     #[test]
-    fn payload_layouts_are_frozen() {
-        // Byte-exact golden layouts (mirrors docs/protocol.md
-        // §"Payload layouts"). Changing any assertion here is a
-        // wire-protocol break.
+    fn payload_layouts_match_the_documented_bytes() {
+        // Byte-exact layouts (mirrors docs/protocol.md §"Payload layouts").
+        // Changing any assertion here is a wire-protocol break.
         let mut raw = [0u8; MAX_RAW_LEN];
         assert_eq!(
             raw_body(
@@ -799,7 +789,7 @@ mod tests {
 
     #[test]
     fn button_event_with_unassigned_ids_still_parses() {
-        // The 2-byte length is frozen but the id space is open — a future
+        // The 2-byte length is fixed but the id space is open — a future
         // firmware button must not kill old parsers.
         let mut raw = [0u8; 8];
         let raw_len = write_raw(PacketType::ButtonEvent, &[7, 9], &mut raw).expect("write_raw");

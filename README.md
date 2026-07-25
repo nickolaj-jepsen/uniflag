@@ -30,7 +30,7 @@ install both from the same zip. Full guide:
 
 ## Repo layout
 
-- `proto/` — the frozen v2 binary wire protocol (Rust, `no_std`):
+- `proto/` — the v2 binary wire protocol (Rust, `no_std`):
   packet layer, COBS framing, CRC-16, shared USB/geometry constants
 - `plugin/` — the SimHub plugin (C#): `core/` holds the renderer and wire
   codec (portable, testable anywhere), `src/` the .NET Framework 4.8 SimHub
@@ -44,11 +44,11 @@ install both from the same zip. Full guide:
   and protocol diagnostic for the panel
 - `overlay/` — the browser virtual-panel page + the DashStudio dash file
 - `simhub/` — end-user plugin install / setup / troubleshooting guide
-- `testdata/` — frozen golden fixtures: the cross-language protocol byte
+- `testdata/` — golden fixtures: the cross-language protocol byte
   vectors (the Rust and C# suites both verify against them), plus
   C#-only adapter timeline scripts
-- `docs/` — protocol + effects specifications, SimHub and Cosmic Unicorn
-  references ([index](docs/README.md))
+- `docs/` — the wire-protocol and flag-grammar specifications, SimHub and
+  Cosmic Unicorn references ([index](docs/README.md))
 - `packaging/` — release-zip assembly (`package.ps1`) and the `INSTALL.md`
   shipped inside the zip
 - `justfile` — task runner (see below)
@@ -135,10 +135,11 @@ SimHub via the bundled `uniflag-cli` test-pattern streamer.
 
 ## Specifications and references
 
-The binary wire protocol is specified in
-[`docs/protocol.md`](docs/protocol.md), the renderer's signal language in
-[`docs/flag-grammar.md`](docs/flag-grammar.md); Cosmic Unicorn hardware
-/ PIO and SimHub references live under [`docs/`](docs/README.md).
+The binary wire protocol is written up in
+[`docs/protocol.md`](docs/protocol.md) and the renderer's signal language in
+[`docs/flag-grammar.md`](docs/flag-grammar.md) — both describe where the
+design currently sits, not where it has to stay. Cosmic Unicorn hardware /
+PIO and SimHub references live under [`docs/`](docs/README.md).
 
 ## License
 

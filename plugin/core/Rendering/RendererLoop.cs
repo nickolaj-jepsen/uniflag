@@ -25,10 +25,8 @@ namespace Uniflag.Rendering
     /// </summary>
     public enum RenderInputMode
     {
-        /// <summary>
-        /// Boot-dark blank panel (the firmware's disconnected posture as
-        /// seen host-side). The initial mode.
-        /// </summary>
+        /// <summary>Boot-dark blank panel — the firmware's disconnected
+        /// posture as seen host-side, and the initial mode.</summary>
         Blank,
 
         /// <summary>
@@ -63,12 +61,9 @@ namespace Uniflag.Rendering
     /// the publish buffer and the sink snapshot array are all reused;
     /// allocations happen only on sink add/remove and thread start.</para>
     ///
-    /// <para><b>Pacing:</b> monotonic <see cref="Stopwatch"/> deadlines —
-    /// frame <c>n</c> is due at <c>start + n/60 s</c>, recomputed from the
-    /// absolute start each tick so timer slop never accumulates into drift.
-    /// If the thread falls behind (GC pause, slow sink, debugger), it skips
-    /// the missed tick indices instead of slewing the clock: sinks see fewer
-    /// frames, but animation rates stay wall-clock true.</para>
+    /// <para><b>Pacing:</b> monotonic <see cref="Stopwatch"/> deadlines, with
+    /// missed ticks skipped rather than slewed, so animation rates stay
+    /// wall-clock true when the thread falls behind.</para>
     /// </summary>
     public sealed class RendererLoop : IDisposable
     {
@@ -112,10 +107,8 @@ namespace Uniflag.Rendering
         // resumes the clock instead of restarting it.
         private long _nextFrame;
 
-        // Render-thread-only envelope bookkeeping (docs/flag-grammar.md §4):
-        // the tracker diffs successive states to run the flash → attention →
-        // ambient → fade envelope per slot. Handed across stop/start cycles
-        // by the Thread.Start/Join barriers.
+        // Render-thread-only. Handed across stop/start cycles by the
+        // Thread.Start/Join barriers.
         private readonly EnvelopeTracker _envelope = new EnvelopeTracker();
 
         /// <summary>
@@ -302,9 +295,7 @@ namespace Uniflag.Rendering
             JoinOutsideLock(toJoin);
         }
 
-        // -------------------------------------------------------------------
-        // Thread lifecycle (callers hold _gate).
-        // -------------------------------------------------------------------
+        // Thread lifecycle. Callers hold _gate.
 
         private void StartLocked()
         {
@@ -359,10 +350,6 @@ namespace Uniflag.Rendering
                 thread.Join();
             }
         }
-
-        // -------------------------------------------------------------------
-        // Render thread.
-        // -------------------------------------------------------------------
 
         private void Run(ManualResetEventSlim stop, long startFrame)
         {

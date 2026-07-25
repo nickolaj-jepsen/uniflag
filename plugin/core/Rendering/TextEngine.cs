@@ -23,7 +23,7 @@ namespace Uniflag.Rendering
 
         /// <summary>
         /// Left x of a horizontally centred row. Truncating division, so odd
-        /// leftovers bias one pixel left exactly as the frozen boards do.
+        /// leftovers bias one pixel left, which is how the boards are drawn.
         /// </summary>
         public static int CenterRowX(int glyphCount, int gap) =>
             (FrameBuffer.Width - MeasureRow(glyphCount, gap)) / 2;

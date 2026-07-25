@@ -144,9 +144,8 @@ function setConnState(connected, text) {
 }
 
 // ---------------------------------------------------------------- dummy source
-// Mirrors the renderer test pattern used since the M2a/M2b spikes: a
-// slow-scrolling colour gradient plus one bright white cursor pixel advancing
-// one position per frame. Stalls and coalescing are visible at a glance.
+// Slow-scrolling colour gradient plus one bright white cursor pixel advancing
+// one position per frame, so stalls and coalescing are visible at a glance.
 function paintTestPattern(buf, f) {
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -296,8 +295,8 @@ function onRaf() {
 }
 
 // ------------------------------------------------------------------------- HUD
-// Off by default in production; ?hud=1 restores the M2a instrumentation
-// panel (docs/web-overlay.md explains how to read it).
+// Off by default; ?hud=1 shows the instrumentation panel
+// (docs/web-overlay.md explains how to read it).
 if (showHud) {
   const hud = document.getElementById('hud');
   hud.style.display = 'block';

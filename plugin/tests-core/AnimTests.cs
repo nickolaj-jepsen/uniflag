@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Unit tests for the animation primitives (plugin/core/Rendering/Anim.cs),
-// pinned against docs/effects-spec.md §2 / render/src/anim.rs. The golden
-// corpus verifies these transitively; the anchors here make a primitive
-// regression fail with a readable message instead of 40 opaque frame diffs.
+// Unit tests for the animation primitives (plugin/core/Rendering/Anim.cs).
+// The painter tests exercise these transitively; the anchors here make a
+// primitive regression fail with a readable message instead of a pile of
+// unexplained pixel diffs.
 
 using Uniflag.Rendering;
 using Xunit;
@@ -12,8 +12,7 @@ namespace Uniflag.Tests
 {
     public class SinLutTests
     {
-        // Anchor values from docs/effects-spec.md §2.1 (Bhaskara I formula,
-        // anim.rs:10-26).
+        // Anchors of the integer Bhaskara I formula.
         [Theory]
         [InlineData(0, 128)]
         [InlineData(1, 131)]
@@ -66,8 +65,7 @@ namespace Uniflag.Tests
 
     public class Strobe60Tests
     {
-        // Period/on-frame table from docs/effects-spec.md §2.2 — the exact
-        // (period * 6 + 5) / 10 duty rounding, sampled at each edge.
+        // The exact (period * 6 + 5) / 10 duty rounding, sampled at each edge.
         [Theory]
         // hz=2: period 30, on 18
         [InlineData(2, 0, true)]
@@ -179,7 +177,6 @@ namespace Uniflag.Tests
 
     public class FloorMathTests
     {
-        // The div_euclid/rem_euclid hazard sites (docs/effects-spec.md §2.6):
         // C# '/' and '%' truncate toward zero; these helpers floor instead.
         [Theory]
         [InlineData(5, 32, 5)]
@@ -212,8 +209,8 @@ namespace Uniflag.Tests
         [Fact]
         public void OutOfRangeWritesAreSilentlyIgnored()
         {
-            // The green onset sweep starts at x = -4 and the renderer relies
-            // on the paint target clamping (docs/effects-spec.md §1).
+            // The green onset sweep starts at x = -4 and relies on the paint
+            // target clamping.
             var frameBuffer = new FrameBuffer();
             frameBuffer.SetPixel(-4, 0, 1, 2, 3);
             frameBuffer.SetPixel(0, -1, 1, 2, 3);

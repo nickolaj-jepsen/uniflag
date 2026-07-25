@@ -23,7 +23,7 @@ namespace Uniflag.Protocol
     /// <c>0x01</c> code byte. <b>Beware: Wikipedia's <c>cobsEncode</c>
     /// example omits that trailing byte</b>, and the divergence is silent
     /// under round-trip testing because the decoder (like every decoder)
-    /// accepts both forms. The cross-language golden vectors freeze the
+    /// accepts both forms. The cross-language golden vectors pin the
     /// Listing-1 choice and include a 254-boundary case precisely so a
     /// Wikipedia-derived port fails loudly.
     /// </summary>

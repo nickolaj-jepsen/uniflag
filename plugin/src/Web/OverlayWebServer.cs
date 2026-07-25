@@ -288,9 +288,7 @@ namespace Uniflag.Web
             }
         }
 
-        // ---------------------------------------------------------------------
         // Accept / HTTP phase
-        // ---------------------------------------------------------------------
 
         private async Task AcceptLoopAsync(TcpListener listener, CancellationToken ct)
         {
@@ -464,9 +462,7 @@ namespace Uniflag.Web
             }
         }
 
-        // ---------------------------------------------------------------------
         // HTTP plumbing
-        // ---------------------------------------------------------------------
 
         private sealed class ParsedRequest
         {

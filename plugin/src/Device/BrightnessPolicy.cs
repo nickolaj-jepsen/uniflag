@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Host-side brightness policy. Behaviour ported 1:1 from the retired v1
-// BrightnessController (render/src/brightness.rs): STEP/SLEEP constants,
-// saturating steps, remembered-awake level, wake-to-at-least-STEP rule.
-// The flash-persistence debounce does NOT carry over: the value lives in
+// Host-side brightness policy: saturating steps, a remembered awake level,
+// and the wake-to-at-least-STEP rule. No write debounce — the value lives in
 // SimHub's settings store, where a property write costs nothing.
 
 using System;
@@ -38,16 +36,14 @@ namespace Uniflag.Device
         private byte _lastAwake;
 
         /// <summary>
-        /// Raised after every effective change with the new value, on
-        /// whichever thread applied the change (UI thread for the slider,
-        /// device RX thread for buttons). Raised while still holding the
-        /// internal state lock so delivery order always matches mutation
-        /// order — the last delivery a subscriber sees is guaranteed to
-        /// carry the final <see cref="Current"/> value even when slider and
-        /// button inputs race (the device TX slot and the persisted setting
-        /// both converge on the true state). Handlers must therefore be
-        /// thread-safe, fast, and non-blocking, and must never wait on
-        /// another thread that could call into this policy.
+        /// Raised after every effective change, on whichever thread applied
+        /// it (UI thread for the slider, device RX thread for buttons). Raised
+        /// while still holding the state lock, so delivery order matches
+        /// mutation order and a subscriber's last delivery always carries the
+        /// final <see cref="Current"/> value even when slider and button
+        /// inputs race. Handlers must therefore be thread-safe, fast,
+        /// non-blocking, and must never wait on a thread that could call back
+        /// into this policy.
         /// </summary>
         public event Action<byte> Changed;
 

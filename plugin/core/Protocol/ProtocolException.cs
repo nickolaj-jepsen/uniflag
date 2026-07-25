@@ -24,7 +24,7 @@ namespace Uniflag.Protocol
         BadCrc,
 
         /// <summary>
-        /// Known packet type whose payload length doesn't match the frozen
+        /// Known packet type whose payload length doesn't match its declared
         /// layout (or, encode-side, an over-long HelloAck <c>fw_version</c>).
         /// Rust: <c>packet::Error::BadLength</c>.
         /// </summary>

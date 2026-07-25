@@ -3,9 +3,8 @@
 namespace Uniflag
 {
     /// <summary>
-    /// Persisted via SimHub's common settings store. Owned by the plugin —
-    /// the device never stores settings in v2. SimHub writes the file when
-    /// the plugin saves at End.
+    /// Persisted via SimHub's common settings store, written when the plugin
+    /// saves at End. Owned by the plugin — the device stores nothing.
     /// </summary>
     public class UniflagSettings
     {

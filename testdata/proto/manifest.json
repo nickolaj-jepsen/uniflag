@@ -1,7 +1,7 @@
 {
   "format": 1,
   "protocol_version": 1,
-  "description": "Frozen cross-language golden vectors for the uniflag v2 binary protocol (docs/protocol.md; docs/v2-plan.md M6). The Rust conformance suite (proto/tests/golden_vectors.rs) and the C# plugin suite load these exact files; neither side generates its own fixtures. Regenerate only via just golden-regen.",
+  "description": "Cross-language golden vectors for the uniflag v2 binary protocol (docs/protocol.md): the bytes the Rust and C# codecs are both checked against. The Rust conformance suite (proto/tests/golden_vectors.rs) and the C# plugin suite load these exact files; neither side generates its own fixtures. Regenerate only via just golden-regen, and only on purpose: a regen that moves bytes is a protocol change.",
   "reading": {
     "raw": "type byte, then payload, then CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflection, xorout 0) computed over type+payload and appended little-endian",
     "wire": "COBS-encoded raw followed by a single 0x00 delimiter; canonical Cheshire-Baker Listing 1 encoding, meaning the encoder always terminates with a group header",
@@ -69,7 +69,7 @@
       "kind": "unknown_packet",
       "type_byte": 126,
       "files": { "raw": "cobs_boundary_254.raw", "wire": "cobs_boundary_254.wire" },
-      "purpose": "raw form ends in exactly 254 non-zero bytes immediately after a zero byte, so a canonical (Cheshire-Baker Listing 1) COBS encoder emits a full 0xFF group followed by a trailing 0x01 group header before the delimiter. The Wikipedia cobsEncode example omits that trailing 0x01; an encoder ported from it produces a wire one byte shorter and must fail the byte-exact comparison against this vector. Type byte 0x7E is unassigned, so receivers parse this packet as unknown and ignore it. Exact raw bytes, re-derivable: [0x7E, 0x51, tweak, 0x00, 0x01, 0x02, .., 0xFC, crc_lo, crc_hi] where tweak is the smallest value in 0x00..=0xFF for which neither CRC-16/CCITT-FALSE byte of the whole preceding sequence is zero; in this frozen file tweak = 0x00, giving 252 ascending pattern bytes + 2 CRC bytes = 254 zero-free trailing bytes after the 0x00 at raw offset 3"
+      "purpose": "raw form ends in exactly 254 non-zero bytes immediately after a zero byte, so a canonical (Cheshire-Baker Listing 1) COBS encoder emits a full 0xFF group followed by a trailing 0x01 group header before the delimiter. The Wikipedia cobsEncode example omits that trailing 0x01; an encoder ported from it produces a wire one byte shorter and must fail the byte-exact comparison against this vector. Type byte 0x7E is unassigned, so receivers parse this packet as unknown and ignore it. Exact raw bytes, re-derivable: [0x7E, 0x51, tweak, 0x00, 0x01, 0x02, .., 0xFC, crc_lo, crc_hi] where tweak is the smallest value in 0x00..=0xFF for which neither CRC-16/CCITT-FALSE byte of the whole preceding sequence is zero; in this committed file tweak = 0x00, giving 252 ascending pattern bytes + 2 CRC bytes = 254 zero-free trailing bytes after the 0x00 at raw offset 3"
     },
     {
       "name": "bad_crc",

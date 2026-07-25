@@ -5,8 +5,7 @@
 // SYNTHETIC iRacing SessionFlags sequences through the generic+iRacing
 // layers.
 //
-// The timeline fixtures are game-agnostic SignalState scripts (format 2 —
-// schema-revved from the M7 transcriptions at the flag-grammar cutover), so
+// The timeline fixtures are game-agnostic SignalState scripts (format 2), so
 // they run through the GENERIC pipeline only: each step is projected onto a
 // telemetry snapshot (unified flags + a representative SessionTypeName)
 // and the expected output is the step folded through the documented

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Whole-scenario smoke pass over the Grammar catalogue. Deliberately pins
-// no pixels: the corpus of byte-exact golden frames was retired because
-// the design is still moving and every visual tweak churned 41 binaries.
+// Whole-scenario smoke pass over the Grammar catalogue. Deliberately pins no
+// pixels — while the visual design is still moving, byte-exactness is the
+// wrong contract for the painters (docs/flag-grammar.md §11).
 //
-// What survives here are the invariants that hold no matter how the
-// painters are tuned — every scenario replays end to end without
-// throwing, produces a whole frame, renders deterministically, and is
-// dark only where darkness is the signal. That catches the failure the
-// unit tests miss (a compositor/envelope interaction that only appears
-// under full replay) without ever needing regeneration.
+// What it asserts are the invariants that hold no matter how the painters are
+// tuned: every scenario replays end to end without throwing, produces a whole
+// frame, renders deterministically, and is dark only where darkness is the
+// signal. That catches the failure the unit tests miss — a compositor/envelope
+// interaction that only appears under full replay — and never needs
+// regenerating.
 //
 // Visual review is the frame viewer's job, not a test's.
 

@@ -16,11 +16,9 @@ namespace Uniflag.Rendering
         /// Deliver one completed frame.
         ///
         /// <para><b>Buffer ownership:</b> <paramref name="rgb888"/> is the
-        /// renderer's reusable publish buffer (32×32 RGB888, row-major,
-        /// 3072 bytes — golden-frame layout). It is on loan only for the
-        /// duration of this call: read it synchronously or copy what you
-        /// need; never write to it and never retain the reference — its
-        /// contents are overwritten on a later tick.</para>
+        /// renderer's reusable publish buffer, on loan for the duration of
+        /// this call only. Read it synchronously or copy what you need; never
+        /// write to it and never retain the reference.</para>
         ///
         /// <para><b>Threading:</b> called on the dedicated render thread.
         /// Implementations must not block (a stalled sink delays every other

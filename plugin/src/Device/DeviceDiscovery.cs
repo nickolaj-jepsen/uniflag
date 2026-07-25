@@ -27,8 +27,8 @@ namespace Uniflag.Device
         public const ushort UsbProductIdTest = 0x0001;
 
         /// <summary>
-        /// The future registered pid.codes PID (docs/v2-tracking.md). The
-        /// filter accepts both this and <see cref="UsbProductIdTest"/>
+        /// The future registered pid.codes PID (docs/protocol.md §Transport).
+        /// The filter accepts both this and <see cref="UsbProductIdTest"/>
         /// during the transition, per the note on <c>USB_PID</c> in
         /// <c>proto/src/packet.rs</c>.
         /// </summary>

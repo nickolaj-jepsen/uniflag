@@ -7,16 +7,12 @@
 // allocated.
 //
 // The iRacing raw object behind StatusDataBase.GetRawDataObject() is
-// IRacingReader.DataSampleEx from ICarsReader.dll — a proprietary assembly
-// NOT in the plugin's reference set (CI stages only SimHub.Plugins /
-// GameReaderCommon / log4net / SimHub.Logging), so it is read reflectively:
-// one cached PropertyInfo fetch of `Telemetry`, whose value derives from
-// Dictionary<string, object> (iRacingSDK.Telemetry) and is therefore
-// readable through the BCL IDictionary interface with no further reflection.
-// Per-tick cost at 60 Hz: GetRawDataObject() is a plain field read
-// (IL-verified, no boxing for the class-typed sample), one
-// PropertyInfo.GetValue invocation, one dictionary lookup — no per-tick
-// allocation. Shapes verified against SimHub 9.11.21; documented in
+// IRacingReader.DataSampleEx from ICarsReader.dll, a proprietary assembly NOT
+// in the plugin's reference set, so it is read reflectively: one cached
+// PropertyInfo fetch, then the BCL IDictionary interface (iRacingSDK.Telemetry
+// derives from Dictionary<string, object>). Per-tick cost at 60 Hz is one
+// field read, one PropertyInfo.GetValue and a dictionary lookup, with no
+// allocation. Shapes verified against SimHub 9.11.21 and documented in
 // docs/simhub-plugin-api.md.
 
 using System;
@@ -114,16 +110,12 @@ namespace Uniflag.Adapters
         }
 
         /// <summary>
-        /// Pull the iRacing raw-data signals the refiner consumes: the
-        /// SessionFlags bitmask and PlayerCarMyIncidentCount from the live
-        /// telemetry dictionary, and the incident limit from the session-info
-        /// dictionary. Null-safe at every layer: any deviation from the
-        /// researched shape (missing raw object, absent property, not a
-        /// string-keyed dictionary, missing key, unexpected boxed type)
-        /// simply leaves the corresponding <c>Has*</c> flag false. SimHub
+        /// Pull the iRacing raw-data signals the refiner consumes. Null-safe at
+        /// every layer: any deviation from the researched shape simply leaves
+        /// the corresponding <c>Has*</c> flag false, and the three reads are
+        /// independent so a miss on one never skips the others. SimHub
         /// throttles plugins whose DataUpdate throws, so this path must never
-        /// leak an exception. The three reads are independent — a miss on one
-        /// never skips the others.
+        /// leak an exception.
         /// </summary>
         private static void ExtractIRacingRaw(StatusDataBase telemetry, TelemetrySnapshot into)
         {
@@ -146,12 +138,9 @@ namespace Uniflag.Adapters
             Type rawType = raw.GetType();
             if (!ReferenceEquals(rawType, _rawType))
             {
-                // (Re-)resolve both cached properties on type change. Shape
-                // drift in a future SimHub must degrade, never throw:
-                // GetProperty returns null when the property is gone, but it
-                // *throws* AmbiguousMatchException when a derived raw type
-                // shadows one with a different property type — SafeGetProperty
-                // caches null either way.
+                // Shape drift in a future SimHub must degrade, never throw —
+                // hence SafeGetProperty, which caches null for both the absent
+                // and the AmbiguousMatchException case.
                 _rawTelemetryProperty = SafeGetProperty(rawType, "Telemetry");
                 _rawSessionDataDictProperty = SafeGetProperty(rawType, "SessionDataDict");
                 _rawType = rawType;
@@ -264,9 +253,8 @@ namespace Uniflag.Adapters
         /// <summary>
         /// The session incident limit. SimHub 9.11.21's iRacingSDK typed
         /// SessionData model omits IncidentLimit (verified by reflection over
-        /// iRacingSDK.dll — <c>_WeekendOptions</c> has NumStarters/Standing
-        /// Start/… but no limit), so read the raw session-info tree:
-        /// <c>WeekendInfo → WeekendOptions → IncidentLimit</c>. This path is
+        /// iRacingSDK.dll), so read the raw session-info tree:
+        /// <c>WeekendInfo → WeekendOptions → IncidentLimit</c>. That nesting is
         /// researched, not live-verified against a running session — every
         /// layer is guarded, so a wrong nesting/key/type simply leaves
         /// <see cref="TelemetrySnapshot.HasIncidentLimit"/> false. "unlimited"

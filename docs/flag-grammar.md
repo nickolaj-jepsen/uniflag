@@ -1,12 +1,11 @@
 # uniflag flag grammar — the second-generation signal language
 
-**Status: adopted design constitution (2026-07-04); phases 1a–1e
-implemented.** This document is the outcome of a full redesign interview and
-is the normative spec for the live renderer: the Grammar renderer shipped,
-the firmware fallback is the roaming ember, and the legacy painters and
-corpora were retired (docs/effects-spec.md is historical, like the v1
-`render/` crate docs). Phases 2–3 (§12 — the LMU and F1 adapters, each gated
-on a live-verification session) remain open.
+**The renderer's design doc** — and a working one. This is a prerelease
+hobby project, the visual design is still moving, and none of it is settled
+enough to argue from. What's worth keeping is the *consistency*: the six
+rules in §2 are there so the panel reads as one language. If a new signal
+doesn't fall out of them, that usually means a rule wants revisiting — which
+is fine, it's just worth doing on purpose rather than by accident.
 
 Codename **Grammar**: the C# implementation lives in
 `plugin/core/Rendering/Grammar/` (`Uniflag.Rendering.Grammar` namespace); how
@@ -28,15 +27,18 @@ wire don't care what painted them.
    flags a discipline doesn't fly.
 4. **Pretty, without compromising the above.**
 5. **Consistent.** One design grammar; learning one flag teaches the others.
-   Bespoke per-flag behaviour is banned unless licensed as a *signature* (§3).
+   Bespoke per-flag behaviour needs a reason — the ones that have earned it
+   are collected as *signatures* in §3.
 
-**Target sims**: iRacing, Le Mans Ultimate, F1 (Codemasters/EA) first-class;
-every other sim degrades gracefully through the generic unified-flag adapter.
+**Target sims**: iRacing, Le Mans Ultimate, F1 (Codemasters/EA) get the most
+attention; every other sim degrades gracefully through the generic
+unified-flag adapter.
 
 ## 2. The grammar — six rules
 
-Every signal design in §6–§8 is *derived* from these rules; a change that
-can't be derived needs a rule change first.
+Everything in §6–§8 falls out of these rules. When something doesn't, that's
+the interesting case — revisit the rule rather than bolting an exception onto
+the side of it.
 
 - **R1 — hue = identity.** Always the real-world flag colour. Hues are never
   repurposed. Idle states use only hues absent from the flag vocabulary
@@ -52,8 +54,7 @@ can't be derived needs a rule change first.
   gantry). Frame (1-px perimeter accent) = synthetic advisories with no
   physical form.
 - **R4 — universal onset transient.** Every signal *entry* opens with the
-  same white flash (§4), scoped to its slot. Two licensed signature
-  exceptions: green's onset **is** its sweep; red's onset **is** the flash it
+  same white flash (§4), scoped to its slot. Two signature exceptions: green's onset **is** its sweep; red's onset **is** the flash it
   donated to everyone else.
 - **R5 — motion is a transient, presence is the state.** The tier governs the
   onset, not the steady state: tier motion runs for one attention window,
@@ -64,10 +65,10 @@ can't be derived needs a rule change first.
   render concurrently, max one winner per slot; precedence works *within*
   slots (§5). Red and checkered are field-exclusive takeovers.
 
-## 3. Signature registry
+## 3. Signatures
 
-The complete list of licensed bespoke patterns. Anything not listed renders
-the plain tier motion.
+The bespoke patterns that have earned an exception, kept in one list so the
+exceptions stay countable. Anything not here renders the plain tier motion.
 
 | Signal | Signature |
 |---|---|
@@ -154,24 +155,24 @@ pixels still reads as a frame.
 
 ## 6. Signal catalogue
 
-Shared palette (LED-tuned, carried over): `YELLOW (255,220,0)`,
-`BLUE (0,64,255)`, `RED (255,0,0)`, `GREEN (0,220,0)`, `WHITE (255,255,255)`,
-`ORANGE (255,90,0)`, `SECTOR_DIM (40,30,0)`; new: `TEAL (0,255,192)`,
+Shared palette (LED-tuned): `YELLOW (255,220,0)`, `BLUE (0,64,255)`,
+`RED (255,0,0)`, `GREEN (0,220,0)`, `WHITE (255,255,255)`,
+`ORANGE (255,90,0)`, `SECTOR_DIM (40,30,0)`, `TEAL (0,255,192)`,
 `VIOLET (176,0,255)`, `AMBER (255,120,8)`.
 
 ### 6.1 Fields
 
 | Field | Ambient (T0 / settled) | Notes |
 |---|---|---|
-| Yellow | cloth-wave `(150,255)` | Tier from source severity: displayed→T0, waving→T1, double-waved / "be prepared to stop"→T2. Wave levels are dead as a render concept — they are tier inputs |
+| Yellow | cloth-wave `(150,255)` | Tier from source severity: displayed→T0, waving→T1, double-waved / "be prepared to stop"→T2 — wave level is a tier input, never a render concept |
 | Red | cloth-wave `(150,255)` | Enters at T2 (4 Hz strobe through the window), settles to calm red. Total takeover |
 | Green | cloth-wave `(220,255)` | Onset = signature sweep: 30 frames, band half-width 4, `pos = age * 40 / 30 − 4`, in-band `(200,255,200)`; then T1 for the window remainder |
 | Blue | cloth-wave `(150,255)` | T1: sweep band 1 px / 2 frames; T2: 1 px / frame. Band = 4 px, multiplier 255, wrapping (`FloorMod`) |
 | White | cloth-wave `(220,255)` | Final lap (iRacing). Enters T0–T1 per source; one attention pulse, nothing frantic |
-| Black | black + white X (`|x−y| ≤ 1` or `|x+y−31| ≤ 1`) | X ambient: breathe 240 mapped to 80..180 (brighter + calmer than legacy). T1 window: X pulses 2 Hz between 255 and 90. **DQ variant**: steady X at 200, no motion, + `DQ` board |
-| Meatball | black + orange disc | Disc: half-pixel metric `dx2 = 2x−31, dy2 = 2y−31`, lit iff `dx2² + dy2² ≤ 400` (r = 10.0). Ambient: disc breathes 150..255; T1 window: 2 Hz pulse. The real flag's true form — replaces the legacy rotating quadrants |
+| Black | black + white X (`|x−y| ≤ 1` or `|x+y−31| ≤ 1`) | X ambient: breathe 240 mapped to 80..180. T1 window: X pulses 2 Hz between 255 and 90. **DQ variant**: steady X at 200, no motion, + `DQ` board |
+| Meatball | black + orange disc | Disc: half-pixel metric `dx2 = 2x−31, dy2 = 2y−31`, lit iff `dx2² + dy2² ≤ 400` (r = 10.0). Ambient: disc breathes 150..255; T1 window: 2 Hz pulse. The real flag's form |
 | Checkered | scrolling checker, `off = frame/8` | Attention window: `off = frame/2` (4× scroll), settling to the lazy drift. Field-exclusive |
-| Debris | diagonal stripes: `(FloorDiv(x + y + off, 4) & 1)` → YELLOW/RED, `off = frame/16` | The real surface flag, promoted from idle-arm board to a true field. Enters T0, lowest precedence |
+| Debris | diagonal stripes: `(FloorDiv(x + y + off, 4) & 1)` → YELLOW/RED, `off = frame/16` | Enters T0, lowest precedence |
 
 ### 6.2 Boards (all wear the §8 chrome; all static — motion lives in the field)
 
@@ -223,9 +224,8 @@ inactive segments constant `SECTOR_DIM`. Painted last (§5).
 One primitive — the **ember**: a bright core, shoulders at `(m*3) >> 3`, a
 1-px halo above at `m >> 2` — parameterised four ways. Inset rule: no idle
 pixel ever touches row/column 0 or 31 (structurally distinct from frames).
-Salience strictly decreases as the system gets healthier. Kills: the hard
-100 ms blink, the green centred orb, and the orb's two-stage fallback —
-one look per state, no shape-shifting idles.
+Salience strictly decreases as the system gets healthier. One look per
+state: an idle never shape-shifts partway through.
 
 | State | Design |
 |---|---|
@@ -234,8 +234,8 @@ one look per state, no shape-shifting idles.
 | (c1) **Race idle** — game live, Racing/Paused, no signal | **Fully static**: (1,30)=(8,8,8), (2,30)=(4,4,4), (29,30)=(4,4,4), (30,30)=(8,8,8). Zero motion — safe because a dead stream self-reveals via the firmware's 1.5 s fallback timeout |
 | (c2) **Session idle** — game live, other session, no signal | Violet flankers at x=8 and x=23: core (x,30), shoulders (x±1,30), halo (x,29); `mL = 8 + Breathe(f,240)*12/255`, `mR` same with `f+120`. Exact anti-phase (`SinU8[p] + SinU8[p+128] == 256`): aggregate luminance constant to ±1 LSB |
 
-State (a) requires a firmware release and a rewrite of effects-spec §7a; it
-ships with phase 1d. With start telemetry present, pre-race sessions show the
+State (a) is the only one the firmware paints, so changing it needs a
+firmware release. With start telemetry present, pre-race sessions show the
 gantry standby instead of (c2) — the flankers are the no-telemetry fallback.
 
 ## 8. Board chrome and glyphs
@@ -245,10 +245,10 @@ One chrome for every board: **solid black backing, 1-px white outline, white
 outline 1 → two-glyph boards 21 px wide, three-glyph 29 px, height 19
 (y 6..24), leaving ≥ 6 field rows above and below. Boards are static; they
 appear with a 2-frame white-box onset (§4) and then sit. The gantry is the
-one licensed animated-content exception (§3). The breathing yellow caution
-border of the legacy SC/VSC board dies — the yellow field carries the mood.
+the one board with animated content (§3). Boards carry no coloured
+border of their own — the field behind them carries the mood.
 
-Glyph inventory (7×11 grid): existing `V S C` + new `F Y D T G Q`, digits
+Glyph inventory (7×11 grid): `V S C F Y D T G Q`, digits
 `0–9`, `+`, the X glyph, and the 9×9 disc icon.
 
 ## 9. State model — `SignalState`
@@ -280,10 +280,8 @@ field — folding them into `Flag` would force adapters to discard exactly the
 concurrency the compositor exists to preserve. Debris stays inside `Flag`
 (lowest track state — when it loses, the winner already conveys caution).
 
-Deleted from the legacy model: `WaveLevel` (→ `Tier`), `Slowdown` (no
-producer anywhere — iRacing's slow-down meter is not in telemetry),
-`Debris` bool (→ `Flag`), `Flag.Orange`/`Flag.Black` (→ the orthogonal
-`Meatball`/`BlackFlag` dimensions).
+There is deliberately no slowdown field: no sim exposes one (iRacing's
+slow-down meter is not in telemetry).
 
 ## 10. Adapter contracts
 
@@ -292,7 +290,7 @@ enters at Tier 1 (the marshal-is-waving guess), everything else Tier 0;
 `Flag_Orange` → Meatball; session mapping and the no-game predicate carry
 over verbatim; caution/sectors/boards/penalty detail only from refiners.
 
-**iRacing** (refiner, updated in phase 1): red→Red T2 · yellow/yellowWaving→
+**iRacing** (refiner): red→Red T2 · yellow/yellowWaving→
 Yellow T0/T1 · caution/cautionWaving→Yellow field T1/T2 + SC board ·
 black→Black T1 · disqualify→Black + Disqualified · repair→Meatball T1 ·
 furled→Furled · debris→Debris T0 · blue→Blue T1 (keeping SimHub's
@@ -301,90 +299,45 @@ startReady/oneLapToGreen→Ready, startSet→Set, startGo→Go ·
 tenToGo/fiveToGo→CountdownLaps (new) · incident count vs limit−margin→
 IncidentWarning.
 
-**LMU** (phase 2, new; every mapping live-verified before trust — this doc
-has been burned by prose-only rF2 claims before): `mYellowFlagState`
-severity→tiers · `mSectorFlag[0..2]`→Sectors · phase 6 split into FCY vs SC
-via `mYellowFlagState`/pace-car fields · `mStartLight`/`mNumRedLights`→
-Set + StartLightsLit · `mPenalties`→DT/SG.
+The LMU and F1 refiners below are **designed, not implemented**. Both are
+gated on a live-verification session — every mapping is verified against real
+telemetry before it is trusted, because prose-only rF2 claims have been wrong
+here before. Until then those sims run on the generic adapter, so the sector
+strip, FCY board, gantry light counts and DT/SG boards are unreachable.
 
-**F1** (phase 3, new; live-verified): `m_safetyCarStatus` 1→SC, 2→VSC,
-3→Ready (formation) · marshal zones aggregated to thirds→Sectors, zone
-severity→tier · penalty events→DT/SG/TimePenaltySeconds.
+**LMU**: `mYellowFlagState` severity→tiers · `mSectorFlag[0..2]`→Sectors ·
+phase 6 split into FCY vs SC via `mYellowFlagState`/pace-car fields ·
+`mStartLight`/`mNumRedLights`→Set + StartLightsLit · `mPenalties`→DT/SG.
+
+**F1**: `m_safetyCarStatus` 1→SC, 2→VSC, 3→Ready (formation) · marshal zones
+aggregated to thirds→Sectors, zone severity→tier · penalty events→
+DT/SG/TimePenaltySeconds.
 
 ## 11. Conformance strategy
 
-**The renderer has no byte corpus.** `testdata/frames-grammar/` existed
-briefly and was retired: pinning 41 binaries made every deliberate visual
-tweak a 41-file regeneration, and the diff a reviewer saw was
-`Binary files differ` — churn bought with unreviewable commits. While the
-design is still moving, byte-exactness is the wrong contract for the
-painters. (The bytes live in git history if a future freeze wants them.)
+**The renderer has no byte corpus, deliberately.** While the design is still
+moving, byte-exactness is the wrong contract for the painters: pinning frames
+makes every intended visual tweak a mass regeneration whose diff reads
+`Binary files differ`. What covers them instead:
 
-What replaces it:
-
-- **The scenario catalogue** (`plugin/tools/ScenarioCatalogue.cs`) survives
-  the corpus and is the durable asset: ~40 curated scripts covering the
-  signal vocabulary, each a `{ name, description, script: [{frame, state}, …],
-  sample_frame }` replayed from frame 0 (the envelope makes rendering a
-  function of state *history*, so the script — not a lone state — is the unit).
-  Sample frames are chosen to discriminate: strobe phases, breathe peaks,
-  sweep positions, flash blend weights, fade depths.
-- **A smoke pass** (`GrammarSmokeTests`) replays every catalogue scenario and
-  asserts only what stays true across visual tuning: no throw, a whole 3072-byte
-  frame, deterministic output, a survivable window either side of the sample
-  frame, and darkness exactly where darkness is the signal. It catches
-  compositor/envelope interaction bugs that per-painter unit tests miss, and it
-  never needs regenerating.
+- **The scenario catalogue** (`plugin/tools/ScenarioCatalogue.cs`) — ~40
+  curated scripts covering the signal vocabulary, each a
+  `{ name, description, script: [{frame, state}, …], sample_frame }` replayed
+  from frame 0. The envelope makes rendering a function of state *history*, so
+  the script, not a lone state, is the unit. Sample frames are chosen to
+  discriminate: strobe phases, breathe peaks, sweep positions, flash blend
+  weights, fade depths.
+- **A smoke pass** (`GrammarSmokeTests`) replays every scenario and asserts
+  only what survives visual tuning: no throw, a whole 3072-byte frame,
+  deterministic output, a survivable window either side of the sample frame,
+  and darkness exactly where darkness is the signal. It catches
+  compositor/envelope interaction bugs the per-painter tests miss.
 - **Per-painter unit tests** (`GrammarPainterTests`, `GrammarCompositorTests`,
-  `GrammarEnvelopeTests`) keep asserting specific pixels and specific
-  slot/phase decisions — targeted, hand-authored, and cheap to update when a
-  decision deliberately changes.
-- **Visual review is a tool, not a test.** `just frames-sheet` renders the whole
-  catalogue to one labelled contact sheet and `just frames <scenario>` renders
-  a single frame to PNG, so "does this still look right" is answered by looking.
+  `GrammarEnvelopeTests`) assert specific pixels and slot/phase decisions.
+- **Visual review is a tool, not a test.** `just frames-sheet` renders the
+  whole catalogue to one labelled contact sheet; `just frames <scenario>`
+  renders one frame to PNG.
 - **Timelines** (`testdata/timelines/`) remain the adapter-side contract:
   C#-only, hand-authored, schema-revved in deliberate commits.
-- **The wire protocol keeps its golden vectors.** `testdata/proto/` is frozen
-  and does not churn — that contract is about bytes, so bytes are the right
-  fixture. Nothing here changes it.
-- No user-facing legacy/Grammar toggle: the redesign replaces.
-
-## 12. Implementation plan
-
-Phases are individually shippable; the repo stays green after every step.
-
-- **1a — foundation** (no behaviour change): `SignalState`, `Compositor`
-  (slot selection + demotion + suppression), `EnvelopeTracker` (per-slot
-  diffing, phases, escalation rules) — all pure and unit-tested. Legacy
-  renderer untouched.
-- **1b — painters**: palette + glyph additions, board chrome, field/board/
-  frame painters, sector strip, Watchline idles (b)–(c2), all against the
-  paint-target abstraction; golden scripts + first `frames-grammar/` corpus;
-  ASCII/PNG contact sheet for human review of the regen.
-- **1c — cutover**: `RendererLoop` dispatches through Grammar; generic +
-  iRacing adapters emit `SignalState`; preview tour rebuilt on the new
-  vocabulary; timelines schema-rev; docs updated (this doc becomes normative;
-  effects-spec marked historical).
-- **1d — firmware fallback**: `screens.rs` roaming ember + §7a rewrite +
-  firmware release (rides the same release as the plugin cutover).
-- **1e — retirement**: delete legacy painters, `testdata/frames/`,
-  `GoldenFrameTests`; CLAUDE.md + docs updated to name the Grammar corpus as
-  the conformance contract.
-- **2 — LMU adapter**: mappings per §10, gated on a live-verification
-  session; sector strip, FCY board, gantry counts, DT/SG become reachable.
-- **3 — F1 adapter**: mappings per §10, live-verified; VSC, formation,
-  time-penalty boards become reachable.
-
-## 13. Decision log
-
-Adopted 2026-07-04 in a full design interview: peripheral-first with glance
-layer · iRacing/LMU/F1 focus · rules R1–R6 · form-based geometry (blue stays
-a field; meatball is the disc) · caution family = tiered yellow field +
-regime boards + sector strip · penalty family incl. slowdown cut, DQ
-terminal, time-penalty boards · white = final-lap only (no synthesized last
-lap) · start family incl. LMU light counts + countdown boards, `crossed`
-unmapped · frame-slot language (red ring / white dashes, furled > incident)
-· attention-decay envelope (5 s window, universal) · Watchline Embers idles
-(workflow-judged, composite) · uniform board chrome · white-flash onset +
-fade-out clears · staged corpus replacement · `SignalState` model +
-demotion rule · phased adapters iRacing-first.
+- **The wire protocol keeps its golden vectors.** That contract is about
+  bytes, so bytes are the right fixture; nothing here changes it.

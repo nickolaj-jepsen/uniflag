@@ -4,7 +4,7 @@
 // primitive (core, shoulders at (m*3)>>3, halo at m>>2), parameterised per
 // state. Inset rule: no idle pixel touches row/column 0 or 31, so idles are
 // structurally distinct from the 1-px warning frames. The firmware fallback
-// (roaming amber ember) lives in firmware/src/screens.rs, not here.
+// (roaming amber ember) lives in the `screens` crate, not here.
 
 namespace Uniflag.Rendering.Grammar
 {

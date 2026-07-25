@@ -13,7 +13,7 @@
 //! `0x01` code byte. **Beware: Wikipedia's `cobsEncode` example omits that
 //! trailing byte**, and the divergence is silent under round-trip testing
 //! because the decoder (like every decoder) accepts both forms. The
-//! cross-language golden vectors freeze the Listing-1 choice and include a
+//! cross-language golden vectors pin the Listing-1 choice and include a
 //! 254-boundary case precisely so a Wikipedia-derived port fails loudly.
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

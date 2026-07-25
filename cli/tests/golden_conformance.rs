@@ -1,6 +1,6 @@
-//! Golden-vector conformance for the CLI's TX path (docs/v2-plan.md M7).
+//! Golden-vector conformance for the CLI's TX path.
 //!
-//! The bytes `uniflag-cli emit` writes must equal the frozen vectors
+//! The bytes `uniflag-cli emit` writes must equal the committed vectors
 //! under `testdata/proto/` byte-for-byte — that is what makes shell-level
 //! byte-diff verification meaningful. Path discovery mirrors
 //! `proto/tests/golden_vectors.rs`: the fixtures live at the repo top
@@ -76,7 +76,7 @@ fn emit_brightness_200_matches_the_golden_wire_vector() {
 /// one of the CLI's visual test patterns — so the frame TX path is pinned
 /// by feeding the golden payload (frame.raw[1..3073]) through the CLI's
 /// encoder and requiring the golden wire bytes back. That exercises the
-/// exact encode pipeline `emit frame` uses, on the exact frozen payload.
+/// exact encode pipeline `emit frame` uses, on the exact committed payload.
 #[test]
 fn frame_encode_path_reproduces_the_golden_frame_wire() {
     let raw = read_vector("frame.raw");

@@ -83,7 +83,7 @@ Useful raw fields:
 | `DataCorePlugin.GameRawData.Telemetry.PlayerCarMyIncidentCount` | Player's incident count this session — drives the incident-limit warning. A dictionary key with **no typed getter** on `iRacingSDK.Telemetry` (verified). |
 | `SessionData.WeekendInfo.WeekendOptions.IncidentLimit` (raw session-info) | Session incident limit ("unlimited" or a number). **Not in SimHub's typed model** — see the incident-limit note below. |
 
-**`irsdk_Flags` bit values — VERIFIED at M10** against the `iRacingSDK.dll`
+**`irsdk_Flags` bit values — verified** against the `iRacingSDK.dll`
 that ships *inside* SimHub 9.11.21 (the assembly SimHub's own iRacing reader
 consumes; enum `iRacingSDK.SessionFlags`), not transcribed from prose — this
 doc once carried an inverted `mGamePhase` claim, so bits get verified against
@@ -106,7 +106,7 @@ executable artifacts now:
 | `0x00001000` | fiveToGo     |              |              |
 
 **How SimHub's unified layer derives `Flag_*` for iRacing** (IL-verified at
-M10 against `IRacingReader.IRacingManager.GD_Flag_*` in `ICarsReader.dll`):
+against `IRacingReader.IRacingManager.GD_Flag_*` in `ICarsReader.dll`):
 `Flag_Yellow` ⇐ `yellow | yellowWaving | caution | cautionWaving` (so a
 full-course caution *also* reads as unified yellow); `Flag_Orange` ⇐
 `repair` (the meatball!); `Flag_Black` ⇐ `black` only (disqualify is
@@ -127,16 +127,15 @@ Third-party plugins (e.g. ATSR Hub) drive their iRacing "slow down" alerts
 from exactly that `Isfurled` property, with client-side state on top.
 
 Caution detection: bit-test `Caution` (**`0x4000`**) in NCalc as
-`([...SessionFlags] & 0x4000) > 0`. **Correction (M10):** the v1-era claim
-that iRacing exposes a **`SafetyCarActive`** property was wrong — a binary
-sweep of every assembly in SimHub 9.11.21 finds the `SafetyCarActive` name
-in `RfactorReader.dll` **only** (it's an rFactor-family property bag entry).
+`([...SessionFlags] & 0x4000) > 0`. iRacing exposes no **`SafetyCarActive`** property: a binary sweep of every
+assembly in SimHub 9.11.21 finds that name in `RfactorReader.dll` **only**
+(it's an rFactor-family property bag entry).
 For iRacing, detect the physical pace car via `UnderPaceCar` /
 `CarIdxTrackSurface[0]`, or treat the `caution`/`cautionWaving` bits as
 "pace car deployed" (iRacing's full-course caution *is* a pace car; the sim
 has no VSC concept).
 
-**Penalty telemetry limits (verified at M10):** iRacing exports **no graded
+**Penalty telemetry limits (verified):** iRacing exports **no graded
 slow-down meter** (the on-screen SLOW DOWN bar isn't in telemetry — the
 closest signal is the `furled` bit) and **no drive-through vs stop-and-go
 distinction** (only the single `black` bit). Don't invent either from
@@ -156,10 +155,9 @@ unified `Flag_*` properties cover the common cases. For richer info:
 | `DataCorePlugin.GameRawData.Scoring.mGamePhase`                | Session phase enum — **5 = Green flag, 6 = Full Course Yellow / Safety Car** |
 
 The `mGamePhase` values above follow the ISI InternalsPlugin / rF2 shared-memory
-`GamePhase` enum (`GreenFlag = 5`, `FullCourseYellow = 6`). Beware: the v1
-serial-profile research (and the v1 profile in `simhub/README.md`) had these two
-**inverted** — don't copy that mapping. There is no phase value for "safety car
-deployed"; phase 6 covers both an FCY and an SC, so distinguish them via
+`GamePhase` enum (`GreenFlag = 5`, `FullCourseYellow = 6`) — easy to get
+**inverted**, so check the numbers against that enum. There is no phase value
+for "safety car deployed"; phase 6 covers both an FCY and an SC, so distinguish them via
 `mYellowFlagState` / the pace-car fields, not `mGamePhase` alone. Mods can deviate,
 so **verify against your install** in the in-app properties picker. (Other property
 names may also differ slightly between rF2 and LMU.)
@@ -212,7 +210,7 @@ double-waved flag. To recover that, fall back to raw data:
 
 | Sim              | VSC | SC | How to detect                                                               |
 |------------------|-----|----|-----------------------------------------------------------------------------|
-| iRacing          | —   | ✓  | `SessionFlags` bitmask for `Caution` / `CautionWaving` (a full-course caution is a deployed pace car; no VSC concept); pace car on track via `UnderPaceCar`. (`SafetyCarActive` is an rFactor-family property, not iRacing — corrected at M10.) |
+| iRacing          | —   | ✓  | `SessionFlags` bitmask for `Caution` / `CautionWaving` (a full-course caution is a deployed pace car; no VSC concept); pace car on track via `UnderPaceCar`. (`SafetyCarActive` is an rFactor-family property, not iRacing.) |
 | F1 (Codemasters) | ✓   | ✓  | `m_safetyCarStatus` raw enum (0=none, 1=full SC, 2=VSC, 3=formation lap)    |
 | ACC              | —   | —  | No first-class VSC / SC concept exposed.                                    |
 | rF2 / LMU        | ✓   | ✓  | `mGamePhase` = 6 covers both FCY and a deployed SC (5 = green flag); tell them apart via `mYellowFlagState` / pace-car fields — verify per install. |
@@ -247,8 +245,7 @@ Doc and code state the same contract — change them together.
   emits one either.
 - **Tier heuristic**: the unified booleans can't distinguish a displayed from a
   waved flag, so a yellow always enters at **Tier 1 (Alert)** — the
-  marshal-is-waving guess; every other flag enters at Tier 0 (Ambient). Same
-  tradeoff the retired v1 formula made, re-expressed on the tier ladder.
+  marshal-is-waving guess; every other flag enters at Tier 0 (Ambient).
 - **Session mapping** from `SessionTypeName` (ordinal case-insensitive substring
   matching): `GamePaused` → *Paused* outright; null/empty → *Unknown*; names
   containing `practice`, `qualif`, `test`, `warmup`, `hotlap`, `hotstint` or

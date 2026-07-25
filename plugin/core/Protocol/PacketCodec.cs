@@ -43,10 +43,11 @@ namespace Uniflag.Protocol
     /// <c>0x00</c> delimiter. A <i>known</i> type with a wrong-length
     /// payload is also dropped (<see cref="ProtocolErrorKind.BadLength"/>).
     ///
-    /// Payload schemas are frozen: the Rust <c>proto::packet</c> module is
-    /// the source of truth, mirrored in prose by <c>docs/protocol.md</c> and
-    /// in bytes by the golden vectors under <c>testdata/proto/</c>. Any
-    /// wire-visible change bumps <see cref="ProtocolVersion"/>.
+    /// The Rust <c>proto::packet</c> module is where the payload layouts are
+    /// defined, mirrored in prose by <c>docs/protocol.md</c> and in bytes by
+    /// the golden vectors under <c>testdata/proto/</c>. Any wire-visible
+    /// change bumps <see cref="ProtocolVersion"/> and updates all of them
+    /// together.
     /// </summary>
     public static class PacketCodec
     {
@@ -134,7 +135,7 @@ namespace Uniflag.Protocol
         /// The payload length is <b>not</b> validated against the type — a
         /// valid-CRC Frame with 5 bytes of payload parses fine here. The
         /// typed layer (<see cref="ParsePacket(byte[], int, int)"/> /
-        /// <see cref="FromPayload"/>) is what enforces the frozen layouts.
+        /// <see cref="FromPayload"/>) is what enforces the declared layouts.
         /// </summary>
         public static RawPacket ParseRaw(byte[] raw, int offset, int count)
         {
@@ -282,7 +283,7 @@ namespace Uniflag.Protocol
         {
             return new ProtocolException(
                 ProtocolErrorKind.BadLength,
-                $"{type} payload of {actual} bytes doesn't match the frozen layout");
+                $"{type} payload of {actual} bytes doesn't match its declared layout");
         }
     }
 }

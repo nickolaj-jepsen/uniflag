@@ -15,9 +15,9 @@ canvas. No hardware involved anywhere on this path.
 
 Wire format on `/ws`: raw **3072-byte** RGB888 frames (32×32, row-major,
 top-left origin), one binary message per frame, no COBS/CRC. Frames are
-broadcast at **30 fps** — the M2a-measured overlay target — by forwarding
-every even tick of the renderer's 60 fps clock (parity decimation stays
-locked to the render clock and stays honest across skipped ticks).
+broadcast at **30 fps** by forwarding every even tick of the renderer's
+60 fps clock (parity decimation stays locked to the render clock and stays
+honest across skipped ticks).
 
 Design points that are contracts, not accidents:
 
@@ -52,7 +52,7 @@ Page query parameters:
 |---|---|
 | `?v=N` | Cache-buster, ignored by the page (see below). |
 | `?ws=URL` | Override the frame source (default `ws://127.0.0.1:8972/ws`). |
-| `?hud=1` | Show the fps instrumentation panel (the M2a measurement HUD). |
+| `?hud=1` | Show the fps instrumentation panel (see below). |
 | `?src=dummy` | Built-in 30 Hz test pattern instead of the WebSocket — skin iteration with no plugin running (pairs with `just overlay-serve` or plain `file://`). |
 
 ## Installing the overlay dash
@@ -92,9 +92,9 @@ re-import the updated committed dash).
 
 > **SimHub free tier caps dashes at 10 fps.** The overlay degrades but
 > stays usable: flag changes and the ≤ 5 Hz strobe effects survive; only
-> motion smoothness suffers. The licensed tier was measured at ~26–30
-> painted fps (table below). To diagnose a cap, open the dash page with
-> `?hud=1` and follow "Reading the HUD" below.
+> motion smoothness suffers. (The licensed tier paints ~26–30 fps in the
+> Web Page View — visually fine for a panel whose fastest effect is a 4 Hz
+> strobe.) To diagnose a cap, open the dash page with `?hud=1`.
 
 ## Page iteration outside SimHub
 
@@ -105,28 +105,7 @@ the live plugin. With `?src=dummy` no plugin is needed at all. The embedded
 copy only updates on `just plugin-build`, so in-plugin serving always
 matches the last build, not the working tree.
 
-## Evidence base: the M2a measurements
-
-Kept verbatim as the justification for the 30 fps target and the dash
-verdict. Measured 2026-07-03 on the dev box (SimHub 9.11.21, licensed;
-M2a spike WS host on `ws://127.0.0.1:8972/ws`).
-
-| Environment | rAF fps | received /s | painted /s | cursor motion (eyeball) | verdict |
-|---|---|---|---|---|---|
-| Desktop Chrome / Edge (baseline) | 120 | 30 | 30 | good | good |
-| DashStudio Web Page View — licensed tier | 30 | 30 | 26 | a bit jittery | good enough |
-| DashStudio Web Page View — free tier (10 fps dash cap behaviour) | — | — | — | — | *not measurable on a licensed install* |
-| SimHub HTML rendering mode (issue #1494) | — | — | — | — | *not reproduced locally; known broken upstream* |
-
-The desktop baseline is ideal (paint locks to the 30 Hz delivery; the
-144 Hz-class display gives rAF 120). The licensed Web Page View runs its
-embedded browser at 30 fps rAF and paints ~26/s — occasional coalesced
-frames and slightly jittery cursor motion, visually acceptable for a flag
-panel whose effects are ≤ 5 Hz strobes. The free tier could not be measured
-on a licensed install; its 10 fps cap is a documented degradation, not a
-redesign risk.
-
-### Reading the HUD (`?hud=1`)
+## Reading the HUD (`?hud=1`)
 
 - `rAF /s` — `requestAnimationFrame` callbacks per second: is the render
   loop itself throttled?

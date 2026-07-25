@@ -1,16 +1,20 @@
 # Docs index
 
-Two kinds of documents live here: **project specifications** (the wire
-protocol and the flag grammar — the normative contracts the code
-implements) and **external references** (the Cosmic Unicorn panel and
-SimHub, written down because upstream doesn't).
+Two kinds of documents live here: **project docs** (how the wire protocol
+and the flag grammar currently work — written down so the firmware, the
+plugin and the docs stay in step) and **external references** (the Cosmic
+Unicorn panel and SimHub, written down because upstream doesn't).
 
-## Project specifications
+The project docs describe a prerelease hobby project and will keep
+changing with it. They're a record of the current design and the
+reasoning behind it, not a standard anyone has to live up to.
+
+## Project docs
 
 | File | Subject |
 |------|---------|
-| [`protocol.md`](./protocol.md) | The v2 binary wire protocol: COBS framing, CRC-16, packet layouts, USB identity, handshake. **Frozen (M6)** — byte vectors in `testdata/proto/` are the conformance fixtures. |
-| [`flag-grammar.md`](./flag-grammar.md) | **The normative renderer spec** — the second-generation signal language: the six grammar rules, tiers and the envelope, slots/precedence/suppression, the signal catalogue, the idle family, `SignalState`, adapter contracts. Implemented by `plugin/core/Rendering/Grammar/`; §7a is implemented by the firmware fallback screen. |
+| [`protocol.md`](./protocol.md) | The binary wire protocol: COBS framing, CRC-16, packet layouts, USB identity, handshake. Changing it costs a `PROTOCOL_VERSION` bump; the byte vectors in `testdata/proto/` are what both codecs get checked against. |
+| [`flag-grammar.md`](./flag-grammar.md) | **The renderer's design doc** — the signal language: the six grammar rules, tiers and the envelope, slots/precedence/suppression, the signal catalogue, the idle family, `SignalState`, adapter contracts. Implemented by `plugin/core/Rendering/Grammar/`; §7a is implemented by the firmware fallback screen. |
 | [`web-overlay.md`](./web-overlay.md) | The browser/overlay virtual panel: `OverlayWebServer`, the LED-dot page, the DashStudio dash, and the design contracts (localhost-only, newest-frame-wins, 30 fps). |
 
 ## External references
@@ -21,14 +25,6 @@ SimHub, written down because upstream doesn't).
 | [`cosmic-unicorn-pio.md`](./cosmic-unicorn-pio.md) | The Cosmic Unicorn bitstream PIO program, transcribed and annotated, plus the SM configuration that pairs with it. |
 | [`simhub-plugin-api.md`](./simhub-plugin-api.md) | SimHub's undocumented plugin API: loading contract, interfaces, settings persistence, UI integration. Reference SimHub version 9.11.21. |
 | [`simhub-flag-properties.md`](./simhub-flag-properties.md) | The flag-related properties exposed by SimHub's `DataCorePlugin` — the unified `GameData.Flag_*` set, per-sim raw-data fallbacks, and the generic adapter's mapping contract. |
-
-## Historical
-
-| File | Subject |
-|------|---------|
-| [`effects-spec.md`](./effects-spec.md) | The first-generation flag-effects contract, transcribed from the v1 `render/` crate for the C# port. **Superseded by [`flag-grammar.md`](./flag-grammar.md)** at the flag-grammar cutover: the ported painters and their corpora (`testdata/frames/`, `testdata/frames-plugin/`) were retired and live in git history only. |
-| [`v2-plan.md`](./v2-plan.md) | The v1→v2 rework plan (milestones M1–M12) and its cross-cutting policies. Historical record — the architecture it describes is now the codebase. |
-| [`v2-tracking.md`](./v2-tracking.md) | External clocks started in M1: the pid.codes PID registration and the plugin licensing decision. |
 
 ## Hardware target — note on revisions
 

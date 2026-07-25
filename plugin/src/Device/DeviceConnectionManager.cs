@@ -192,9 +192,7 @@ namespace Uniflag.Device
             _brightness.Changed -= OnBrightnessChanged;
         }
 
-        // -------------------------------------------------------------------
         // IFrameSink — called on the render thread at 60 fps.
-        // -------------------------------------------------------------------
 
         /// <summary>
         /// <see cref="IFrameSink"/> entry point. Decimated to 30 fps by
@@ -221,9 +219,7 @@ namespace Uniflag.Device
             ReleaseTxWake();
         }
 
-        // -------------------------------------------------------------------
         // Connection worker.
-        // -------------------------------------------------------------------
 
         private void WorkerLoop()
         {
@@ -369,9 +365,7 @@ namespace Uniflag.Device
             return null;
         }
 
-        // -------------------------------------------------------------------
         // Streaming session.
-        // -------------------------------------------------------------------
 
         /// <summary>
         /// One streaming session: reset the TX slots (queue the persisted
@@ -581,9 +575,7 @@ namespace Uniflag.Device
             ReleaseTxWake();
         }
 
-        // -------------------------------------------------------------------
         // Plumbing.
-        // -------------------------------------------------------------------
 
         private void ReleaseTxWake()
         {

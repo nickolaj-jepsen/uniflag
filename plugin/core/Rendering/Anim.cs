@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Integer-only animation primitives, originally ported per
-// docs/effects-spec.md §2 and now the Grammar renderer's primitive library
+// Integer-only animation primitives for the Grammar renderer
 // (docs/flag-grammar.md §4/§6). Must stay float-free and every division
 // truncates (u32/u16 semantics): the painters are tuned against this exact
 // rounding, so "improving" it silently shifts every animation that uses it.
@@ -98,7 +97,7 @@ namespace Uniflag.Rendering
         }
 
         /// <summary>
-        /// Floor division (docs/effects-spec.md §2.6). C#'s <c>/</c> truncates
+        /// Floor division. C#'s <c>/</c> truncates
         /// toward zero and disagrees for negative dividends:
         /// <c>-5 / 4 == -1</c> but <c>FloorDiv(-5, 4) == -2</c>. All effect
         /// call sites use <paramref name="b"/> &gt; 0, where the two coincide.
@@ -114,7 +113,7 @@ namespace Uniflag.Rendering
         }
 
         /// <summary>
-        /// Floor modulus (docs/effects-spec.md §2.6). C#'s <c>%</c> is a
+        /// Floor modulus. C#'s <c>%</c> is a
         /// remainder and goes negative for negative dividends:
         /// <c>-5 % 32 == -5</c> but <c>FloorMod(-5, 32) == 27</c>. All effect
         /// call sites use <paramref name="b"/> &gt; 0, where the two coincide.

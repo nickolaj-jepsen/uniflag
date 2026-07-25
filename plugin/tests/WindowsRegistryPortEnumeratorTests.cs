@@ -14,9 +14,7 @@ namespace Uniflag.Tests
 {
     public class WindowsRegistryPortEnumeratorTests
     {
-        // ---------------------------------------------------------------
         // TryParseVidPid: Enum\USB subkey-name shapes.
-        // ---------------------------------------------------------------
 
         [Theory]
         [InlineData("VID_1209&PID_0001", 0x1209, 0x0001)] // test PID
@@ -46,10 +44,8 @@ namespace Uniflag.Tests
             Assert.False(WindowsRegistryPortEnumerator.TryParseVidPid(keyName, out _, out _));
         }
 
-        // ---------------------------------------------------------------
         // PreferCandidate: several registry identities recording the same
         // present port name (stale Enum entries after COM-number reuse).
-        // ---------------------------------------------------------------
 
         private static SerialPortInfo Uniflag(ushort pid)
         {

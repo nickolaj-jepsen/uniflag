@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // Cross-language golden-vector conformance suite — the C# mirror of
-// proto/tests/golden_vectors.rs. Both suites load the exact frozen files
+// proto/tests/golden_vectors.rs. Both suites load the exact committed files
 // under testdata/proto/ (described by manifest.json); neither side
 // generates its own fixtures. The Rust suite additionally asserts the
 // files are byte-identical to their generator, so the expectation tables
@@ -212,7 +212,7 @@ namespace Uniflag.Tests
         [Fact]
         public void ConstantsAreStable()
         {
-            // Wire-frozen numbers; changing any of these is a protocol break.
+            // Wire-visible numbers; changing any of these is a protocol break.
             Assert.Equal(3072, PacketCodec.FramePayloadLength);
             Assert.Equal(3075, PacketCodec.MaxRawLength);
             Assert.Equal(3089, PacketCodec.MaxWireLength);
@@ -340,7 +340,7 @@ namespace Uniflag.Tests
         [Fact]
         public void ButtonEventWithUnassignedIdsStillParses()
         {
-            // The 2-byte length is frozen but the id space is open — a future
+            // The 2-byte length is fixed but the id space is open — a future
             // firmware button must not kill old parsers.
             byte[] raw = PacketCodec.WriteRaw((byte)PacketType.ButtonEvent, new byte[] { 7, 9 });
             var parsed = Assert.IsType<ButtonEventPacket>(PacketCodec.ParsePacket(raw));
@@ -395,17 +395,15 @@ namespace Uniflag.Tests
     }
 
     /// <summary>
-    /// Golden-vector conformance tests against the frozen files under
+    /// Golden-vector conformance tests against the committed files under
     /// <c>testdata/proto/</c>, mirroring the Rust suite in
     /// <c>proto/tests/golden_vectors.rs</c> assertion for assertion.
     /// </summary>
     public class ProtoConformanceTests
     {
-        // -----------------------------------------------------------------
-        // Frozen expectation tables (the C# mirror of the Rust tables that
+        // Expectation tables (the C# mirror of the Rust tables that
         // generate manifest.json — the Rust suite asserts the files match
         // those tables byte-for-byte, so these must agree with the manifest).
-        // -----------------------------------------------------------------
 
         private const byte BrightnessValue = 200;
         private const byte BoundaryTypeByte = 0x7E;
@@ -563,7 +561,7 @@ namespace Uniflag.Tests
         {
             byte[] raw = RepoPaths.ReadVector("cobs_boundary_254.raw");
 
-            // Frozen shape: [0x7E][0x51][tweak][0x00][0x01..0xFC][crc16 LE].
+            // Committed shape: [0x7E][0x51][tweak][0x00][0x01..0xFC][crc16 LE].
             Assert.Equal(258, raw.Length);
             Assert.Equal(BoundaryTypeByte, raw[0]);
             Assert.Equal(0x51, raw[1]);
@@ -589,7 +587,7 @@ namespace Uniflag.Tests
                 Slice(raw, 1, raw.Length - 3));
 
             // The CRC our codec computes over type+payload must reproduce the
-            // frozen raw bytes exactly.
+            // committed raw bytes exactly.
             AssertBytesEqual("cobs_boundary_254.raw re-encode", unknown.EncodeRaw(), raw);
         }
 
@@ -677,10 +675,8 @@ namespace Uniflag.Tests
             Assert.Equal(new BrightnessPacket(BrightnessValue), recovered[1]);
         }
 
-        // -----------------------------------------------------------------
         // Manifest cross-checks (no JSON dependency, same posture as the
         // Rust suite's manifest_references_every_vector_file).
-        // -----------------------------------------------------------------
 
         [Fact]
         public void ManifestReferencesEveryVectorFileAndErrorClass()

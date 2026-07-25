@@ -4,8 +4,7 @@
 // docs/flag-grammar.md §9. Adapters are pure telemetry→state functions; the
 // renderer diffs successive SignalStates to run the envelope (§4), so no
 // age/animation state crosses the adapter boundary. Session and SectorSet
-// are shared with the parent namespace; the enums here shadow their legacy
-// counterparts deliberately — the legacy model retires at phase 1e.
+// come from the parent namespace.
 
 namespace Uniflag.Rendering.Grammar
 {
@@ -27,7 +26,7 @@ namespace Uniflag.Rendering.Grammar
         Debris,
     }
 
-    /// <summary>Urgency ladder (docs/flag-grammar.md §4). Replaces WaveLevel.</summary>
+    /// <summary>Urgency ladder (docs/flag-grammar.md §4).</summary>
     public enum Tier : byte
     {
         /// <summary>Calm form: cloth-wave / slow breathe.</summary>
@@ -40,7 +39,7 @@ namespace Uniflag.Rendering.Grammar
         Urgent = 2,
     }
 
-    /// <summary>Neutralisation regime. Shadows the legacy enum, adding FCY.</summary>
+    /// <summary>Neutralisation regime.</summary>
     public enum Caution
     {
         None,

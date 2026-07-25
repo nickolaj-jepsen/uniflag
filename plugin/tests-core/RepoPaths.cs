@@ -14,7 +14,7 @@ namespace Uniflag.Tests
     /// </summary>
     internal static class RepoPaths
     {
-        /// <summary>Absolute path of <c>testdata/proto/</c> — the frozen golden vectors.</summary>
+        /// <summary>Absolute path of <c>testdata/proto/</c> — the golden vectors.</summary>
         public static string TestDataProtoDir => Path.Combine(RepoRoot, "testdata", "proto");
 
         /// <summary>Absolute path of the repo root (the ancestor holding <c>testdata/</c>).</summary>

@@ -22,7 +22,7 @@ namespace Uniflag.Tests
         public void ConstantsMirrorTheProtoCrate()
         {
             // proto/src/packet.rs: USB_VID = 0x1209, USB_PID = 0x0001 (test),
-            // registered PID 0xF1A6 pending (docs/v2-tracking.md).
+            // registered PID 0xF1A6 pending (docs/protocol.md §Transport).
             Assert.Equal(0x1209, DeviceDiscovery.UsbVendorId);
             Assert.Equal(0x0001, DeviceDiscovery.UsbProductIdTest);
             Assert.Equal(0xF1A6, DeviceDiscovery.UsbProductIdRegistered);

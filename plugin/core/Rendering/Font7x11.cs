@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The 7×11 pixel font, carried over from the ported renderer and rendered
-// through the Grammar boards. All glyphs share one style: 2-px strokes,
-// rounded caps, bit 6 = leftmost column, one byte per row — match it when
-// adding one, or the new glyph reads as a different typeface on the panel.
+// The 7×11 pixel font the Grammar boards render through. All glyphs share
+// one style: 2-px strokes, rounded caps, bit 6 = leftmost column, one byte
+// per row — match it when adding one, or the new glyph reads as a different
+// typeface on the panel.
 
 namespace Uniflag.Rendering
 {
@@ -18,12 +18,7 @@ namespace Uniflag.Rendering
 
         public const int GlyphHeight = 11;
 
-        // ---------------------------------------------------------------
-        // Caution-board glyphs (S/C/V), carried over verbatim from the
-        // ported renderer; pinned by the Grammar corpus.
-        // ---------------------------------------------------------------
-
-        /// <summary>S (caution boards, docs/effects-spec.md §5.9).</summary>
+        /// <summary>S (caution boards).</summary>
         public static readonly byte[] S =
         {
             0b0111110, // .#####.
@@ -39,7 +34,7 @@ namespace Uniflag.Rendering
             0b0111110, // .#####.
         };
 
-        /// <summary>C (caution boards, docs/effects-spec.md §5.9).</summary>
+        /// <summary>C (caution boards).</summary>
         public static readonly byte[] C =
         {
             0b0111110, // .#####.
@@ -55,7 +50,7 @@ namespace Uniflag.Rendering
             0b0111110, // .#####.
         };
 
-        /// <summary>V (VSC board, docs/effects-spec.md §5.9).</summary>
+        /// <summary>V (VSC board).</summary>
         public static readonly byte[] V =
         {
             0b1100011, // ##...##
@@ -71,11 +66,8 @@ namespace Uniflag.Rendering
             0b0001000, // ...#...
         };
 
-        // ---------------------------------------------------------------
-        // Letter glyphs from the retired penalty suite. D/G/T live on in the
-        // Grammar boards (DT/SG/DQ); L/O/W are currently unused but kept —
-        // they exercise the text engine's row layout in tests.
-        // ---------------------------------------------------------------
+        // D/G/T build the DT/SG/DQ boards; L/O/W are unused on the panel but
+        // kept because the tests exercise row layout through them.
 
         /// <summary>D (drive-through marker).</summary>
         public static readonly byte[] D =
@@ -220,11 +212,6 @@ namespace Uniflag.Rendering
             0b1100011, // ##...##
             0b0111110, // .#####.
         };
-
-        // ---------------------------------------------------------------
-        // Grammar-suite glyphs (docs/flag-grammar.md §8). Same style: 2-px
-        // strokes, bit 6 = leftmost column.
-        // ---------------------------------------------------------------
 
         /// <summary>F (FCY board).</summary>
         public static readonly byte[] F =

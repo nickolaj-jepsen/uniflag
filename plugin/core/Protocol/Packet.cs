@@ -9,7 +9,7 @@ namespace Uniflag.Protocol
     /// Typed view of one packet — the C# analogue of the Rust
     /// <c>proto::packet::Packet</c> enum plus its <c>Parsed::Unknown</c>
     /// escape hatch (<see cref="UnknownPacket"/>). Subclasses document their
-    /// frozen payload layout; wrong-length payloads for known types never
+    /// payload layout; wrong-length payloads for known types never
     /// construct a packet (<see cref="PacketCodec.ParsePacket(byte[])"/>
     /// throws <see cref="ProtocolErrorKind.BadLength"/>).
     ///
@@ -22,7 +22,7 @@ namespace Uniflag.Protocol
         public abstract byte TypeByte { get; }
 
         /// <summary>
-        /// Serialize the frozen payload layout for this packet. Throws
+        /// Serialize the declared payload layout for this packet. Throws
         /// <see cref="ProtocolException"/> (<see cref="ProtocolErrorKind.BadLength"/>)
         /// only for a <see cref="HelloAckPacket"/> whose <c>fw_version</c>
         /// exceeds the encoder cap.

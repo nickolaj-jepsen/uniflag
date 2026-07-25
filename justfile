@@ -199,7 +199,7 @@ frames SCENARIO *ARGS:
     dotnet run --project plugin/tools -c Release -- render {{SCENARIO}} {{ARGS}}
 
 # The whole catalogue: one contact-sheet.png plus a labelled contact-sheet.html.
-# This is the visual review that replaced the retired golden corpus.
+# This is the visual review the painters are checked by.
 [doc("Render the whole catalogue to one contact sheet + HTML page.")]
 frames-sheet *ARGS:
     dotnet run --project plugin/tools -c Release -- sheet {{ARGS}}
@@ -210,8 +210,8 @@ frames-ansi TARGET *ARGS:
 
 # Regenerate the regenerable golden fixtures (testdata/proto byte vectors).
 # Only ever run this deliberately, in a reviewed commit — the proto vectors
-# are the frozen wire contract both the Rust and C# suites must match
-# byte-exactly, so a regen that changes anything IS a protocol change.
+# are the bytes both the Rust and C# suites are checked against, so a regen
+# that changes anything IS a protocol change.
 #
 # This is the whole of it: the renderer has no byte corpus. Visual work is
 # reviewed by eye through `just frames-sheet`, not by regenerating fixtures.

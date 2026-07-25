@@ -126,9 +126,7 @@ namespace Uniflag.Web
             _onGone(this);
         }
 
-        // ---------------------------------------------------------------------
         // Send side
-        // ---------------------------------------------------------------------
 
         private async Task SendLoopAsync()
         {
@@ -191,9 +189,7 @@ namespace Uniflag.Web
             }
         }
 
-        // ---------------------------------------------------------------------
         // Receive side
-        // ---------------------------------------------------------------------
 
         /// <summary>
         /// Frame pump for client->server traffic: processes the close
