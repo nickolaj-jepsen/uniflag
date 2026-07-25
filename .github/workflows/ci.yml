@@ -47,6 +47,23 @@ jobs:
           tool: just
       - run: just test
 
+  # Gating, and the reason plugin/core/ exists: the renderer and the C# wire
+  # codec are the parts most likely to break, and until the split they were
+  # only covered by the non-gating Windows job below. No SimHub, no Windows,
+  # no proprietary assemblies — just dotnet.
+  core-test:
+    name: core test (renderer + codec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - run: just core-test
+
   # Isolated and deliberately non-gating: no `needs:`, not in any required-checks
   # group. A SimHub-installer outage must never red the Rust pipeline.
   plugin:

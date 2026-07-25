@@ -32,8 +32,10 @@ install both from the same zip. Full guide:
 
 - `proto/` — the frozen v2 binary wire protocol (Rust, `no_std`):
   packet layer, COBS framing, CRC-16, shared USB/geometry constants
-- `plugin/` — the SimHub plugin (C#, .NET Framework 4.8): renderer,
-  game adapters, USB device connection, web overlay server, settings UI
+- `plugin/` — the SimHub plugin (C#): `core/` holds the renderer and wire
+  codec (portable, testable anywhere), `src/` the .NET Framework 4.8 SimHub
+  half — game adapters, USB device connection, web overlay server, settings
+  UI — plus `tools/`, the frame viewer. Ships as a single DLL.
 - `firmware/` — embedded firmware (Rust + embassy-rs, RP2040): receives
   frames over USB CDC and puts them on the panel
 - `screens/` — the firmware's local screens (the no-host fallback and the

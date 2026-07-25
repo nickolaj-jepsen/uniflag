@@ -38,6 +38,12 @@ clippy:
 test:
     cargo test -p proto -p screens -p uniflag-cli --all-targets
 
+# The cross-platform C# leg: renderer + wire codec, no SimHub, no Windows.
+# Targets the csproj rather than the .sln on purpose — the solution also
+# contains net48 projects, which only build on Windows.
+core-test:
+    dotnet test plugin/tests-core/Uniflag.Core.Tests.csproj -c Release
+
 # Build the firmware ELF (release).
 build:
     cargo build --release --manifest-path firmware/Cargo.toml --target thumbv6m-none-eabi
@@ -94,6 +100,28 @@ cli *ARGS: chmod-serial
 # Serve the overlay test page over http:// (for contexts that refuse file://).
 overlay-serve:
     python -m http.server 8000 --directory overlay
+
+# --- Looking at frames -------------------------------------------------
+# The panel is a picture. These render what the C# renderer actually paints,
+# with no SimHub, no hardware and no game — on any OS. Output: target/frames/.
+
+# List the scenario catalogue (names + sample frames + descriptions).
+frames-list:
+    dotnet run --project plugin/tools -c Release -- list
+
+# Render one scenario to PNG. Extra args pass through: --frame N, --scale N,
+# --out PATH, --rgb.
+frames SCENARIO *ARGS:
+    dotnet run --project plugin/tools -c Release -- render {{SCENARIO}} {{ARGS}}
+
+# The whole catalogue: one contact-sheet.png plus a labelled contact-sheet.html.
+# This is the visual review that replaced the retired golden corpus.
+frames-sheet *ARGS:
+    dotnet run --project plugin/tools -c Release -- sheet {{ARGS}}
+
+# One frame as terminal half-blocks — takes a scenario name or a .rgb path.
+frames-ansi TARGET *ARGS:
+    dotnet run --project plugin/tools -c Release -- ansi {{TARGET}} {{ARGS}}
 
 # Regenerate the regenerable golden fixtures (testdata/proto byte vectors).
 # Only ever run this deliberately, in a reviewed commit — the proto vectors

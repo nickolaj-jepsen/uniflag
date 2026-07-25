@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The SimHub-free, WPF-free half of the plugin: the renderer and the wire
+    codec. Split out for ONE reason — so it can be tested without Windows, a
+    .NET Framework targeting pack, or SimHub's proprietary reference
+    assemblies. That puts the renderer and the hand-mirrored C# codec into
+    the gating cross-platform CI leg instead of the isolated Windows one.
+
+    This assembly is NEVER shipped. UniflagPlugin.csproj compiles these same
+    source files directly (<Compile Include="..\core\**"/>) rather than
+    referencing the built DLL, so the release zip still contains exactly one
+    DLL and packaging/package.ps1's only-one-DLL audit is untouched.
+  -->
+
+  <PropertyGroup>
+    <!-- netstandard2.0 is the common denominator: consumable by the net48
+         plugin and by the net8.0 test project. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <RootNamespace>Uniflag</RootNamespace>
+    <AssemblyName>Uniflag.Core</AssemblyName>
+    <!-- Kept in lockstep with UniflagPlugin.csproj / firmware / cli. -->
+    <Version>2.0.0</Version>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Uniflag.Core.Tests" />
+    <InternalsVisibleTo Include="Uniflag.Tools" />
+    <!-- The net48 plugin compiles these sources into its own assembly, so
+         the existing UniflagPlugin.Tests grant has to survive the move. -->
+    <InternalsVisibleTo Include="UniflagPlugin.Tests" />
+  </ItemGroup>
+
+</Project>

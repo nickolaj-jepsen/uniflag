@@ -16,6 +16,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Shared with the cross-platform leg. Linked rather than duplicated: both
+         suites resolve fixtures from the same repo-root probe. -->
+    <Compile Include="..\tests-core\RepoPaths.cs" Link="RepoPaths.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\src\UniflagPlugin.csproj" />
     <!-- Private=true here (unlike src): the test runner needs SimHub.Plugins.dll on
          disk to reflect over plugin metadata. bin/ is gitignored; release artifacts

@@ -10,8 +10,10 @@
 // Sample frames are chosen deliberately: strobe on/off phases, breathe
 // peaks and mid-points, sweep positions, flash blend weights, fade depths.
 //
-// This is dev tooling, not a fixture. It drives the smoke pass
-// (GrammarSmokeTests) and the frame viewer; nothing here pins bytes.
+// This is dev tooling, not a fixture — it pins nothing. It drives the frame
+// viewer and the GrammarSmokeTests whole-scenario replay. It outlived the
+// byte corpus it was written for (docs/flag-grammar.md §11) because the
+// curation is the valuable part: these are the states worth looking at.
 
 using System.Collections.Generic;
 using Uniflag.Rendering;
@@ -20,13 +22,13 @@ using Caution = Uniflag.Rendering.Grammar.Caution;
 using SectorSet = Uniflag.Rendering.SectorSet;
 using Session = Uniflag.Rendering.Session;
 
-namespace Uniflag.Tests
+namespace Uniflag.Tools
 {
-    internal static class ScenarioCatalogue
+    public static class ScenarioCatalogue
     {
-        internal delegate void StateMutator(ref SignalState s);
+        public delegate void StateMutator(ref SignalState s);
 
-        internal sealed class Step
+        public sealed class Step
         {
             public Step(uint frame, SignalState state)
             {
@@ -38,7 +40,7 @@ namespace Uniflag.Tests
             public SignalState State { get; }
         }
 
-        internal sealed class Scenario
+        public sealed class Scenario
         {
             public Scenario(string name, string description, uint sampleFrame, Step[] steps)
             {
@@ -79,7 +81,7 @@ namespace Uniflag.Tests
             new Scenario(name, description, sampleFrame, steps);
 
         /// <summary>The catalogue. Names are unique.</summary>
-        internal static readonly IReadOnlyList<Scenario> Table = new[]
+        public static readonly IReadOnlyList<Scenario> Table = new[]
         {
             Sc("yellow_t0_ambient", "settled yellow cloth wave", 400,
                 St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.Session = Session.Racing; })),
@@ -165,7 +167,7 @@ namespace Uniflag.Tests
         };
 
         /// <summary>Look a scenario up by name, or null if there is no such scenario.</summary>
-        internal static Scenario Find(string name)
+        public static Scenario Find(string name)
         {
             foreach (Scenario sc in Table)
             {
@@ -178,14 +180,14 @@ namespace Uniflag.Tests
         }
 
         /// <summary>Replay a scenario's script from frame 0 and render its sample frame.</summary>
-        internal static byte[] Render(Scenario sc) => Render(sc, sc.SampleFrame);
+        public static byte[] Render(Scenario sc) => Render(sc, sc.SampleFrame);
 
         /// <summary>
         /// Replay a scenario's script from frame 0 and render <paramref name="frame"/>.
         /// Replay always starts at 0: the envelope is a function of state history,
         /// so a frame rendered from a cold tracker is a different frame.
         /// </summary>
-        internal static byte[] Render(Scenario sc, uint frame)
+        public static byte[] Render(Scenario sc, uint frame)
         {
             var tracker = new EnvelopeTracker();
             var buf = new FrameBuffer();

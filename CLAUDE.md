@@ -12,7 +12,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `firmware/` — embedded firmware (`thumbv6m-none-eabi`, embassy-rs): blits streamed frames, paints the local fallback/test screens, reports button events. Excluded from workspace `default-members` so a bare `cargo check` from the root doesn't try to cross-compile.
 - `screens/` — the firmware's local screens (`no_std`, depends only on `proto` for geometry): the §7a roaming-ember fallback and the button test pattern. A separate crate purely so it builds and is **tested** on the host — the firmware binary is `test = false`, so anything left inside it has no test coverage at all. Paints through a `Canvas` trait that `Display` implements.
 - `cli/` — `uniflag-cli`, host-side test-pattern streamer and protocol diagnostic (stream/loopback/emit modes). Conformance tests pin its emitted bytes against `testdata/proto/`.
-- `plugin/` — the SimHub plugin (C#, .NET Framework 4.8): `plugin/src/` (Rendering, Adapters, Device, Protocol, Web, settings UI) + `plugin/tests/` (xunit). Built via `plugin/UniflagPlugin.sln`; needs SimHub's reference DLLs (see Common commands).
+- `plugin/` — the SimHub plugin (C#), in four projects under `plugin/UniflagPlugin.sln`:
+  - `plugin/core/` — **`Uniflag.Core`** (netstandard2.0): the renderer (`Rendering/`, incl. `Rendering/Grammar/`) and the wire codec (`Protocol/`). No SimHub, no WPF, no Windows APIs — that's the whole point, see below.
+  - `plugin/src/` — **`UniflagPlugin`** (net48): Adapters, Device, Web, settings UI, plugin entry point. Needs SimHub's reference DLLs (see Common commands).
+  - `plugin/tests-core/` — **`Uniflag.Core.Tests`** (net8.0): the gating cross-platform suite. `just core-test`.
+  - `plugin/tests/` — **`UniflagPlugin.Tests`** (net48): everything that genuinely needs SimHub or Windows. `just plugin-test`.
+  - `plugin/tools/` — **`Uniflag.Tools`** (net8.0): the frame viewer + scenario catalogue. Dev-only, never packaged.
+
+  **`Uniflag.Core` is compiled into `UniflagPlugin.dll`, not referenced.** `UniflagPlugin.csproj` pulls the core sources in with `<Compile Include="..\core\**\*.cs">` so the release still ships exactly one DLL (`packaging/package.ps1` audits this, and SimHub users drop one file into their plugins folder). A `ProjectReference` would ship a second assembly — don't "fix" it into one. The separate project exists so the renderer and codec can be built and tested without Windows, SimHub, or a .NET Framework targeting pack; before the split they were verified only in the isolated, non-gating Windows CI job.
 - `overlay/` — the browser virtual-panel page (`index.html`, embedded into the plugin assembly at build time) + the DashStudio dash under `overlay/dash/`.
 - `simhub/` — end-user plugin install / setup / troubleshooting guide.
 - `testdata/` — the frozen cross-language golden fixtures (see Golden fixtures below). Top-level so the C# tests reach it by relative path.

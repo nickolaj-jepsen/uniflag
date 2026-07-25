@@ -29,6 +29,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The renderer and wire codec live in plugin/core/ so they can be built and
+         tested without Windows, SimHub or a .NET Framework targeting pack. They are
+         COMPILED IN here rather than referenced as Uniflag.Core.dll on purpose: the
+         release zip must contain exactly one DLL (packaging/package.ps1 audits it,
+         and SimHub users drop a single file into their plugins folder). Referencing
+         the project instead would ship a second assembly. -->
+    <Compile Include="..\core\**\*.cs"
+             Exclude="..\core\obj\**\*.cs;..\core\bin\**\*.cs"
+             LinkBase="Core" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- overlay/index.html is the single source of the overlay page: OverlayWebServer
          serves this embedded copy at GET /, and `just overlay-serve` serves the same
          file from disk for iteration. LogicalName is pinned — it is the manifest name
