@@ -16,7 +16,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Uniflag.Tools;
+using Uniflag.Rendering.Grammar;
 using Xunit;
 
 namespace Uniflag.Tests

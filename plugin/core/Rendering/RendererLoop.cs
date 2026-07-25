@@ -74,15 +74,16 @@ namespace Uniflag.Rendering
         public const int TargetFps = 60;
 
         // _sinkSnapshot is copy-on-write so the render thread reads it without locking.
+        //
+        // _gate also serializes thread lifecycle, and Stop joins before
+        // releasing it — so two render threads can never share _back or
+        // deliver duplicate indices. Joining under _gate is safe because the
+        // render thread never takes it (it uses _publishGate / _inputGate).
         private readonly object _gate = new object();
         private readonly List<IFrameSink> _sinks = new List<IFrameSink>();
         private volatile IFrameSink[] _sinkSnapshot = Array.Empty<IFrameSink>();
         private Thread _thread;
         private ManualResetEventSlim _stop;
-        // Last stopped render thread, possibly still draining its final tick
-        // (its join happens outside _gate). StartLocked waits for it so two
-        // render threads can never share _back / deliver duplicate indices.
-        private Thread _retiring;
         private bool _disposed;
 
         // Latest input, latched once at the top of every tick. The normal
@@ -230,7 +231,6 @@ namespace Uniflag.Rendering
             {
                 return;
             }
-            Thread toJoin = null;
             lock (_gate)
             {
                 if (!_sinks.Remove(sink))
@@ -240,10 +240,9 @@ namespace Uniflag.Rendering
                 _sinkSnapshot = _sinks.ToArray();
                 if (_sinks.Count == 0)
                 {
-                    toJoin = StopLocked();
+                    StopLocked();
                 }
             }
-            JoinOutsideLock(toJoin);
         }
 
         /// <summary>
@@ -280,7 +279,6 @@ namespace Uniflag.Rendering
         /// </summary>
         public void Dispose()
         {
-            Thread toJoin;
             lock (_gate)
             {
                 if (_disposed)
@@ -290,26 +288,15 @@ namespace Uniflag.Rendering
                 _disposed = true;
                 _sinks.Clear();
                 _sinkSnapshot = Array.Empty<IFrameSink>();
-                toJoin = StopLocked();
+                StopLocked();
             }
-            JoinOutsideLock(toJoin);
         }
 
-        // Thread lifecycle. Callers hold _gate.
+        // Thread lifecycle. Callers hold _gate; StopLocked leaves no thread
+        // running, so StartLocked never sees a predecessor.
 
         private void StartLocked()
         {
-            // Joining under _gate is safe: the render thread never takes
-            // _gate (sink snapshots are copy-on-write). The re-entrant case
-            // gets the same degrade-don't-hang guard as JoinOutsideLock;
-            // joining an already-dead thread returns immediately.
-            Thread retiring = _retiring;
-            if (retiring != null && retiring != Thread.CurrentThread)
-            {
-                retiring.Join();
-            }
-            _retiring = null;
-
             var stop = new ManualResetEventSlim(false);
             long startFrame = Interlocked.Read(ref _nextFrame);
             var thread = new Thread(() => Run(stop, startFrame))
@@ -322,12 +309,16 @@ namespace Uniflag.Rendering
             thread.Start();
         }
 
-        private Thread StopLocked()
+        /// <summary>
+        /// Signals and drains, so no <see cref="IFrameSink.OnFrame"/> can
+        /// arrive after the caller releases <c>_gate</c>.
+        /// </summary>
+        private void StopLocked()
         {
             Thread thread = _thread;
             if (thread == null)
             {
-                return null;
+                return;
             }
             _stop.Set();
             // Deliberately not disposed: the render thread may still be inside
@@ -335,17 +326,11 @@ namespace Uniflag.Rendering
             // nothing measurable.
             _stop = null;
             _thread = null;
-            _retiring = thread;
-            return thread;
-        }
-
-        private static void JoinOutsideLock(Thread thread)
-        {
-            // Joining from the render thread itself would self-deadlock;
-            // that only happens if a sink re-enters Add/RemoveSink, which
-            // the IFrameSink contract forbids — degrade to a signal-only
-            // stop rather than hanging.
-            if (thread != null && thread != Thread.CurrentThread)
+            // Joining from the render thread itself would self-deadlock; that
+            // only happens if a sink re-enters Add/RemoveSink, which the
+            // IFrameSink contract forbids — degrade to a signal-only stop
+            // rather than hanging.
+            if (thread != Thread.CurrentThread)
             {
                 thread.Join();
             }

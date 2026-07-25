@@ -23,6 +23,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using Uniflag.Adapters;
 using Uniflag.Rendering.Grammar;
 using Xunit;
@@ -50,25 +51,25 @@ namespace Uniflag.Tests
         private static List<Step> LoadTimeline(string fileName, out string description)
         {
             string path = Path.Combine(TimelinesDir, fileName);
-            var root = (Dictionary<string, object>)MiniJson.Parse(File.ReadAllText(path));
-            Assert.Equal(2L, (long)root["format"]);
-            description = (string)root["description"];
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
+            JsonElement root = document.RootElement;
+            Assert.Equal(2, root.GetProperty("format").GetInt32());
+            description = root.GetProperty("description").GetString();
             var steps = new List<Step>();
-            foreach (object stepObj in (List<object>)root["steps"])
+            foreach (JsonElement entry in root.GetProperty("steps").EnumerateArray())
             {
-                var entry = (Dictionary<string, object>)stepObj;
                 SectorSet sectors = SectorSet.Empty;
-                foreach (object sector in (List<object>)entry["sectors"])
+                foreach (JsonElement sector in entry.GetProperty("sectors").EnumerateArray())
                 {
-                    sectors = sectors.With((int)(long)sector);
+                    sectors = sectors.With(sector.GetInt32());
                 }
                 steps.Add(new Step
                 {
-                    DelayMs = (long)entry["delay_ms"],
-                    Flag = (TrackFlag)Enum.Parse(typeof(TrackFlag), (string)entry["flag"]),
-                    Tier = (Tier)Enum.Parse(typeof(Tier), (string)entry["tier"]),
-                    Session = (Session)Enum.Parse(typeof(Session), (string)entry["session"]),
-                    Caution = (Caution)Enum.Parse(typeof(Caution), (string)entry["caution"]),
+                    DelayMs = entry.GetProperty("delay_ms").GetInt64(),
+                    Flag = Enum.Parse<TrackFlag>(entry.GetProperty("flag").GetString()),
+                    Tier = Enum.Parse<Tier>(entry.GetProperty("tier").GetString()),
+                    Session = Enum.Parse<Session>(entry.GetProperty("session").GetString()),
+                    Caution = Enum.Parse<Caution>(entry.GetProperty("caution").GetString()),
                     Sectors = sectors,
                 });
             }

@@ -116,7 +116,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: UniflagPlugin
-          path: plugin/src/bin/Release/net48/UniflagPlugin.dll
+          path: plugin/simhub/bin/Release/net48/UniflagPlugin.dll
           if-no-files-found: error
 
   package:
@@ -139,9 +139,9 @@ jobs:
           stamped=$(
             sed -n 's/^version = "\(.*\)"$/\1/p' firmware/Cargo.toml cli/Cargo.toml
             sed -n 's/^ *version = "\(.*\)";$/\1/p' flake.nix
-            sed -n 's|.*<Version>\(.*\)</Version>.*|\1|p' plugin/src/UniflagPlugin.csproj
-            sed -n 's|.*<AssemblyVersion>\(.*\)\.0</AssemblyVersion>.*|\1|p' plugin/src/UniflagPlugin.csproj
-            sed -n 's|.*<FileVersion>\(.*\)\.0</FileVersion>.*|\1|p' plugin/src/UniflagPlugin.csproj
+            sed -n 's|.*<Version>\(.*\)</Version>.*|\1|p' plugin/simhub/UniflagPlugin.csproj
+            sed -n 's|.*<AssemblyVersion>\(.*\)\.0</AssemblyVersion>.*|\1|p' plugin/simhub/UniflagPlugin.csproj
+            sed -n 's|.*<FileVersion>\(.*\)\.0</FileVersion>.*|\1|p' plugin/simhub/UniflagPlugin.csproj
           )
           echo "tag $tag → base version $base; stamped versions:"
           echo "$stamped"

@@ -32,10 +32,12 @@ install both from the same zip. Full guide:
 
 - `proto/` — the v2 binary wire protocol (Rust, `no_std`):
   packet layer, COBS framing, CRC-16, shared USB/geometry constants
-- `plugin/` — the SimHub plugin (C#): `core/` holds the renderer and wire
-  codec (portable, testable anywhere), `src/` the .NET Framework 4.8 SimHub
-  half — game adapters, USB device connection, web overlay server, settings
-  UI — plus `tools/`, the frame viewer. Ships as a single DLL.
+- `plugin/` — the SimHub plugin (C#): `core/` holds everything portable and
+  testable anywhere — renderer, wire codec, USB device connection, web
+  overlay server, game adapters — and `simhub/` only the .NET Framework 4.8
+  glue that genuinely needs SimHub or a Windows API (telemetry extraction,
+  serial port, registry, settings UI). Plus `tools/`, the frame viewer.
+  Ships as a single DLL.
 - `firmware/` — embedded firmware (Rust + embassy-rs, RP2040): receives
   frames over USB CDC and puts them on the panel
 - `screens/` — the firmware's local screens (the no-host fallback and the
@@ -111,9 +113,9 @@ just frames-sheet
 writes `target/frames/contact-sheet.png` (the whole signal vocabulary on
 one grid) and a labelled `contact-sheet.html`. `just frames-list` names
 the scenarios, `just frames <name>` renders one to a PNG, and
-`just frames-ansi <name>` draws it straight into the terminal. For a
-frame captured off the wire, `uniflag-cli view <frame.rgb>` does the
-same.
+`just frames-ansi <name>` draws it straight into the terminal — it
+takes a scenario name or a path to a raw `.rgb` frame, so it also
+renders frames written by `just frames <name> --rgb`.
 
 ## Flashing
 

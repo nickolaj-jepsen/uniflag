@@ -181,10 +181,10 @@ Minimal reference set: `SimHub.Plugins.dll`, `GameReaderCommon.dll`,
 SDK demo's 2.0.8 pin is stale and non-binding). CI also stages
 `SimHub.Logging.dll` beside them to avoid resolve warnings.
 
-- `plugin/src`: references use `Private=false` so the build output
+- `plugin/simhub`: references use `Private=false` so the build output
   contains only `UniflagPlugin.dll` (the release-zip audit relies on
   this).
-- `plugin/tests`: `Private=true` copies the DLLs beside the test runner
+- `plugin/tests-simhub`: `Private=true` copies the DLLs beside the test runner
   so reflection over plugin metadata resolves. `bin/` is gitignored.
 
 ## CI acquisition of reference DLLs

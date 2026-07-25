@@ -1,4 +1,4 @@
 # Golden vectors are byte-exact cross-language fixtures.
-# Never eol-convert them (manifest.json has no NUL bytes, so
-# git would otherwise treat it as text under autocrlf).
+# Never eol-convert them: several have no NUL bytes, so git would
+# otherwise treat them as text under autocrlf and rewrite line endings.
 * -text

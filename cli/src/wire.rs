@@ -1,10 +1,9 @@
-//! Wire-byte builders shared by the emit, stream, and loopback modes.
+//! Wire-byte builders shared by the stream and emit modes.
 //!
 //! Thin wrappers over [`proto::packet::Packet::encode`] that allocate the
-//! right-sized buffers and hand back owned byte vectors, plus the
-//! loopback stream generator. All host→device bytes the CLI ever sends
-//! originate here, so pinning these functions against the golden vectors
-//! pins every mode at once.
+//! right-sized buffers and hand back owned byte vectors. All host→device
+//! bytes the CLI ever sends originate here, so pinning these functions
+//! against the golden vectors pins every mode at once.
 
 use anyhow::{anyhow, Result};
 use proto::packet::{Packet, FRAME_PAYLOAD_LEN, MAX_RAW_LEN, MAX_WIRE_LEN, PROTOCOL_VERSION};
@@ -47,47 +46,39 @@ pub fn frame_from_pixels(pixels: &[u8; FRAME_PAYLOAD_LEN]) -> Result<Vec<u8>> {
     encode_packet(&Packet::Frame { pixels })
 }
 
-/// The exact byte stream the loopback mode decodes, in the same packet
-/// order the stream mode sends on the wire: `Hello`, then `Brightness`
-/// if given, then `frames` Frame packets of `pattern` — each preceded by
-/// a per-frame `Brightness` when the pattern sweeps brightness.
-///
-/// `Hello` is deliberately **included**: loopback verifies the whole TX
-/// byte stream, and the handshake open is part of it. `HelloAck` is a
-/// device-side reply, so it has no place in a host-emitted stream.
-///
-/// Returns the bytes and the number of packets they encode, so callers
-/// can assert that every self-emitted packet survives decoding.
-pub fn loopback_stream(
-    pattern: Pattern,
-    frames: u64,
-    brightness_value: Option<u8>,
-) -> Result<(Vec<u8>, usize)> {
-    let mut bytes = Vec::new();
-    let mut packets = 0usize;
-
-    bytes.extend_from_slice(&hello()?);
-    packets += 1;
-    if let Some(value) = brightness_value {
-        bytes.extend_from_slice(&brightness(value)?);
-        packets += 1;
-    }
-    for frame_index in 0..frames {
-        if let Some(value) = pattern.brightness_for_frame(frame_index) {
-            bytes.extend_from_slice(&brightness(value)?);
-            packets += 1;
-        }
-        bytes.extend_from_slice(&frame(pattern, frame_index)?);
-        packets += 1;
-    }
-    Ok((bytes, packets))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::patterns::Rgb;
     use crate::rx::{Decoder, OwnedPacket, RxEvent};
+
+    /// The exact byte stream the stream mode sends, and its packet count.
+    /// `Hello` is deliberately included — the handshake open is part of
+    /// the TX stream; `HelloAck` is a device reply, so it is not.
+    fn tx_stream(
+        pattern: Pattern,
+        frames: u64,
+        brightness_value: Option<u8>,
+    ) -> Result<(Vec<u8>, usize)> {
+        let mut bytes = Vec::new();
+        let mut packets = 0usize;
+
+        bytes.extend_from_slice(&hello()?);
+        packets += 1;
+        if let Some(value) = brightness_value {
+            bytes.extend_from_slice(&brightness(value)?);
+            packets += 1;
+        }
+        for frame_index in 0..frames {
+            if let Some(value) = pattern.brightness_for_frame(frame_index) {
+                bytes.extend_from_slice(&brightness(value)?);
+                packets += 1;
+            }
+            bytes.extend_from_slice(&frame(pattern, frame_index)?);
+            packets += 1;
+        }
+        Ok((bytes, packets))
+    }
 
     #[test]
     fn every_wire_packet_ends_in_exactly_one_delimiter() {
@@ -102,15 +93,20 @@ mod tests {
         }
     }
 
+    /// TX bytes and RX pipeline are two statements of the same wire
+    /// format; this is where they are checked against each other.
     #[test]
-    fn loopback_stream_decodes_to_exactly_its_own_packet_count() {
-        let (bytes, expected) =
-            loopback_stream(Pattern::BrightnessSweep, 3, Some(128)).expect("stream");
+    fn the_whole_tx_stream_decodes_to_exactly_its_own_packet_count() {
+        let (bytes, expected) = tx_stream(Pattern::BrightnessSweep, 3, Some(128)).expect("stream");
         // Hello + initial Brightness + 3 × (sweep Brightness + Frame).
         assert_eq!(expected, 8);
 
+        // Transport-sized chunks so the accumulator paths get real work.
         let mut decoder = Decoder::default();
-        let events = decoder.feed(&bytes);
+        let mut events = Vec::new();
+        for chunk in bytes.chunks(1024) {
+            events.extend(decoder.feed(chunk));
+        }
         assert_eq!(events.len(), expected);
         assert!(events
             .iter()

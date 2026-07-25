@@ -19,7 +19,7 @@ identity: VID `0x1209`, PID `0x0001`.
 `0x0001` is the pid.codes **shared test PID**, which must not ship on
 redistributed devices; `0x1209:0xF1A6` is requested and pending. When it
 is granted, swap `USB_PID` in `proto/src/packet.rs`, its C# mirror in
-`plugin/src/Device/DeviceDiscovery.cs`, this section, and
+`plugin/core/Device/DeviceDiscovery.cs`, this section, and
 `simhub/README.md`. There is no flag day: the plugin's discovery filter
 accepts both PIDs, so fielded devices keep working until they are
 reflashed and the filter collapses to the registered PID.

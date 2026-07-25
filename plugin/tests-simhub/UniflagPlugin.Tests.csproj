@@ -1,5 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Only the tests that need SimHub's reference assemblies or a Windows API:
+    the GameData extractor, the iRacing raw-extraction path, the registry
+    port enumerator, the plugin-metadata contract, and the opt-in hardware
+    test. Everything else lives in plugin/tests-core/.
+
+    Non-gating in CI by design — a SimHub-installer outage must never red
+    the pipeline. Keeping it small is what makes that safe.
+  -->
+
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
     <LangVersion>9.0</LangVersion>
@@ -16,13 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Shared with the cross-platform leg. Linked rather than duplicated: both
-         suites resolve fixtures from the same repo-root probe. -->
-    <Compile Include="..\tests-core\RepoPaths.cs" Link="RepoPaths.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\src\UniflagPlugin.csproj" />
+    <ProjectReference Include="..\simhub\UniflagPlugin.csproj" />
     <!-- Private=true here (unlike src): the test runner needs SimHub.Plugins.dll on
          disk to reflect over plugin metadata. bin/ is gitignored; release artifacts
          are built from src only, so nothing proprietary ships. -->

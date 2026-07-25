@@ -1,11 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The SimHub-free, WPF-free half of the plugin: the renderer and the wire
-    codec. Split out for ONE reason — so it can be tested without Windows, a
-    .NET Framework targeting pack, or SimHub's proprietary reference
-    assemblies. That puts the renderer and the hand-mirrored C# codec into
-    the gating cross-platform CI leg instead of the isolated Windows one.
+    Everything in the plugin that does not need SimHub, WPF or a Windows
+    API: the renderer, the wire codec, the device connection manager, the
+    overlay web server, the telemetry adapters and the debug state cycler.
+
+    Split out for ONE reason — so it can be tested without Windows, a .NET
+    Framework targeting pack, or SimHub's proprietary reference assemblies,
+    which puts it in the gating CI leg instead of the isolated Windows one.
+    The files next door in ..\simhub\ are exactly those that name a type
+    absent off Windows; each sits behind an interface declared here
+    (IGameAdapter, ISerialConnection, IPortEnumerator, IFrameSink).
 
     This assembly is NEVER shipped. UniflagPlugin.csproj compiles these same
     source files directly (<Compile Include="..\core\**"/>) rather than
@@ -31,6 +36,14 @@
     <!-- The net48 plugin compiles these sources into its own assembly, so
          the existing UniflagPlugin.Tests grant has to survive the move. -->
     <InternalsVisibleTo Include="UniflagPlugin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Embedded in BOTH assemblies on purpose: OverlayWebServer resolves it
+         from its own assembly — Uniflag.Core.dll under test, UniflagPlugin.dll
+         when shipped. LogicalName is pinned: it is the manifest name
+         OverlayWebServer.PageResourceName looks up. -->
+    <EmbeddedResource Include="..\..\overlay\index.html" LogicalName="Uniflag.Web.index.html" />
   </ItemGroup>
 
 </Project>

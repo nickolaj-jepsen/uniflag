@@ -26,7 +26,7 @@ if ($dirty) {
     if ($LASTEXITCODE -ne 0 -or -not $version) { $version = 'dev' }
 }
 
-$dll  = Join-Path $root 'plugin\src\bin\Release\net48\UniflagPlugin.dll'
+$dll  = Join-Path $root 'plugin\simhub\bin\Release\net48\UniflagPlugin.dll'
 $uf2  = Join-Path $root 'target\uniflag.uf2'
 $dash = Join-Path $root 'overlay\dash\Uniflag Overlay'
 $md   = Join-Path $root 'packaging\INSTALL.md'

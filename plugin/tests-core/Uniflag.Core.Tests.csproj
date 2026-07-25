@@ -1,10 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The cross-platform test leg: renderer + wire codec, no SimHub, no WPF,
-    no Windows. This is the suite CI gates on. The net48 project next door
-    (plugin/tests/) keeps everything that genuinely needs SimHub's reference
-    assemblies or Windows APIs.
+    The cross-platform test leg, and the suite CI gates on: renderer, wire
+    codec, device connection manager, overlay web server, telemetry
+    adapters, state cycler. No SimHub, no WPF, no Windows.
+
+    When adding a test, default to here — it belongs in plugin/tests-simhub/
+    only if it cannot compile without GameReaderCommon, System.IO.Ports or
+    the registry.
   -->
 
   <PropertyGroup>

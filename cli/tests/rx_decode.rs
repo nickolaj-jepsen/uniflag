@@ -3,7 +3,7 @@
 //! The stream mode's inbound decoder must recover the device→host golden
 //! vectors (`hello_ack`, both `button_event`s), reject every negative
 //! vector with the right drop class, and walk `resync.stream` recovering
-//! exactly the packets the manifest's `expected_packets` names.
+//! exactly the two packets embedded in it.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -56,7 +56,7 @@ fn button_event_long_decodes_to_button_2_long_press() {
 }
 
 #[test]
-fn hello_ack_decodes_to_the_manifest_packet() {
+fn hello_ack_decodes_to_the_expected_packet() {
     assert_eq!(
         decode_all(&read_vector("hello_ack.wire")),
         vec![RxEvent::Packet(OwnedPacket::HelloAck {
@@ -69,11 +69,11 @@ fn hello_ack_decodes_to_the_manifest_packet() {
 }
 
 /// `resync.stream` is garbage (no delimiter), a lone `0x00`, then
-/// hello.wire and brightness.wire verbatim; the manifest's
+/// hello.wire and brightness.wire verbatim; the README's
 /// `expected_packets` are `hello` then `brightness`. The garbage segment
 /// dies in the COBS layer; the survivors must match exactly and in order.
 #[test]
-fn resync_stream_survivors_match_the_manifest_expected_packets() {
+fn resync_stream_survivors_are_exactly_hello_then_brightness() {
     let expected = vec![
         RxEvent::Dropped(DropReason::CobsMalformed),
         RxEvent::Packet(OwnedPacket::Hello {
@@ -94,7 +94,7 @@ fn resync_stream_survivors_match_the_manifest_expected_packets() {
 }
 
 #[test]
-fn negative_vectors_drop_with_the_manifest_error_class() {
+fn negative_vectors_drop_with_the_contract_error_class() {
     let cases: &[(&str, DropReason)] = &[
         ("bad_crc.wire", DropReason::BadCrc),
         ("truncated.wire", DropReason::CobsMalformed),
@@ -109,7 +109,7 @@ fn negative_vectors_drop_with_the_manifest_error_class() {
     }
 
     // embedded_zero_garbage.wire has a 0x00 *inside* the COBS body. The
-    // manifest's negative reading (strip one trailing delimiter, decode
+    // README's negative reading (strip one trailing delimiter, decode
     // the rest as one packet) sees one malformed packet; a streaming
     // decoder legitimately splits on the interior zero too and drops two
     // malformed segments. Either way nothing decodes.

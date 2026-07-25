@@ -228,7 +228,7 @@ double-waved flag. To recover that, fall back to raw data:
 
 ## Generic adapter mapping (plugin)
 
-How the plugin's generic adapter (`plugin/src/Adapters/GenericAdapter.cs`) maps
+How the plugin's generic adapter (`plugin/core/Adapters/GenericAdapter.cs`) maps
 the unified layer to the Grammar `SignalState` (docs/flag-grammar.md §9-§10).
 Doc and code state the same contract — change them together.
 
@@ -264,7 +264,7 @@ Doc and code state the same contract — change them together.
 
 ## iRacing adapter mapping (plugin)
 
-How the iRacing raw-telemetry refiner (`plugin/src/Adapters/IRacingAdapter.cs`)
+How the iRacing raw-telemetry refiner (`plugin/core/Adapters/IRacingAdapter.cs`)
 layers over the generic result, emitting the Grammar `SignalState`
 (docs/flag-grammar.md §10). It matches `GameData.GameName == "IRacing"`
 (ordinal case-insensitive; the code that also names the `PluginsData\IRacing`

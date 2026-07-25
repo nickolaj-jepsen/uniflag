@@ -10,18 +10,15 @@
 // Sample frames are chosen deliberately: strobe on/off phases, breathe
 // peaks and mid-points, sweep positions, flash blend weights, fade depths.
 //
-// This is dev tooling, not a fixture — it pins nothing (docs/flag-grammar.md
-// §11). It drives the frame viewer and the GrammarSmokeTests whole-scenario
-// replay; the curation is the value: these are the states worth looking at.
+// Not a fixture — it pins nothing (docs/flag-grammar.md §11). The curation
+// IS the value: these are the states worth looking at. Lives here rather
+// than with the frame viewer because it has three consumers: the viewer
+// (`just frames-sheet`), the GrammarSmokeTests replay, and StateCycler's
+// settings-tab tour.
 
 using System.Collections.Generic;
-using Uniflag.Rendering;
-using Uniflag.Rendering.Grammar;
-using Caution = Uniflag.Rendering.Grammar.Caution;
-using SectorSet = Uniflag.Rendering.SectorSet;
-using Session = Uniflag.Rendering.Session;
 
-namespace Uniflag.Tools
+namespace Uniflag.Rendering.Grammar
 {
     public static class ScenarioCatalogue
     {
@@ -156,6 +153,8 @@ namespace Uniflag.Tools
                 St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.Sectors = SectorSet.Empty.With(2); s.Session = Session.Racing; })),
             Sc("strip_sector13_urgent_off", "sector strip: S1+S3 active, urgent off-phase", 13,
                 St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.Tier = Tier.Urgent; s.Sectors = SectorSet.Empty.With(1).With(3); s.Session = Session.Racing; })),
+            Sc("strip_all_sectors_settled", "sector strip: all three active — the fully-lit strip", 400,
+                St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.Tier = Tier.Alert; s.Sectors = SectorSet.Empty.With(1).With(2).With(3); s.Session = Session.Racing; })),
             Sc("fade_mid_yellow_clear", "yellow cleared, fade-out mid-way (age 7)", 407,
                 St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.Session = Session.Racing; }),
                 St(400, (ref SignalState s) => { s.Session = Session.Racing; })),

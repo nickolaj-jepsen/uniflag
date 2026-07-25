@@ -53,53 +53,13 @@ _check-cs:
 
 # What's installed, what isn't, and what to do about it. Run this first
 # when a recipe fails for reasons that look like the environment.
+#
+# The report lives in `uniflag-cli doctor` (cli/src/doctor.rs): a recipe
+# that has to work on both bash and PowerShell gets written twice and the
+# two copies drift. This recipe owns only the platform-flavoured paths.
 [doc("Report which toolchains, SimHub DLLs and devices are present.")]
-[unix]
 doctor:
-    #!/usr/bin/env bash
-    set -u
-    ok()   { printf '  ok      %-14s %s\n' "$1" "$2"; }
-    miss() { printf '  MISSING %-14s %s\n' "$1" "$2"; }
-    have() { command -v "$1" >/dev/null 2>&1; }
-    echo "uniflag doctor"
-    echo ""
-    echo "Rust:"
-    have cargo && ok cargo "$(cargo --version)" || miss cargo "install rustup"
-    have rustc && ok rustc "$(rustc --version)" || miss rustc "install rustup"
-    if rustup target list --installed 2>/dev/null | grep -q thumbv6m-none-eabi; then
-        ok thumbv6m "firmware target installed"
-    else
-        miss thumbv6m "rustup target add thumbv6m-none-eabi"
-    fi
-    have elf2uf2-rs && ok elf2uf2-rs "$(command -v elf2uf2-rs)" || miss elf2uf2-rs "cargo install elf2uf2-rs (or use 'nix develop')"
-    echo ""
-    echo "C#:"
-    if have dotnet; then
-        ok dotnet "SDKs: $(dotnet --list-sdks 2>/dev/null | cut -d' ' -f1 | tr '\n' ' ')"
-    else
-        miss dotnet "install the .NET SDK — needed for just core-test and the frame viewer"
-    fi
-    echo "  n/a     plugin         the net48 plugin build is Windows-only"
-    echo ""
-    echo "Device:"
-    echo "  serial port : {{serial}} $([ -e {{serial}} ] && echo '(present)' || echo '(not connected)')"
-    echo "  BOOTSEL     : {{mount}} $(mountpoint -q {{mount}} 2>/dev/null && echo '(mounted)' || echo '(not mounted — hold BOOTSEL while plugging in)')"
-
-[doc("Report which toolchains, SimHub DLLs and devices are present.")]
-[windows]
-doctor:
-    @Write-Host "uniflag doctor`n`nRust:"
-    @try { Write-Host ("  ok      cargo          " + (cargo --version)) } catch { Write-Host "  MISSING cargo          install rustup" }
-    @try { Write-Host ("  ok      rustc          " + (rustc --version)) } catch { Write-Host "  MISSING rustc          install rustup" }
-    @$t = $null; try { $t = rustup target list --installed 2>$null | Select-String thumbv6m-none-eabi } catch {}; if ($t) { Write-Host "  ok      thumbv6m       firmware target installed" } else { Write-Host "  MISSING thumbv6m       rustup target add thumbv6m-none-eabi" }
-    @$e = $null; try { $e = Get-Command elf2uf2-rs -ErrorAction Stop } catch {}; if ($e) { Write-Host ("  ok      elf2uf2-rs     " + $e.Source) } else { Write-Host "  MISSING elf2uf2-rs     cargo install elf2uf2-rs" }
-    @Write-Host "`nC#:"
-    @$d = $null; try { $d = Get-Command dotnet -ErrorAction Stop } catch {}; if ($d) { Write-Host ("  ok      dotnet         SDKs: " + ((dotnet --list-sdks | ForEach-Object { ($_ -split ' ')[0] }) -join ' ')) } else { Write-Host "  MISSING dotnet         install the .NET SDK -- needed for just core-test and the frame viewer" }
-    @if (Test-Path '{{simhub_dir}}\SimHub.Plugins.dll') { Write-Host "  ok      SimHub         {{simhub_dir}}" } else { Write-Host "  MISSING SimHub         no SimHub.Plugins.dll at {{simhub_dir}} -- set UNIFLAG_SIMHUB_DIR" }
-    @foreach ($dll in 'SimHub.Plugins.dll','GameReaderCommon.dll','log4net.dll') { if (-not (Test-Path (Join-Path '{{simhub_dir}}' $dll))) { Write-Host ("  MISSING reference DLL  " + $dll) } }
-    @Write-Host "`nDevice:"
-    @$ports = [System.IO.Ports.SerialPort]::GetPortNames(); if ($ports) { Write-Host ("  serial ports : " + ($ports -join ', ') + "  (using {{serial}}; override with UNIFLAG_SERIAL)") } else { Write-Host "  serial ports : none detected (using {{serial}})" }
-    @if (Test-Path '{{mount}}') { Write-Host "  BOOTSEL      : {{mount}} (mounted)" } else { Write-Host "  BOOTSEL      : {{mount}} (not mounted -- hold BOOTSEL while plugging in)" }
+    cargo run --quiet -p uniflag-cli -- doctor --serial '{{serial}}' --mount '{{mount}}' --simhub-dir '{{simhub_dir}}'
 
 # Format the entire workspace (firmware included).
 fmt:

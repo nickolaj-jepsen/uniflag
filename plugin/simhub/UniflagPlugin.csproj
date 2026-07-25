@@ -29,12 +29,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The renderer and wire codec live in plugin/core/ so they can be built and
-         tested without Windows, SimHub or a .NET Framework targeting pack. They are
-         COMPILED IN here rather than referenced as Uniflag.Core.dll on purpose: the
-         release zip must contain exactly one DLL (packaging/package.ps1 audits it,
-         and SimHub users drop a single file into their plugins folder). Referencing
-         the project instead would ship a second assembly. -->
+    <!-- Everything portable lives in plugin/core/; what is left in this directory
+         is only what touches GameReaderCommon, System.IO.Ports, the registry or WPF.
+
+         Those sources are COMPILED IN rather than referenced as Uniflag.Core.dll
+         on purpose: the release zip must contain exactly one DLL
+         (packaging/package.ps1 audits it, and SimHub users drop a single file into
+         their plugins folder). A ProjectReference would ship two. -->
     <Compile Include="..\core\**\*.cs"
              Exclude="..\core\obj\**\*.cs;..\core\bin\**\*.cs"
              LinkBase="Core" />
@@ -44,7 +45,11 @@
     <!-- overlay/index.html is the single source of the overlay page: OverlayWebServer
          serves this embedded copy at GET /, and `just overlay-serve` serves the same
          file from disk for iteration. LogicalName is pinned — it is the manifest name
-         OverlayWebServer.PageResourceName looks up. -->
+         OverlayWebServer.PageResourceName looks up.
+
+         Uniflag.Core.csproj embeds the same file: EmbeddedResource is a project
+         item, not a source file, so the <Compile> above does not carry it over
+         and both assemblies need their own copy. -->
     <EmbeddedResource Include="..\..\overlay\index.html" LogicalName="Uniflag.Web.index.html" />
   </ItemGroup>
 

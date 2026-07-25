@@ -2,10 +2,10 @@
 //
 // Cross-language golden-vector conformance suite — the C# mirror of
 // proto/tests/golden_vectors.rs. Both suites load the exact committed files
-// under testdata/proto/ (described by manifest.json); neither side
-// generates its own fixtures. The Rust suite additionally asserts the
-// files are byte-identical to their generator, so the expectation tables
-// here mirror the same single source of truth.
+// under testdata/proto/ (described by its README); neither side generates
+// its own fixtures. The Rust suite additionally asserts the files are
+// byte-identical to their generator, so the expectation tables here mirror
+// the same single source of truth.
 
 using System;
 using System.Collections.Generic;
@@ -401,9 +401,9 @@ namespace Uniflag.Tests
     /// </summary>
     public class ProtoConformanceTests
     {
-        // Expectation tables (the C# mirror of the Rust tables that
-        // generate manifest.json — the Rust suite asserts the files match
-        // those tables byte-for-byte, so these must agree with the manifest).
+        // The C# mirror of the Rust tables that generate the committed
+        // vectors. The Rust suite asserts the files match those tables
+        // byte-for-byte, so these must agree with them.
 
         private const byte BrightnessValue = 200;
         private const byte BoundaryTypeByte = 0x7E;
@@ -432,7 +432,7 @@ namespace Uniflag.Tests
         /// <summary>
         /// Byte <paramref name="i"/> of the 3072-byte frame payload —
         /// mirrors <c>frame_pixel</c> in the Rust suite (and the prose in the
-        /// manifest's <c>frame.purpose</c>).
+        /// README's frame-payload table).
         /// </summary>
         private static byte FramePixel(int i)
         {
@@ -536,8 +536,8 @@ namespace Uniflag.Tests
         /// <summary>
         /// The frame payload actually stresses what it claims to: zero bytes,
         /// a 254+ run of 0xFF, and a 254+ zero-free run — asserted on the
-        /// file bytes, not the generator. Also pins the manifest's note that
-        /// the payload is <c>raw[1..3073]</c> verbatim.
+        /// file bytes, not the generator. Also pins that the payload is
+        /// <c>raw[1..3073]</c> verbatim.
         /// </summary>
         [Fact]
         public void FrameVectorPayloadStressesCobs()
@@ -673,37 +673,6 @@ namespace Uniflag.Tests
             Assert.True(recovered.Count == 2, $"expected exactly two recovered packets, got {recovered.Count}");
             Assert.Equal(new HelloPacket(PacketCodec.ProtocolVersion), recovered[0]);
             Assert.Equal(new BrightnessPacket(BrightnessValue), recovered[1]);
-        }
-
-        // Manifest cross-checks (no JSON dependency, same posture as the
-        // Rust suite's manifest_references_every_vector_file).
-
-        [Fact]
-        public void ManifestReferencesEveryVectorFileAndErrorClass()
-        {
-            string manifest = Encoding.UTF8.GetString(RepoPaths.ReadVector("manifest.json"));
-            string[] files =
-            {
-                "hello.raw", "hello.wire",
-                "hello_ack.raw", "hello_ack.wire",
-                "brightness.raw", "brightness.wire",
-                "button_event_short.raw", "button_event_short.wire",
-                "button_event_long.raw", "button_event_long.wire",
-                "frame.raw", "frame.wire",
-                "cobs_boundary_254.raw", "cobs_boundary_254.wire",
-                "bad_crc.wire", "truncated.wire", "embedded_zero_garbage.wire",
-                "wrong_length_known_type.wire", "resync.stream",
-            };
-            foreach (string file in files)
-            {
-                Assert.True(manifest.Contains($"\"{file}\""), $"manifest.json does not reference {file}");
-            }
-            foreach (string errorClass in new[] { "cobs_malformed", "bad_crc", "bad_length" })
-            {
-                Assert.True(manifest.Contains($"\"{errorClass}\""), $"manifest.json missing error class {errorClass}");
-            }
-            Assert.Contains($"\"protocol_version\": {PacketCodec.ProtocolVersion}", manifest);
-            Assert.Contains("\"expected_packets\": [ \"hello\", \"brightness\" ]", manifest);
         }
 
         /// <summary>

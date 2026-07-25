@@ -1,27 +1,21 @@
 //! uniflag-cli — binary-protocol test-pattern streamer and the firmware's
 //! diagnostic instrument.
 //!
-//! Four modes:
+//! Three modes:
 //!
 //! - **stream** (default): `Hello`/`HelloAck` handshake (prints fw
 //!   version, protocol version, and panel size; refuses on a protocol
 //!   mismatch), then COBS-framed `Frame` packets at a
 //!   monotonic-deadline-paced 30 fps. Inbound `ButtonEvent` packets are
 //!   decoded and printed live.
-//! - **loopback**: no serial — generates the exact stream bytes and feeds
-//!   them back through proto's decode pipeline in-process; exits non-zero
-//!   if any self-emitted packet fails to decode. The host-side isolation
-//!   tool for silent-failure debugging.
 //! - **emit**: write exactly one encoded wire packet to the sink and exit
 //!   — makes golden byte-diff verification executable from the shell.
-//! - **view**: show a raw RGB888 frame as terminal half-blocks or a PNG.
-//!   The panel exists to display a picture; a diagnostic tool that can
-//!   only count bytes can't tell you the picture was wrong.
+//! - **doctor**: report the toolchains, SimHub assemblies and devices
+//!   present on this machine (`just doctor` is a thin wrapper).
 //!
 //! Binary output goes to the sink (serial port, or stdout via
-//! `--no-port`); all human status and diagnostics go to stderr. The
-//! loopback packet summaries are that mode's product, so they go to
-//! stdout.
+//! `--no-port`); all human status and diagnostics go to stderr, except
+//! the doctor report, which *is* its mode's product and goes to stdout.
 
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
@@ -30,16 +24,16 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
-use proto::packet::{Button, PressKind, PANEL_HEIGHT, PANEL_WIDTH, PROTOCOL_VERSION};
+use proto::packet::{Button, PressKind, PROTOCOL_VERSION};
+use uniflag_cli::doctor::{self, Targets};
 use uniflag_cli::patterns::Pattern;
 use uniflag_cli::rx::{Decoder, OwnedPacket, RxEvent};
-use uniflag_cli::{pacing, view, wire};
+use uniflag_cli::{pacing, wire};
 
 const DEFAULT_PORT: &str = "/dev/ttyACM0";
 const DEFAULT_BAUD: u32 = 115_200;
 const DEFAULT_FPS: u32 = 30;
 const DEFAULT_PATTERN: &str = "gradient";
-const DEFAULT_LOOPBACK_FRAMES: u64 = 90;
 
 /// How long the stream mode waits for `HelloAck` before giving up.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -77,27 +71,27 @@ struct Cli {
 enum Command {
     /// Stream Frame packets at a paced rate (the default subcommand).
     Stream(StreamArgs),
-    /// Decode the CLI's own emitted byte stream in-process — no serial.
-    Loopback(LoopbackArgs),
     /// Write exactly one encoded wire packet to the sink and exit.
     #[command(subcommand)]
     Emit(EmitPacket),
-    /// Show a raw RGB888 frame — terminal half-blocks, or a PNG.
-    View(ViewArgs),
+    /// Report the toolchains, SimHub assemblies and devices present here.
+    Doctor(DoctorArgs),
 }
 
+/// The justfile owns these defaults and passes them in.
 #[derive(Args, Debug, PartialEq)]
-struct ViewArgs {
-    /// Raw 3072-byte RGB888 frame, or `-` to read one from stdin.
-    file: PathBuf,
+struct DoctorArgs {
+    /// Serial device the firmware is expected to enumerate as.
+    #[arg(long, default_value = DEFAULT_PORT)]
+    serial: String,
 
-    /// Write a PNG here instead of drawing to the terminal.
-    #[arg(long)]
-    png: Option<PathBuf>,
+    /// BOOTSEL mass-storage mount point.
+    #[arg(long, default_value = "/run/media/RPI-RP2")]
+    mount: String,
 
-    /// Nearest-neighbour upscale applied to the PNG.
-    #[arg(long, default_value_t = 8)]
-    scale: usize,
+    /// SimHub install providing the plugin's reference DLLs.
+    #[arg(long, default_value = "C:\\Program Files (x86)\\SimHub")]
+    simhub_dir: String,
 }
 
 #[derive(Args, Debug, PartialEq)]
@@ -139,22 +133,6 @@ impl Default for StreamArgs {
     }
 }
 
-#[derive(Args, Debug)]
-struct LoopbackArgs {
-    /// Test pattern for the generated Frame packets.
-    #[arg(long, default_value = DEFAULT_PATTERN, value_parser = Pattern::from_str)]
-    pattern: Pattern,
-
-    /// Number of Frame packets in the generated stream.
-    #[arg(long, default_value_t = DEFAULT_LOOPBACK_FRAMES)]
-    frames: u64,
-
-    /// Include an initial Brightness packet, as --brightness does in
-    /// stream mode.
-    #[arg(long)]
-    brightness: Option<u8>,
-}
-
 #[derive(Subcommand, Debug)]
 enum EmitPacket {
     /// Hello carrying the host protocol version.
@@ -176,9 +154,15 @@ enum EmitPacket {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
-        Some(Command::Loopback(args)) => run_loopback(args),
         Some(Command::Emit(packet)) => run_emit(&cli, packet),
-        Some(Command::View(args)) => run_view(args),
+        Some(Command::Doctor(args)) => {
+            doctor::report(&Targets {
+                serial: &args.serial,
+                mount: &args.mount,
+                simhub_dir: &args.simhub_dir,
+            });
+            Ok(())
+        }
         Some(Command::Stream(args)) => run_stream(&cli, args),
         None => run_stream(&cli, &StreamArgs::default()),
     }
@@ -469,53 +453,6 @@ fn describe_button_event(button: u8, kind: u8) -> String {
     format!("{button_name}, {kind_name}")
 }
 
-/// Generate the exact stream bytes (handshake Hello included — see
-/// [`wire::loopback_stream`]) and decode them in-process. Every packet
-/// summary goes to stdout; any decode failure exits non-zero.
-fn run_loopback(args: &LoopbackArgs) -> Result<()> {
-    let (bytes, expected) = wire::loopback_stream(args.pattern, args.frames, args.brightness)?;
-    eprintln!(
-        "loopback: {} bytes encoding {expected} packets ({:?}, {} frames)",
-        bytes.len(),
-        args.pattern,
-        args.frames
-    );
-
-    let mut decoder = Decoder::default();
-    let mut decoded = 0usize;
-    let mut failures = 0usize;
-    let mut stdout = io::stdout();
-    // Feed in transport-sized chunks so the accumulator paths get real work.
-    for chunk in bytes.chunks(1024) {
-        for event in decoder.feed(chunk) {
-            match event {
-                RxEvent::Packet(packet) => {
-                    decoded += 1;
-                    writeln!(stdout, "{decoded:>5}  {}", packet.summary())
-                        .context("write stdout")?;
-                }
-                RxEvent::Unknown { ty } => {
-                    failures += 1;
-                    eprintln!("loopback: self-emitted packet decoded as unknown type {ty:#04x}");
-                }
-                RxEvent::Dropped(reason) => {
-                    failures += 1;
-                    eprintln!("loopback: self-emitted packet dropped ({reason:?})");
-                }
-            }
-        }
-    }
-
-    if failures > 0 || decoded != expected {
-        bail!(
-            "loopback FAILED: {expected} packets emitted, {decoded} decoded, \
-             {failures} failures — the TX bytes and the decode pipeline disagree"
-        );
-    }
-    eprintln!("loopback OK: all {decoded} packets decoded");
-    Ok(())
-}
-
 fn run_emit(cli: &Cli, packet: &EmitPacket) -> Result<()> {
     let (bytes, what) = match packet {
         EmitPacket::Hello => (wire::hello()?, "Hello".to_string()),
@@ -534,42 +471,6 @@ fn run_emit(cli: &Cli, packet: &EmitPacket) -> Result<()> {
     let mut sink = open_sink(cli, STREAM_TIMEOUT)?;
     sink.send(&bytes)?;
     eprintln!("emitted {what} ({} wire bytes)", bytes.len());
-    Ok(())
-}
-
-fn run_view(args: &ViewArgs) -> Result<()> {
-    let raw = if args.file.as_os_str() == "-" {
-        let mut buf = Vec::new();
-        io::stdin()
-            .read_to_end(&mut buf)
-            .context("reading a frame from stdin")?;
-        buf
-    } else {
-        std::fs::read(&args.file).with_context(|| format!("reading {}", args.file.display()))?
-    };
-
-    if raw.len() != view::FRAME_LEN {
-        bail!(
-            "expected a {}-byte RGB888 frame, got {} bytes",
-            view::FRAME_LEN,
-            raw.len()
-        );
-    }
-
-    match &args.png {
-        Some(path) => {
-            let encoded = view::png(&raw, PANEL_WIDTH, PANEL_HEIGHT, args.scale);
-            std::fs::write(path, &encoded)
-                .with_context(|| format!("writing {}", path.display()))?;
-            eprintln!(
-                "wrote {} ({} bytes, {}x upscale)",
-                path.display(),
-                encoded.len(),
-                args.scale
-            );
-        }
-        None => print!("{}", view::ansi(&raw, PANEL_WIDTH, PANEL_HEIGHT)),
-    }
     Ok(())
 }
 
@@ -619,5 +520,26 @@ mod tests {
                 frame_index: 42,
             }))
         ));
+    }
+
+    #[test]
+    fn doctor_takes_its_lookup_paths_from_the_caller() {
+        let cli = Cli::try_parse_from([
+            "uniflag-cli",
+            "doctor",
+            "--serial",
+            "COM5",
+            "--mount",
+            "D:\\",
+            "--simhub-dir",
+            "C:\\SimHub",
+        ])
+        .expect("parse");
+        let Some(Command::Doctor(args)) = cli.command else {
+            panic!("expected the doctor subcommand");
+        };
+        assert_eq!(args.serial, "COM5");
+        assert_eq!(args.mount, "D:\\");
+        assert_eq!(args.simhub_dir, "C:\\SimHub");
     }
 }

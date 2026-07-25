@@ -9,7 +9,7 @@ canvas. No hardware involved anywhere on this path.
 
 | Piece | Where | What it does |
 |---|---|---|
-| `OverlayWebServer` | `plugin/src/Web/` | Raw `TcpListener` bound to **127.0.0.1:8972** (fixed port). `GET /` serves the overlay page; `GET /ws` upgrades to a WebSocket. |
+| `OverlayWebServer` | `plugin/core/Web/` | Raw `TcpListener` bound to **127.0.0.1:8972** (fixed port). `GET /` serves the overlay page; `GET /ws` upgrades to a WebSocket. |
 | Overlay page | `overlay/index.html` | 32×32 canvas with the LED-dot skin (round dots on a dark background), painted straight from each binary WS message. Auto-reconnects with backoff; shows an on-page status line while disconnected. |
 | Overlay dash | `overlay/dash/Uniflag Overlay/` | Ready-made DashStudio overlay: a 320×320 Web Page View pointed at `http://127.0.0.1:8972/?v=1` (a clean 10× upscale of the 32×32 panel, well inside the 800×600 overlay cap). |
 

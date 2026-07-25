@@ -416,24 +416,6 @@ mod tests {
     }
 
     #[test]
-    fn frame_round_trips_through_the_full_stack() {
-        let payload: [u8; FRAME_PAYLOAD_LEN] = core::array::from_fn(|i| (i % 256) as u8);
-        let mut scratch = [0u8; MAX_RAW_LEN];
-        let mut wire = [0u8; MAX_WIRE_LEN];
-        let wire_len =
-            encode(PacketType::Frame, &payload, &mut scratch, &mut wire).expect("encode");
-        assert!(wire_len <= MAX_WIRE_LEN);
-        assert_eq!(wire[wire_len - 1], 0x00);
-        assert!(!wire[..wire_len - 1].contains(&0));
-
-        let mut raw = [0u8; MAX_RAW_LEN];
-        let raw_len = cobs::decode(&wire[..wire_len - 1], &mut raw).expect("cobs decode");
-        let (ty, got) = parse_raw(&raw[..raw_len]).expect("parse");
-        assert_eq!(ty, PacketType::Frame.to_byte());
-        assert_eq!(got, payload);
-    }
-
-    #[test]
     fn empty_payload_packet_round_trips() {
         // The raw layer doesn't length-check payloads (the typed layer
         // does), so an empty payload is legal here.
@@ -495,21 +477,6 @@ mod tests {
         assert!(parse_raw(&raw[..n]).is_ok());
     }
 
-    #[test]
-    fn unknown_type_is_parseable_for_caller_side_ignoring() {
-        // A valid-CRC packet with an unassigned type byte parses fine —
-        // ignoring it is the caller's job (forward compat).
-        let mut raw = [0u8; 8];
-        raw[0] = 0x7E;
-        raw[1] = 0x42;
-        let checksum = crc::checksum(&raw[..2]);
-        raw[2..4].copy_from_slice(&checksum.to_le_bytes());
-        let (ty, payload) = parse_raw(&raw[..4]).expect("parse");
-        assert_eq!(ty, 0x7E);
-        assert_eq!(payload, &[0x42]);
-        assert_eq!(PacketType::from_byte(ty), None);
-    }
-
     // Typed layer
 
     const ALL_BUTTONS: [Button; 3] = [Button::BrightnessUp, Button::BrightnessDown, Button::Sleep];
@@ -552,17 +519,6 @@ mod tests {
                 "version {protocol_version}"
             );
         }
-    }
-
-    #[test]
-    fn typed_frame_round_trips() {
-        // Pattern includes 0x00 bytes so the COBS leg does real work.
-        let pixels: [u8; FRAME_PAYLOAD_LEN] = core::array::from_fn(|i| (i % 256) as u8);
-        let pkt = Packet::Frame { pixels: &pixels };
-        let mut raw = [0u8; MAX_RAW_LEN];
-        let parsed = full_stack(&pkt, &mut raw);
-        assert_eq!(parsed, pkt);
-        assert_eq!(parsed.packet_type(), PacketType::Frame);
     }
 
     #[test]
@@ -640,57 +596,21 @@ mod tests {
         }
     }
 
+    /// The row-major mapping, stated executably. `testdata/proto/` pins
+    /// these bytes but never states the formula, so it lives here.
     #[test]
-    fn payload_layouts_match_the_documented_bytes() {
-        // Byte-exact layouts (mirrors docs/protocol.md §"Payload layouts").
-        // Changing any assertion here is a wire-protocol break.
-        let mut raw = [0u8; MAX_RAW_LEN];
-        assert_eq!(
-            raw_body(
-                &Packet::Hello {
-                    protocol_version: 0x2A
-                },
-                &mut raw
-            ),
-            [0x01, 0x2A]
-        );
-        assert_eq!(
-            raw_body(&Packet::Brightness { value: 0x80 }, &mut raw),
-            [0x03, 0x80]
-        );
-        // Byte order is button, then kind.
-        assert_eq!(
-            raw_body(
-                &Packet::ButtonEvent {
-                    button: 0x02,
-                    kind: 0x01
-                },
-                &mut raw
-            ),
-            [0x82, 0x02, 0x01]
-        );
-        // Byte order is protocol_version, width, height, fw_version.
-        assert_eq!(
-            raw_body(
-                &Packet::HelloAck {
-                    protocol_version: 0x01,
-                    width: 32,
-                    height: 32,
-                    fw_version: b"0.1",
-                },
-                &mut raw,
-            ),
-            [0x81, 0x01, 0x20, 0x20, b'0', b'.', b'1']
-        );
-        // Frame: type byte, then the 3072 payload bytes verbatim —
-        // row-major RGB, pixel (x, y) channel c at body[1 + (y*32+x)*3 + c].
+    fn frame_payload_is_row_major_rgb_from_the_top_left() {
         let mut pixels = [0u8; FRAME_PAYLOAD_LEN];
         let (x, y) = (5usize, 7usize);
         pixels[(y * PANEL_WIDTH + x) * 3] = 0xAA; // R
         pixels[(y * PANEL_WIDTH + x) * 3 + 2] = 0xBB; // B
+
+        let mut raw = [0u8; MAX_RAW_LEN];
+        // Body is the type byte, then the 3072 payload bytes verbatim:
+        // pixel (x, y) channel c at body[1 + (y*32 + x)*3 + c].
         let body = raw_body(&Packet::Frame { pixels: &pixels }, &mut raw);
         assert_eq!(body.len(), 1 + FRAME_PAYLOAD_LEN);
-        assert_eq!(body[0], 0x02);
+        assert_eq!(body[0], PacketType::Frame.to_byte());
         assert_eq!(body[1 + (y * PANEL_WIDTH + x) * 3], 0xAA);
         assert_eq!(body[1 + (y * PANEL_WIDTH + x) * 3 + 2], 0xBB);
         assert_eq!(&body[1..], pixels);
@@ -730,13 +650,16 @@ mod tests {
 
     #[test]
     fn unknown_type_surfaces_as_unknown_not_error() {
-        // Forward compat: a valid-CRC packet with an unassigned type byte
-        // is Parsed::Unknown, never an error — receivers skip it.
+        // Forward compat at both layers: an unassigned type byte is
+        // Parsed::Unknown, never an error — receivers skip it.
         let mut raw = [0u8; 8];
         raw[0] = 0x7E;
         raw[1] = 0x42;
         let checksum = crc::checksum(&raw[..2]);
         raw[2..4].copy_from_slice(&checksum.to_le_bytes());
+
+        assert_eq!(PacketType::from_byte(0x7E), None);
+        assert_eq!(parse_raw(&raw[..4]), Ok((0x7E, &[0x42][..])));
         assert_eq!(
             parse_packet(&raw[..4]),
             Ok(Parsed::Unknown {
@@ -811,32 +734,5 @@ mod tests {
         }
         assert_eq!(Button::from_byte(3), None);
         assert_eq!(PressKind::from_byte(2), None);
-    }
-
-    #[test]
-    fn typed_encode_matches_low_level_encode() {
-        // Packet::encode is a thin wrapper over packet::encode — the wire
-        // bytes must be identical.
-        let pkt = Packet::HelloAck {
-            protocol_version: 1,
-            width: 32,
-            height: 32,
-            fw_version: b"1.0",
-        };
-        let mut scratch_a = [0u8; MAX_RAW_LEN];
-        let mut wire_a = [0u8; MAX_WIRE_LEN];
-        let len_a = pkt
-            .encode(&mut scratch_a, &mut wire_a)
-            .expect("typed encode");
-        let mut scratch_b = [0u8; MAX_RAW_LEN];
-        let mut wire_b = [0u8; MAX_WIRE_LEN];
-        let len_b = encode(
-            PacketType::HelloAck,
-            &[1, 32, 32, b'1', b'.', b'0'],
-            &mut scratch_b,
-            &mut wire_b,
-        )
-        .expect("low-level encode");
-        assert_eq!(&wire_a[..len_a], &wire_b[..len_b]);
     }
 }

@@ -7,7 +7,7 @@ namespace Uniflag.Protocol
     /// <summary>
     /// Cross-language error classes of the v2 wire protocol, mirroring the
     /// Rust <c>cobs::Error</c> / <c>packet::Error</c> split. The first three
-    /// are the contract classes named by <c>testdata/proto/manifest.json</c>
+    /// are the contract classes named by <c>testdata/proto/README.md</c>
     /// (<c>cobs_malformed</c>, <c>bad_crc</c>, <c>bad_length</c>); receivers
     /// drop the offending packet and resync at the next <c>0x00</c>.
     /// </summary>

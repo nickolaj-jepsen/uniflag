@@ -8,13 +8,15 @@
 // attention-window motion (the envelope re-arms on every state change).
 // Deliberately WPF-free so the sequence and stepping logic are
 // unit-testable from plain xunit.
+//
+// The tour is derived from ScenarioCatalogue so the vocabulary is
+// enumerated once, not once per consumer.
 
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using Uniflag.Rendering;
 using Uniflag.Rendering.Grammar;
-using Caution = Uniflag.Rendering.Grammar.Caution;
 
 namespace Uniflag
 {
@@ -167,102 +169,46 @@ namespace Uniflag
         }
 
         /// <summary>
-        /// The deterministic tour over the full Grammar vocabulary — every
-        /// field at its tiers, the black-flag family with demotions, the
-        /// regime boards, sector strips, notice boards, the gantry phases,
-        /// the frame advisories and both idles. Pure — two calls yield
-        /// identical sequences.
+        /// The deterministic tour: each scenario's state at its sample frame.
+        /// Consecutive duplicates are dropped — scenarios that differ only in
+        /// which frame they sample (onset flash vs. settled) are distinct
+        /// pictures but the same input, and dwelling twice reads as a stall.
+        /// Pure.
         /// </summary>
         public static IReadOnlyList<SignalState> BuildSequence()
         {
-            return new List<SignalState>
+            var sequence = new List<SignalState>();
+            foreach (ScenarioCatalogue.Scenario scenario in ScenarioCatalogue.Table)
             {
-                // Idles: violet session flankers, then the static race ticks.
-                Make(session: Session.PreRace),
-                Make(),
-
-                // Track-state fields through the tier ladder.
-                Make(flag: TrackFlag.Yellow, tier: Tier.Ambient),
-                Make(flag: TrackFlag.Yellow, tier: Tier.Alert),
-                Make(flag: TrackFlag.Yellow, tier: Tier.Urgent),
-                Make(flag: TrackFlag.Blue, tier: Tier.Ambient),
-                Make(flag: TrackFlag.Blue, tier: Tier.Alert),
-                Make(flag: TrackFlag.White),
-                Make(flag: TrackFlag.Green, tier: Tier.Alert),
-                Make(flag: TrackFlag.Red),
-                Make(flag: TrackFlag.Checkered),
-                Make(flag: TrackFlag.Debris),
-
-                // The black-flag family, its details, and the demotions.
-                Make(blackFlag: true),
-                Make(blackFlag: true, blackDetail: BlackDetail.DriveThrough),
-                Make(blackFlag: true, blackDetail: BlackDetail.StopAndGo),
-                Make(blackDetail: BlackDetail.Disqualified),
-                Make(meatball: true),
-                Make(flag: TrackFlag.Yellow, tier: Tier.Alert, blackFlag: true),
-                Make(blackFlag: true, meatball: true),
-
-                // Neutralisation regimes: yellow field + board.
-                Make(caution: Caution.SafetyCar),
-                Make(caution: Caution.VirtualSafetyCar),
-                Make(caution: Caution.FullCourseYellow),
-
-                // Sector strips under a local yellow.
-                Make(flag: TrackFlag.Yellow, tier: Tier.Alert, sectors: SectorSet.FromBits(0b001)),
-                Make(flag: TrackFlag.Yellow, tier: Tier.Alert, sectors: SectorSet.FromBits(0b101)),
-                Make(flag: TrackFlag.Yellow, tier: Tier.Urgent, sectors: SectorSet.FromBits(0b111)),
-
-                // Notice boards.
-                Make(timePenaltySeconds: 5),
-                Make(countdownLaps: 10),
-                Make(countdownLaps: 5),
-
-                // Start-sequence gantry.
-                Make(startPhase: StartPhase.Ready),
-                Make(startPhase: StartPhase.Set),
-                Make(startPhase: StartPhase.Set, startLightsLit: 3),
-                Make(startPhase: StartPhase.Go),
-
-                // Frame advisories, alone and riding a field.
-                Make(furled: true),
-                Make(incidentWarning: true),
-                Make(flag: TrackFlag.Yellow, tier: Tier.Alert, incidentWarning: true),
-            };
+                SignalState state = scenario.StateAt(scenario.SampleFrame);
+                if (sequence.Count == 0 || !SameState(sequence[sequence.Count - 1], state))
+                {
+                    sequence.Add(state);
+                }
+            }
+            return sequence;
         }
 
-        private static SignalState Make(
-            TrackFlag flag = TrackFlag.None,
-            Tier tier = Tier.Ambient,
-            bool blackFlag = false,
-            BlackDetail blackDetail = BlackDetail.None,
-            bool meatball = false,
-            Session session = Session.Racing,
-            Caution caution = Caution.None,
-            SectorSet sectors = default,
-            StartPhase startPhase = StartPhase.Off,
-            byte startLightsLit = 0,
-            byte timePenaltySeconds = 0,
-            byte countdownLaps = 0,
-            bool furled = false,
-            bool incidentWarning = false)
+        /// <summary>
+        /// Field-wise: the default <c>ValueType.Equals</c> would box and
+        /// reflect on every comparison.
+        /// </summary>
+        private static bool SameState(in SignalState a, in SignalState b)
         {
-            return new SignalState
-            {
-                Flag = flag,
-                Tier = tier,
-                BlackFlag = blackFlag,
-                BlackDetail = blackDetail,
-                Meatball = meatball,
-                Session = session,
-                Caution = caution,
-                Sectors = sectors,
-                StartPhase = startPhase,
-                StartLightsLit = startLightsLit,
-                TimePenaltySeconds = timePenaltySeconds,
-                CountdownLaps = countdownLaps,
-                Furled = furled,
-                IncidentWarning = incidentWarning,
-            };
+            return a.Flag == b.Flag
+                && a.Tier == b.Tier
+                && a.BlackFlag == b.BlackFlag
+                && a.BlackDetail == b.BlackDetail
+                && a.Meatball == b.Meatball
+                && a.Session == b.Session
+                && a.Caution == b.Caution
+                && a.Sectors.Equals(b.Sectors)
+                && a.StartPhase == b.StartPhase
+                && a.StartLightsLit == b.StartLightsLit
+                && a.TimePenaltySeconds == b.TimePenaltySeconds
+                && a.CountdownLaps == b.CountdownLaps
+                && a.Furled == b.Furled
+                && a.IncidentWarning == b.IncidentWarning;
         }
     }
 }
