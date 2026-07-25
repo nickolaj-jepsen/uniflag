@@ -1,16 +1,16 @@
 # Docs index
 
 Two kinds of documents live here: **project specifications** (the wire
-protocol and the effects contract — prose halves of the frozen golden
-fixtures under `testdata/`) and **external references** (the Cosmic
-Unicorn panel and SimHub, written down because upstream doesn't).
+protocol and the flag grammar — the normative contracts the code
+implements) and **external references** (the Cosmic Unicorn panel and
+SimHub, written down because upstream doesn't).
 
 ## Project specifications
 
 | File | Subject |
 |------|---------|
 | [`protocol.md`](./protocol.md) | The v2 binary wire protocol: COBS framing, CRC-16, packet layouts, USB identity, handshake. **Frozen (M6)** — byte vectors in `testdata/proto/` are the conformance fixtures. |
-| [`effects-spec.md`](./effects-spec.md) | The flag-effects contract the C# renderer implements: per-flag layers, animation math, precedence, the three-state idle. The ported-parity golden frames in `testdata/frames/` are its executable half (**permanently frozen at M11**). |
+| [`flag-grammar.md`](./flag-grammar.md) | **The normative renderer spec** — the second-generation signal language: the six grammar rules, tiers and the envelope, slots/precedence/suppression, the signal catalogue, the idle family, `SignalState`, adapter contracts. Implemented by `plugin/src/Rendering/Grammar/`; §7a is implemented by the firmware fallback screen. |
 | [`web-overlay.md`](./web-overlay.md) | The browser/overlay virtual panel: `OverlayWebServer`, the LED-dot page, the DashStudio dash, and the design contracts (localhost-only, newest-frame-wins, 30 fps). |
 
 ## External references
@@ -26,6 +26,7 @@ Unicorn panel and SimHub, written down because upstream doesn't).
 
 | File | Subject |
 |------|---------|
+| [`effects-spec.md`](./effects-spec.md) | The first-generation flag-effects contract, transcribed from the v1 `render/` crate for the C# port. **Superseded by [`flag-grammar.md`](./flag-grammar.md)** at the flag-grammar cutover: the ported painters and their corpora (`testdata/frames/`, `testdata/frames-plugin/`) were retired and live in git history only. |
 | [`v2-plan.md`](./v2-plan.md) | The v1→v2 rework plan (milestones M1–M12) and its cross-cutting policies. Historical record — the architecture it describes is now the codebase. |
 | [`v2-tracking.md`](./v2-tracking.md) | External clocks started in M1: the pid.codes PID registration and the plugin licensing decision. |
 

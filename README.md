@@ -108,8 +108,8 @@ SimHub via the bundled `uniflag-cli` test-pattern streamer.
 ## Specifications and references
 
 The binary wire protocol is specified in
-[`docs/protocol.md`](docs/protocol.md), the flag-effects contract in
-[`docs/effects-spec.md`](docs/effects-spec.md); Cosmic Unicorn hardware
+[`docs/protocol.md`](docs/protocol.md), the renderer's signal language in
+[`docs/flag-grammar.md`](docs/flag-grammar.md); Cosmic Unicorn hardware
 / PIO and SimHub references live under [`docs/`](docs/README.md).
 
 ## License
