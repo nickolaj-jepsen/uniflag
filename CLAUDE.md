@@ -32,24 +32,30 @@ The Rust host crates (`proto`, `screens`, `uniflag-cli`) are workspace `default-
 
 All wrapped by `just` (run `just` to list). The justfile works on both Linux and Windows; on Windows override the COM port and BOOTSEL drive via env vars before invoking, e.g. `$env:UNIFLAG_SERIAL = 'COM5'; $env:UNIFLAG_MOUNT = 'D:\'`.
 
+**Start here: `just check` is the gate, and `just doctor` explains the environment.** `just test` is *not* everything — it covers the Rust host crates only.
+
 | Command | Behaviour |
 |---------|-----------|
-| `just fmt` / `just fmt-check` | `cargo fmt --all` (the latter is the CI gate). |
+| **`just check`** | **Every leg available on this machine**: fmt-check → clippy (both targets) → Rust tests → core tests → plugin tests. Legs that can't run here print `SKIPPED: <leg> (<reason>)` and it still exits 0 — read the skips, a silent omission is how "it's green" gets reported for a suite that never ran. |
+| **`just doctor`** | What's installed and what isn't: rustc/cargo, the `thumbv6m` target, `elf2uf2-rs`, dotnet SDKs, SimHub's reference DLLs, visible serial ports, the BOOTSEL mount. Each line says how to fix it. Run this first when a recipe fails for environment-shaped reasons. |
+| `just fmt` / `just fmt-check` | `cargo fmt --all` (the latter is a CI gate). |
 | `just clippy` | clippy on host crates **and** firmware separately (different target). `-D warnings`. |
-| `just test` | `cargo test -p proto -p uniflag-cli --all-targets`. Firmware has `test = false` (it's `no_std`). |
+| `just test` | `cargo test -p proto -p screens -p uniflag-cli --all-targets`. The firmware *binary* has `test = false` (it's `no_std`); its paint code lives in `screens` precisely so it can be tested. |
+| `just core-test` | The cross-platform C# leg (`Uniflag.Core.Tests`, net8.0): renderer + wire codec, no SimHub, no Windows. Gating in CI. |
+| `just frames-list` / `just frames <scenario>` / `just frames-sheet` / `just frames-ansi <target>` | The frame viewer — see what the renderer paints, with no SimHub, no game and no hardware. `frames-sheet` writes `target/frames/contact-sheet.png` + a labelled `.html`. |
 | `just build` / `just img` | release firmware ELF / ELF → UF2 at `target/uniflag.uf2`. |
 | `just flash` | build → UF2 → wait for `RPI-RP2` mount (hold BOOTSEL) → copy → wait for serial. |
 | `just cli` | run `uniflag-cli` against the device's serial port (streams a test pattern by default). |
-| `just plugin-build` / `just plugin-test` | build / test the SimHub plugin (Windows only; `dotnet` against `plugin/UniflagPlugin.sln`). |
+| `just plugin-build` / `just plugin-test` | build / test the SimHub half (Windows only; `dotnet` against `plugin/UniflagPlugin.sln`). |
 | `just overlay-serve` | serve `overlay/` over http:// for page iteration outside SimHub. |
-| `just golden-regen` | regenerate the *regenerable* fixtures only — see Golden fixtures. Deliberate, reviewed commits only. |
+| `just golden-regen` | regenerate `testdata/proto/` — the only regenerable fixtures left. Deliberate, reviewed commits only. |
 | `just package` | assemble the release zip locally (Windows; same layout + only-one-DLL audit as the CI release job, via `packaging/package.ps1`). |
 
-Run a single host test: `cargo test -p proto -- hello` (or `-p uniflag-cli`). Single plugin test: `dotnet test plugin/UniflagPlugin.sln -c Release "-p:SimHubDir=..." --filter "FullyQualifiedName~GoldenFrameTests"`.
+Run a single host test: `cargo test -p proto -- hello` (or `-p screens`, `-p uniflag-cli`). Single C# test: `dotnet test plugin/tests-core/Uniflag.Core.Tests.csproj -c Release --filter "FullyQualifiedName~GrammarSmokeTests"`, or against `plugin/UniflagPlugin.sln -c Release "-p:SimHubDir=..."` for the SimHub-dependent ones.
 
 The plugin build resolves SimHub's proprietary reference assemblies (`SimHub.Plugins.dll` etc.) from `$env:UNIFLAG_SIMHUB_DIR` (default `C:\Program Files (x86)\SimHub`). They are never committed or redistributed. Reference SimHub version: 9.11.21 (`docs/simhub-plugin-api.md`).
 
-CI mirrors `just fmt-check`, `just clippy` (both legs), and `just test` — keep them green. The Windows plugin job is isolated and non-gating by design (installer flakiness must never red the Rust pipeline).
+CI mirrors `just fmt-check`, `just clippy` (both legs), `just test`, and `just core-test` — keep them green. The Windows plugin job is isolated and non-gating by design (installer flakiness must never red the Rust pipeline); that's exactly why the renderer and the C# codec were moved into `core-test`, which *is* gating.
 
 Toolchain: stable rustc with `thumbv6m-none-eabi` (pinned in `rust-toolchain.toml`); `nix develop` provides rustup and `elf2uf2-rs`. Plugin side: .NET Framework 4.8 developer pack + a SimHub install (Windows).
 

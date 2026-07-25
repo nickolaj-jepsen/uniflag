@@ -77,18 +77,23 @@ with no arguments to list them.
 
 | Command              | What it does                                                              |
 |----------------------|---------------------------------------------------------------------------|
+| `just check`         | **every test leg available here**; anything it can't run is reported `SKIPPED` |
+| `just doctor`        | what's installed, what isn't, and how to fix it                          |
 | `just fmt`           | `cargo fmt --all`                                                         |
 | `just fmt-check`     | `cargo fmt --all -- --check` (CI gate)                                    |
 | `just clippy`        | clippy on host crates *and* firmware (different target), `-D warnings`    |
-| `just test`          | `cargo test` on host crates only (firmware is `no_std`, `test = false`)   |
+| `just test`          | `cargo test` on the Rust host crates (not everything — see `just check`)  |
+| `just core-test`     | renderer + wire-codec tests; no SimHub, no Windows (CI gate)             |
+| `just frames-sheet`  | render the whole scenario catalogue to a contact sheet you can look at    |
+| `just frames <name>` | render one scenario to a PNG (`just frames-list` for the names)           |
 | `just build`         | release build of the firmware ELF                                         |
 | `just img`           | build, then convert ELF → UF2 at `target/uniflag.uf2`                     |
 | `just flash`         | full pipeline: build → UF2 → wait for `RPI-RP2` mount → copy → fix serial |
 | `just cli`           | run `uniflag-cli` against the device's serial port                        |
 | `just plugin-build`  | build the SimHub plugin DLL (Windows)                                     |
-| `just plugin-test`   | run the plugin test suite (Windows)                                       |
+| `just plugin-test`   | run the SimHub-dependent test suite (Windows)                             |
 | `just overlay-serve` | serve the overlay page from disk for iteration outside SimHub            |
-| `just golden-regen`  | regenerate the *regenerable* golden fixtures — deliberate commits only    |
+| `just golden-regen`  | regenerate the protocol byte vectors — deliberate commits only            |
 | `just package`       | assemble the release zip locally (Windows; same layout + audit as CI)     |
 
 ## Flashing
