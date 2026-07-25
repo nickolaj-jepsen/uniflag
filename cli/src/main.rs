@@ -1,7 +1,7 @@
 //! uniflag-cli — binary-protocol test-pattern streamer and the firmware's
 //! diagnostic instrument.
 //!
-//! Three modes:
+//! Four modes:
 //!
 //! - **stream** (default): `Hello`/`HelloAck` handshake (prints fw
 //!   version, protocol version, and panel size; refuses on a protocol
@@ -14,6 +14,9 @@
 //!   tool for silent-failure debugging.
 //! - **emit**: write exactly one encoded wire packet to the sink and exit
 //!   — makes golden byte-diff verification executable from the shell.
+//! - **view**: show a raw RGB888 frame as terminal half-blocks or a PNG.
+//!   The panel exists to display a picture; a diagnostic tool that can
+//!   only count bytes can't tell you the picture was wrong.
 //!
 //! Binary output goes to the sink (serial port, or stdout via
 //! `--no-port`); all human status and diagnostics go to stderr. The
@@ -27,10 +30,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
-use proto::packet::{Button, PressKind, PROTOCOL_VERSION};
+use proto::packet::{Button, PressKind, PANEL_HEIGHT, PANEL_WIDTH, PROTOCOL_VERSION};
 use uniflag_cli::patterns::Pattern;
 use uniflag_cli::rx::{Decoder, OwnedPacket, RxEvent};
-use uniflag_cli::{pacing, wire};
+use uniflag_cli::{pacing, view, wire};
 
 const DEFAULT_PORT: &str = "/dev/ttyACM0";
 const DEFAULT_BAUD: u32 = 115_200;
@@ -79,6 +82,22 @@ enum Command {
     /// Write exactly one encoded wire packet to the sink and exit.
     #[command(subcommand)]
     Emit(EmitPacket),
+    /// Show a raw RGB888 frame — terminal half-blocks, or a PNG.
+    View(ViewArgs),
+}
+
+#[derive(Args, Debug, PartialEq)]
+struct ViewArgs {
+    /// Raw 3072-byte RGB888 frame, or `-` to read one from stdin.
+    file: PathBuf,
+
+    /// Write a PNG here instead of drawing to the terminal.
+    #[arg(long)]
+    png: Option<PathBuf>,
+
+    /// Nearest-neighbour upscale applied to the PNG.
+    #[arg(long, default_value_t = 8)]
+    scale: usize,
 }
 
 #[derive(Args, Debug, PartialEq)]
@@ -159,6 +178,7 @@ fn main() -> Result<()> {
     match &cli.command {
         Some(Command::Loopback(args)) => run_loopback(args),
         Some(Command::Emit(packet)) => run_emit(&cli, packet),
+        Some(Command::View(args)) => run_view(args),
         Some(Command::Stream(args)) => run_stream(&cli, args),
         None => run_stream(&cli, &StreamArgs::default()),
     }
@@ -529,6 +549,46 @@ fn run_emit(cli: &Cli, packet: &EmitPacket) -> Result<()> {
     let mut sink = open_sink(cli, STREAM_TIMEOUT)?;
     sink.send(&bytes)?;
     eprintln!("emitted {what} ({} wire bytes)", bytes.len());
+    Ok(())
+}
+
+// =============================================================================
+// View mode
+// =============================================================================
+
+fn run_view(args: &ViewArgs) -> Result<()> {
+    let raw = if args.file.as_os_str() == "-" {
+        let mut buf = Vec::new();
+        io::stdin()
+            .read_to_end(&mut buf)
+            .context("reading a frame from stdin")?;
+        buf
+    } else {
+        std::fs::read(&args.file).with_context(|| format!("reading {}", args.file.display()))?
+    };
+
+    if raw.len() != view::FRAME_LEN {
+        bail!(
+            "expected a {}-byte RGB888 frame, got {} bytes",
+            view::FRAME_LEN,
+            raw.len()
+        );
+    }
+
+    match &args.png {
+        Some(path) => {
+            let encoded = view::png(&raw, PANEL_WIDTH, PANEL_HEIGHT, args.scale);
+            std::fs::write(path, &encoded)
+                .with_context(|| format!("writing {}", path.display()))?;
+            eprintln!(
+                "wrote {} ({} bytes, {}x upscale)",
+                path.display(),
+                encoded.len(),
+                args.scale
+            );
+        }
+        None => print!("{}", view::ansi(&raw, PANEL_WIDTH, PANEL_HEIGHT)),
+    }
     Ok(())
 }
 
