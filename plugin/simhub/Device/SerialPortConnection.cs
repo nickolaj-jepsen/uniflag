@@ -43,9 +43,6 @@ namespace Uniflag.Device
         }
 
         /// <inheritdoc />
-        public string PortName => _port.PortName;
-
-        /// <inheritdoc />
         public int Read(byte[] buffer, int offset, int count)
         {
             try

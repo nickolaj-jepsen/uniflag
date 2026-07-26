@@ -6,10 +6,11 @@ using System.Collections.Generic;
 namespace Uniflag.Device
 {
     /// <summary>
-    /// Pure candidate selection for device discovery: given an enumerated
-    /// port list and the user's manual override, pick the port to attempt.
-    /// The VID/PID filter only <i>nominates</i> — every candidate must still
-    /// pass the Hello/HelloAck handshake before being driven.
+    /// Pure candidate selection for device discovery: given the enumerated
+    /// (already identity-filtered) port names and the user's manual
+    /// override, pick the port to attempt. Enumeration only <i>nominates</i>
+    /// — every candidate must still pass the Hello/HelloAck handshake before
+    /// being driven.
     /// </summary>
     public static class DeviceDiscovery
     {
@@ -28,39 +29,21 @@ namespace Uniflag.Device
 
         /// <summary>
         /// The future registered pid.codes PID (docs/protocol.md §Transport).
-        /// The filter accepts both this and <see cref="UsbProductIdTest"/>
+        /// Enumerators accept both this and <see cref="UsbProductIdTest"/>
         /// during the transition, per the note on <c>USB_PID</c> in
         /// <c>proto/src/packet.rs</c>.
         /// </summary>
         public const ushort UsbProductIdRegistered = 0xF1A6;
 
         /// <summary>
-        /// Whether an enumerated port carries the uniflag USB identity
-        /// (either PID during the transition).
-        ///
-        /// <para>The Windows enumerator already filters on identity, so this
-        /// re-checks a port that matched by construction — deliberate, to keep
-        /// "what counts as the panel" testable off Windows.</para>
-        /// </summary>
-        public static bool IsUniflagDevice(SerialPortInfo port)
-        {
-            if (port == null)
-            {
-                return false;
-            }
-            return port.VendorId == UsbVendorId
-                && (port.ProductId == UsbProductIdTest || port.ProductId == UsbProductIdRegistered);
-        }
-
-        /// <summary>
         /// The port name to attempt next, or null when there is nothing to
         /// try. A non-empty <paramref name="manualOverride"/> wins outright
-        /// and bypasses the VID/PID filter (the handshake still validates
-        /// it); otherwise the lowest-ordinal matching port is returned —
+        /// and bypasses enumeration entirely (the handshake still validates
+        /// it); otherwise the lowest-ordinal enumerated port is returned —
         /// with more than one device attached the choice is arbitrary but
         /// stable across scans.
         /// </summary>
-        public static string SelectCandidate(IReadOnlyList<SerialPortInfo> ports, string manualOverride)
+        public static string SelectCandidate(IReadOnlyList<string> ports, string manualOverride)
         {
             if (!string.IsNullOrWhiteSpace(manualOverride))
             {
@@ -71,15 +54,15 @@ namespace Uniflag.Device
                 return null;
             }
             string best = null;
-            foreach (SerialPortInfo port in ports)
+            foreach (string port in ports)
             {
-                if (!IsUniflagDevice(port))
+                if (string.IsNullOrEmpty(port))
                 {
                     continue;
                 }
-                if (best == null || StringComparer.OrdinalIgnoreCase.Compare(port.PortName, best) < 0)
+                if (best == null || StringComparer.OrdinalIgnoreCase.Compare(port, best) < 0)
                 {
-                    best = port.PortName;
+                    best = port;
                 }
             }
             return best;

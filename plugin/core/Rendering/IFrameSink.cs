@@ -33,4 +33,15 @@ namespace Uniflag.Rendering
         /// strictly increasing, but with gaps when the loop skips missed ticks.</param>
         void OnFrame(byte[] rgb888, long frameIndex);
     }
+
+    /// <summary>
+    /// Half-rate sampling for 30 fps sinks: forward even tick indices only.
+    /// Parity sampling is locked to the renderer clock — no second timer to
+    /// drift against — and honest under skipped ticks (a skipped even tick
+    /// is simply absent, never substituted).
+    /// </summary>
+    public static class HalfRate
+    {
+        public static bool Skip(long frameIndex) => (frameIndex & 1L) != 0L;
+    }
 }

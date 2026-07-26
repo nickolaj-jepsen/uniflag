@@ -36,10 +36,8 @@ namespace Uniflag
         private readonly Dispatcher _dispatcher;
         private readonly WriteableBitmap _bitmap;
         private readonly Action _publish; // cached delegate — no per-frame allocation
-        private readonly object _gate = new object();
-        private readonly byte[] _latest = new byte[FrameBuffer.ByteLength];
+        private readonly LatestFrameSlot _slot = new LatestFrameSlot(FrameBuffer.ByteLength);
         private readonly byte[] _staging = new byte[FrameBuffer.ByteLength];
-        private bool _updateQueued;
 
         /// <summary>
         /// Construct on the UI thread that owns <paramref name="dispatcher"/>
@@ -59,26 +57,18 @@ namespace Uniflag
         /// <inheritdoc />
         public void OnFrame(byte[] rgb888, long frameIndex)
         {
-            lock (_gate)
+            if (_slot.Post(rgb888))
             {
-                Buffer.BlockCopy(rgb888, 0, _latest, 0, FrameBuffer.ByteLength);
-                if (_updateQueued)
-                {
-                    return; // coalesce: the queued Publish will pick this frame up
-                }
-                _updateQueued = true;
+                _dispatcher.BeginInvoke(_publish, DispatcherPriority.Render);
             }
-            _dispatcher.BeginInvoke(_publish, DispatcherPriority.Render);
         }
 
         private void Publish()
         {
-            lock (_gate)
+            if (_slot.TryTake(_staging))
             {
-                Buffer.BlockCopy(_latest, 0, _staging, 0, FrameBuffer.ByteLength);
-                _updateQueued = false;
+                _bitmap.WritePixels(FullRect, _staging, Stride, 0);
             }
-            _bitmap.WritePixels(FullRect, _staging, Stride, 0);
         }
     }
 }

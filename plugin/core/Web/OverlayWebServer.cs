@@ -270,16 +270,13 @@ namespace Uniflag.Web
 
         /// <summary>
         /// <see cref="IFrameSink"/> entry point, called on the render thread
-        /// at 60 fps. Decimated to <see cref="BroadcastFps"/> by forwarding
-        /// even tick indices only: parity sampling is locked to the renderer
-        /// clock (no second timer to drift against) and stays honest when the
-        /// loop skips ticks — a skipped even tick is simply absent, never
-        /// substituted. Never blocks: per-client work is one bounded buffer
-        /// copy behind a short lock (see <see cref="OverlayClient.Post"/>).
+        /// at 60 fps and decimated to <see cref="BroadcastFps"/> via
+        /// <see cref="HalfRate"/>. Never blocks: per-client work is one
+        /// bounded buffer copy (see <see cref="OverlayClient.Post"/>).
         /// </summary>
         public void OnFrame(byte[] rgb888, long frameIndex)
         {
-            if ((frameIndex & 1L) != 0L)
+            if (HalfRate.Skip(frameIndex))
             {
                 return;
             }
@@ -461,8 +458,6 @@ namespace Uniflag.Web
         {
             internal string Method;
             internal string Path;
-            internal Dictionary<string, string> Headers;
-
         }
 
         /// <summary>
@@ -552,21 +547,10 @@ namespace Uniflag.Web
             }
             string target = parts[1];
             int query = target.IndexOf('?');
-            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 1; i < lines.Length; i++)
-            {
-                int colon = lines[i].IndexOf(':');
-                if (colon <= 0)
-                {
-                    continue;
-                }
-                headers[lines[i].Substring(0, colon).Trim()] = lines[i].Substring(colon + 1).Trim();
-            }
             return new ParsedRequest
             {
                 Method = parts[0],
                 Path = query < 0 ? target : target.Substring(0, query),
-                Headers = headers,
             };
         }
 
@@ -620,21 +604,8 @@ namespace Uniflag.Web
         /// Bounded HTTP-phase write; returns false on timeout (caller's
         /// finally closes the socket, faulting the abandoned write).
         /// </summary>
-        private static async Task<bool> WriteBoundedAsync(NetworkStream stream, byte[] data, CancellationToken ct)
-        {
-            Task write = stream.WriteAsync(data, 0, data.Length, CancellationToken.None);
-            if (!write.IsCompleted)
-            {
-                Task first = await Task.WhenAny(write, Task.Delay(HttpIoTimeoutMs, ct)).ConfigureAwait(false);
-                if (first != write)
-                {
-                    DetachedTask.Observe(write);
-                    return false;
-                }
-            }
-            await write.ConfigureAwait(false);
-            return true;
-        }
+        private static Task<bool> WriteBoundedAsync(NetworkStream stream, byte[] data, CancellationToken ct) =>
+            BoundedIo.WriteAsync(stream, data, HttpIoTimeoutMs, ct);
 
         private static byte[] LoadPageResource()
         {

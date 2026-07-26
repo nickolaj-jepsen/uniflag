@@ -17,14 +17,6 @@ namespace Uniflag.Device
         /// </summary>
         public int ScanIntervalMs { get; set; } = 2000;
 
-        /// <summary>
-        /// Backoff schedule between open attempts on one candidate before
-        /// falling back to a rescan. Windows holds the stale COM handle for
-        /// a moment after a replug, so the first opens often fail with
-        /// access-denied — retry, don't give up on the first throw.
-        /// </summary>
-        public int[] OpenRetryBackoffMs { get; set; } = { 250, 500, 1000, 2000 };
-
         /// <summary>Deadline for the HelloAck after sending Hello.</summary>
         public int HandshakeTimeoutMs { get; set; } = 2000;
 

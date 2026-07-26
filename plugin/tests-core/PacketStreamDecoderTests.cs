@@ -23,7 +23,7 @@ namespace Uniflag.Tests
             var whole = new PacketStreamDecoder();
             List<Packet> expected = whole.Feed(wire, 0, wire.Length);
             Assert.Single(expected);
-            Assert.Equal(new BrightnessPacket(200), expected[0]);
+            PacketAssert.Same(new BrightnessPacket(200), expected[0]);
 
             // Byte-at-a-time produces the identical packet sequence.
             var trickle = new PacketStreamDecoder();
@@ -32,7 +32,8 @@ namespace Uniflag.Tests
             {
                 seen.AddRange(trickle.Feed(wire, i, 1));
             }
-            Assert.Equal(expected, seen);
+            Assert.Single(seen);
+            PacketAssert.Same(expected[0], seen[0]);
         }
 
         [Fact]
@@ -63,7 +64,7 @@ namespace Uniflag.Tests
             System.Array.Copy(hello, 0, tail, 1, hello.Length);
             List<Packet> packets = decoder.Feed(tail, 0, tail.Length);
             Assert.Single(packets);
-            Assert.Equal(new HelloPacket(PacketCodec.ProtocolVersion), packets[0]);
+            PacketAssert.Same(new HelloPacket(PacketCodec.ProtocolVersion), packets[0]);
             Assert.Equal(1, decoder.DroppedSegments);
         }
 
@@ -81,7 +82,7 @@ namespace Uniflag.Tests
             seen.AddRange(decoder.Feed(corrupted, 0, corrupted.Length));
             seen.AddRange(decoder.Feed(good, 0, good.Length));
             Assert.Single(seen); // the corrupted segment vanished silently
-            Assert.Equal(new BrightnessPacket(200), seen[0]);
+            PacketAssert.Same(new BrightnessPacket(200), seen[0]);
             Assert.Equal(1, decoder.DroppedSegments);
         }
 

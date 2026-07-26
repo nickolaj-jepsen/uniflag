@@ -410,7 +410,7 @@ namespace Uniflag.Tests
             byte[] raw = RepoPaths.ReadVector(name + ".raw");
             Packet parsed = PacketCodec.ParsePacket(raw);
             Assert.False(parsed is UnknownPacket, $"{name}: expected a known packet");
-            Assert.Equal(ExpectedPacket(name), parsed);
+            PacketAssert.Same(ExpectedPacket(name), parsed);
         }
 
         [Theory]
@@ -439,7 +439,7 @@ namespace Uniflag.Tests
             AssertBytesEqual($"{name}: decoded wire body", decoded, rawFile);
 
             Packet expected = ExpectedPacket(name);
-            Assert.Equal(expected, PacketCodec.ParsePacket(decoded));
+            PacketAssert.Same(expected, PacketCodec.ParsePacket(decoded));
             Assert.Null(Classify(name, wire));
 
             AssertBytesEqual($"{name}.wire typed re-encode", expected.EncodeWire(), wire);
@@ -583,8 +583,8 @@ namespace Uniflag.Tests
             }
 
             Assert.True(recovered.Count == 2, $"expected exactly two recovered packets, got {recovered.Count}");
-            Assert.Equal(new HelloPacket(PacketCodec.ProtocolVersion), recovered[0]);
-            Assert.Equal(new BrightnessPacket(BrightnessValue), recovered[1]);
+            PacketAssert.Same(new HelloPacket(PacketCodec.ProtocolVersion), recovered[0]);
+            PacketAssert.Same(new BrightnessPacket(BrightnessValue), recovered[1]);
         }
 
         /// <summary>

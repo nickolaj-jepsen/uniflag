@@ -3,8 +3,8 @@
 // The USB device connection manager: a background worker that owns the
 // serial port exclusively and walks
 //
-//   scan → open (retry-on-open with backoff) → handshake → Brightness →
-//   streaming → (yank/fault) → back to scan
+//   scan → open → handshake → Brightness → streaming → (yank/fault) →
+//   back to scan
 //
 // per docs/protocol.md §Handshake. It doubles as the USB frame sink: it
 // registers itself with the renderer (via IFrameSinkHost) while — and only
@@ -54,17 +54,15 @@ namespace Uniflag.Device
         private bool _disposed;
 
         // TX slots: depth-one, newest-wins — a wedged write can never back
-        // up the renderer; stale frames are dropped, never queued (the
-        // OverlayClient posture). _txWake is capped at 1: posts while a
-        // send is in flight coalesce onto the already-signalled wake-up.
+        // up the renderer. _txWake is capped at 1: posts while a send is in
+        // flight coalesce onto the already-signalled wake-up.
+        private readonly LatestFrameSlot _frameSlot = new LatestFrameSlot(PacketCodec.FramePayloadLength);
         private readonly object _txGate = new object();
-        private readonly byte[] _pendingFrame = new byte[PacketCodec.FramePayloadLength];
-        private bool _hasPendingFrame;
         private byte? _pendingBrightness;
         private readonly SemaphoreSlim _txWake = new SemaphoreSlim(0, 1);
 
-        // TX-pump-only scratch: the pending frame is copied here under
-        // _txGate, then encoded and written outside the lock.
+        // TX-pump-only scratch: the slot's newest frame is taken into here,
+        // then encoded and written outside any lock.
         private readonly byte[] _txFramePixels = new byte[PacketCodec.FramePayloadLength];
 
         // Brightness rate limit (Stopwatch ticks). 0 = immediately eligible;
@@ -73,16 +71,14 @@ namespace Uniflag.Device
         private long _brightnessDueAtTicks;
 
         // Session flags. _streaming gates OnFrame; _sessionFault (first
-        // exception message wins) and _reconnectRequested end the session
-        // loops cooperatively.
+        // message wins — a fault or an override-driven reconnect request)
+        // ends the session loops cooperatively.
         private volatile bool _streaming;
         private volatile string _sessionFault;
-        private volatile bool _reconnectRequested;
 
         // Manual override (null = auto-discovery) and the published status.
         private string _manualPortOverride;
-        private DeviceStatus _status =
-            new DeviceStatus(DeviceConnectionState.Stopped, null, null, null, null, null, null);
+        private DeviceStatus _status = DeviceStatus.Stopped;
 
         /// <param name="host">Renderer sink registration seam.</param>
         /// <param name="enumerator">Platform port enumeration (scan loop only).</param>
@@ -173,7 +169,7 @@ namespace Uniflag.Device
             // the TX pump's Write faults within the connection's write
             // timeout, and every sleep is _kick-interruptible.
             worker.Join(10000);
-            PublishStatus(new DeviceStatus(DeviceConnectionState.Stopped, null, null, null, null, null, null));
+            PublishStatus(DeviceStatus.Stopped);
         }
 
         /// <summary>Stop and detach from the brightness policy.</summary>
@@ -194,15 +190,13 @@ namespace Uniflag.Device
         // IFrameSink — called on the render thread at 60 fps.
 
         /// <summary>
-        /// <see cref="IFrameSink"/> entry point. Decimated to 30 fps by
-        /// forwarding even tick indices only — parity sampling locked to the
-        /// renderer clock, no second timer to drift against, and honest
-        /// under skipped ticks (a skipped even tick is simply absent, never
-        /// substituted). Never blocks: one bounded buffer copy behind a short lock.
+        /// <see cref="IFrameSink"/> entry point. Decimated to 30 fps via
+        /// <see cref="HalfRate"/>; never blocks (see
+        /// <see cref="LatestFrameSlot.Post"/>).
         /// </summary>
         public void OnFrame(byte[] rgb888, long frameIndex)
         {
-            if ((frameIndex & 1L) != 0L)
+            if (HalfRate.Skip(frameIndex))
             {
                 return;
             }
@@ -210,12 +204,10 @@ namespace Uniflag.Device
             {
                 return; // no session — don't overwrite the slot pointlessly
             }
-            lock (_txGate)
+            if (_frameSlot.Post(rgb888))
             {
-                Buffer.BlockCopy(rgb888, 0, _pendingFrame, 0, PacketCodec.FramePayloadLength);
-                _hasPendingFrame = true;
+                ReleaseTxWake();
             }
-            ReleaseTxWake();
         }
 
         // Connection worker.
@@ -248,10 +240,18 @@ namespace Uniflag.Device
                 return;
             }
 
-            PublishConnecting(candidate);
-            ISerialConnection connection = OpenWithRetry(candidate);
-            if (connection == null)
+            PublishStatus(DeviceStatus.Connecting(candidate));
+            ISerialConnection connection;
+            try
             {
+                connection = _factory.Open(candidate);
+            }
+            catch (Exception ex)
+            {
+                // Expected right after a replug: Windows briefly holds the
+                // stale COM handle and throws access-denied. The next scan
+                // pass re-nominates the same port and retries.
+                PublishScanning("could not open " + candidate + ": " + ex.Message);
                 WaitKick(_options.ScanIntervalMs);
                 return;
             }
@@ -281,7 +281,7 @@ namespace Uniflag.Device
                     case HandshakeOutcome.Refused:
                         // Refuse-with-message: never drive the device, park
                         // the message in the status, retry slowly.
-                        PublishRefused(candidate, result.Message);
+                        PublishStatus(DeviceStatus.Refused(candidate, result.Message));
                         WaitKick(_options.RefusedRetryMs);
                         return;
                     case HandshakeOutcome.NoAck:
@@ -332,38 +332,6 @@ namespace Uniflag.Device
             }
         }
 
-        /// <summary>
-        /// Open with the configured backoff schedule. Windows holds the
-        /// stale COM handle briefly after a replug, so early attempts often
-        /// throw access-denied — that is expected, not fatal.
-        /// </summary>
-        private ISerialConnection OpenWithRetry(string portName)
-        {
-            Exception last = null;
-            int[] backoff = _options.OpenRetryBackoffMs;
-            for (int attempt = 0; attempt <= backoff.Length; attempt++)
-            {
-                if (_stopRequested)
-                {
-                    return null;
-                }
-                try
-                {
-                    return _factory.Open(portName);
-                }
-                catch (Exception ex)
-                {
-                    last = ex;
-                }
-                if (attempt < backoff.Length && WaitKick(backoff[attempt]))
-                {
-                    return null;
-                }
-            }
-            PublishScanning("could not open " + portName + ": " + last?.Message);
-            return null;
-        }
-
         // Streaming session.
 
         /// <summary>
@@ -376,14 +344,13 @@ namespace Uniflag.Device
         private void StreamSession(ISerialConnection connection, HandshakeResult handshake, string portName)
         {
             _sessionFault = null;
-            _reconnectRequested = false;
             // Read outside _txGate: the policy raises Changed while holding
             // its own lock and the handler takes _txGate, so the lock order
             // is policy-gate → _txGate — never nest the other way around.
             byte connectBrightness = _brightness.Current;
+            _frameSlot.Clear(); // a stale frame from a previous session must not leak
             lock (_txGate)
             {
-                _hasPendingFrame = false; // a stale frame from a previous session must not leak
                 _pendingBrightness = connectBrightness;
             }
             Interlocked.Exchange(ref _brightnessDueAtTicks, 0);
@@ -393,7 +360,7 @@ namespace Uniflag.Device
             _host.AddSink(this);
             // Published only after the sink is live: a Streaming status
             // always implies frames are being accepted and delivered.
-            PublishStreaming(portName, handshake.Ack);
+            PublishStatus(DeviceStatus.Streaming(portName, handshake.Ack));
             var rx = new Thread(() => RxLoop(connection, handshake.Decoder, handshake.TrailingPackets))
             {
                 IsBackground = true,
@@ -424,7 +391,7 @@ namespace Uniflag.Device
         /// </summary>
         private void TxLoop(ISerialConnection connection, string portName)
         {
-            while (!_stopRequested && _sessionFault == null && !_reconnectRequested)
+            while (!_stopRequested && _sessionFault == null)
             {
                 // The idle poll bounds how long a rate-limited brightness
                 // value or a stop request can go unnoticed with no frames.
@@ -441,12 +408,11 @@ namespace Uniflag.Device
                 if (overridePort != null
                     && !string.Equals(portName, overridePort, StringComparison.OrdinalIgnoreCase))
                 {
-                    _reconnectRequested = true;
+                    RecordSessionFault("port override changed to " + overridePort);
                     return;
                 }
 
                 byte? brightness = null;
-                bool hasFrame;
                 lock (_txGate)
                 {
                     if (_pendingBrightness.HasValue && BrightnessSendDue())
@@ -454,13 +420,8 @@ namespace Uniflag.Device
                         brightness = _pendingBrightness;
                         _pendingBrightness = null;
                     }
-                    hasFrame = _hasPendingFrame;
-                    if (hasFrame)
-                    {
-                        Buffer.BlockCopy(_pendingFrame, 0, _txFramePixels, 0, PacketCodec.FramePayloadLength);
-                        _hasPendingFrame = false;
-                    }
                 }
+                bool hasFrame = _frameSlot.TryTake(_txFramePixels);
 
                 try
                 {
@@ -516,7 +477,7 @@ namespace Uniflag.Device
                 }
             }
             var buffer = new byte[4096];
-            while (!_stopRequested && _sessionFault == null && !_reconnectRequested)
+            while (!_stopRequested && _sessionFault == null)
             {
                 int n;
                 try
@@ -602,32 +563,7 @@ namespace Uniflag.Device
 
         private void PublishScanning(string lastError)
         {
-            PublishStatus(new DeviceStatus(
-                DeviceConnectionState.Scanning, null, null, null, null, null, lastError));
-        }
-
-        private void PublishConnecting(string portName)
-        {
-            PublishStatus(new DeviceStatus(
-                DeviceConnectionState.Connecting, portName, null, null, null, null, null));
-        }
-
-        private void PublishRefused(string portName, string message)
-        {
-            PublishStatus(new DeviceStatus(
-                DeviceConnectionState.Refused, portName, null, null, null, null, message));
-        }
-
-        private void PublishStreaming(string portName, HelloAckPacket ack)
-        {
-            PublishStatus(new DeviceStatus(
-                DeviceConnectionState.Streaming,
-                portName,
-                ack.FwVersionString,
-                ack.ProtocolVersion,
-                ack.Width,
-                ack.Height,
-                null));
+            PublishStatus(DeviceStatus.Scanning(lastError));
         }
     }
 }

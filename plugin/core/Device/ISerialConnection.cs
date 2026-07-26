@@ -11,9 +11,6 @@ namespace Uniflag.Device
     /// </summary>
     public interface ISerialConnection : IDisposable
     {
-        /// <summary>The port this connection was opened on, e.g. <c>COM5</c>.</summary>
-        string PortName { get; }
-
         /// <summary>
         /// Read available bytes. <b>Bounded-block contract:</b> blocks at
         /// most a short implementation-defined interval and returns 0 when
@@ -42,8 +39,8 @@ namespace Uniflag.Device
         /// <summary>
         /// Open <paramref name="portName"/> exclusively. Throws on failure —
         /// including the access-denied window right after a replug, while
-        /// Windows still holds the stale COM handle (callers retry with
-        /// backoff).
+        /// Windows still holds the stale COM handle (the scan loop retries
+        /// on its next pass).
         /// </summary>
         ISerialConnection Open(string portName);
     }

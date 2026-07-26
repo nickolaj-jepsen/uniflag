@@ -41,8 +41,7 @@ namespace Uniflag.Tests
 
             internal Harness(DeviceConnectionOptions options = null)
             {
-                Enumerator.SetPorts(new SerialPortInfo(
-                    DevicePort, DeviceDiscovery.UsbVendorId, DeviceDiscovery.UsbProductIdTest));
+                Enumerator.SetPorts(DevicePort);
                 Manager = new DeviceConnectionManager(
                     Host, Enumerator, Factory, Policy, options ?? FastOptions());
             }
@@ -59,7 +58,6 @@ namespace Uniflag.Tests
             return new DeviceConnectionOptions
             {
                 ScanIntervalMs = 10,
-                OpenRetryBackoffMs = new[] { 5, 5 },
                 HandshakeTimeoutMs = 2000,
                 RefusedRetryMs = 20,
                 TxIdlePollMs = 10,
@@ -69,7 +67,7 @@ namespace Uniflag.Tests
 
         private static FakeConnection AnsweringConnection()
         {
-            var connection = new FakeConnection(DevicePort);
+            var connection = new FakeConnection();
             connection.EnqueueRx(HelloAckWire());
             return connection;
         }
@@ -113,8 +111,8 @@ namespace Uniflag.Tests
                 // Wire order is the protocol's handshake order: Hello, then
                 // Brightness (the persisted value), then Frames.
                 List<Packet> packets = TxPackets(connection);
-                Assert.Equal(new HelloPacket(PacketCodec.ProtocolVersion), packets[0]);
-                Assert.Equal(new BrightnessPacket(80), packets[1]);
+                PacketAssert.Same(new HelloPacket(PacketCodec.ProtocolVersion), packets[0]);
+                PacketAssert.Same(new BrightnessPacket(80), packets[1]);
                 Assert.IsType<FramePacket>(packets[2]);
 
                 DeviceStatus status = h.Manager.Status;
@@ -156,7 +154,7 @@ namespace Uniflag.Tests
         {
             using (var h = new Harness())
             {
-                var connection = new FakeConnection(DevicePort);
+                var connection = new FakeConnection();
                 // The wedged-across-sessions packet: a brightness-up press
                 // delivered ahead of the ack.
                 connection.EnqueueRx(ButtonEventWire(0, 0));
@@ -186,7 +184,7 @@ namespace Uniflag.Tests
         {
             using (var h = new Harness())
             {
-                var connection = new FakeConnection(DevicePort);
+                var connection = new FakeConnection();
                 connection.EnqueueRx(HelloAckWire(protocolVersion: 2));
                 h.Factory.EnqueueConnection(connection);
                 h.Manager.Start();
@@ -224,7 +222,7 @@ namespace Uniflag.Tests
         {
             using (var h = new Harness())
             {
-                var connection = new FakeConnection(DevicePort);
+                var connection = new FakeConnection();
                 connection.EnqueueRx(HelloAckWire(width: 16, height: 16));
                 h.Factory.EnqueueConnection(connection);
                 h.Manager.Start();
@@ -268,8 +266,8 @@ namespace Uniflag.Tests
                 // Full handshake sequence again on the new session — the
                 // device never assumes a value survives a reconnect.
                 List<Packet> packets = TxPackets(second);
-                Assert.Equal(new HelloPacket(PacketCodec.ProtocolVersion), packets[0]);
-                Assert.Equal(new BrightnessPacket(80), packets[1]);
+                PacketAssert.Same(new HelloPacket(PacketCodec.ProtocolVersion), packets[0]);
+                PacketAssert.Same(new BrightnessPacket(80), packets[1]);
                 Assert.True(first.Disposed, "the dead connection must be closed");
             }
         }
@@ -357,19 +355,20 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void OpenRetriesWithBackoffThroughTheStaleHandleWindow()
+        public void OpenFailureFallsBackToTheNextScanPass()
         {
             using (var h = new Harness())
             {
                 // Windows-replug shape: access denied twice while the stale
-                // COM handle lingers, then the open succeeds.
+                // COM handle lingers, then the open succeeds. The scan loop
+                // re-nominates the same port each pass — no inner retry.
                 h.Factory.EnqueueFailure("Access to the port 'COM7' is denied.");
                 h.Factory.EnqueueFailure("Access to the port 'COM7' is denied.");
                 h.Factory.EnqueueConnection(AnsweringConnection());
                 h.Manager.Start();
                 WaitUntil(
                     () => h.Manager.Status.State == DeviceConnectionState.Streaming,
-                    "streaming after open retries");
+                    "streaming after the stale-handle window");
                 Assert.True(h.Factory.OpenAttempts >= 3, "expected at least three open attempts");
                 Assert.All(h.Factory.OpenedPorts, port => Assert.Equal(DevicePort, port));
             }
@@ -380,9 +379,10 @@ namespace Uniflag.Tests
         {
             using (var h = new Harness())
             {
-                // Discovery has nothing to offer: only a foreign device.
-                h.Enumerator.SetPorts(new SerialPortInfo("COM3", 0x0403, 0x6001));
-                var connection = new FakeConnection("COM9");
+                // Discovery has nothing to offer (the enumerator filters on
+                // the USB identity, so a foreign device never even appears).
+                h.Enumerator.SetPorts();
+                var connection = new FakeConnection();
                 connection.EnqueueRx(HelloAckWire());
                 h.Factory.EnqueueConnection(connection);
 
@@ -413,7 +413,7 @@ namespace Uniflag.Tests
                     () => h.Manager.Status.State == DeviceConnectionState.Streaming,
                     "the initial streaming session");
 
-                var second = new FakeConnection("COM9");
+                var second = new FakeConnection();
                 second.EnqueueRx(HelloAckWire());
                 h.Factory.EnqueueConnection(second);
                 h.Manager.ManualPortOverride = "COM9";
@@ -440,14 +440,14 @@ namespace Uniflag.Tests
                 // Apply happens inside the Connecting window (in production
                 // that window is multi-second: open-retry backoff plus the
                 // handshake deadline).
-                var stale = new FakeConnection(DevicePort);
+                var stale = new FakeConnection();
                 h.Factory.EnqueueConnection(stale);
                 h.Manager.Start();
                 WaitUntil(
                     () => h.Manager.Status.State == DeviceConnectionState.Connecting,
                     "the connect window on the auto-discovered port");
 
-                var overrideConnection = new FakeConnection("COM9");
+                var overrideConnection = new FakeConnection();
                 overrideConnection.EnqueueRx(HelloAckWire());
                 h.Factory.EnqueueConnection(overrideConnection);
                 h.Manager.ManualPortOverride = "COM9";

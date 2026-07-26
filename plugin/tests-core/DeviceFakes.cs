@@ -35,14 +35,8 @@ namespace Uniflag.Tests
         private readonly ManualResetEventSlim _rxAvailable = new ManualResetEventSlim(false);
         private int _rxChunkOffset;
         private volatile bool _failReads;
-        private volatile bool _failWrites;
         private volatile bool _disposed;
         private int _writeAttempts;
-
-        internal FakeConnection(string portName = "COM7")
-        {
-            PortName = portName;
-        }
 
         /// <summary>
         /// When non-null, every write blocks on this gate first (up to 5 s,
@@ -50,8 +44,6 @@ namespace Uniflag.Tests
         /// writes flow.
         /// </summary>
         internal ManualResetEventSlim WriteGate { get; set; }
-
-        public string PortName { get; }
 
         internal bool Disposed => _disposed;
 
@@ -84,12 +76,6 @@ namespace Uniflag.Tests
         {
             _failReads = true;
             _rxAvailable.Set();
-        }
-
-        /// <summary>Subsequent writes throw (simulated yank on the TX path).</summary>
-        internal void FailWrites()
-        {
-            _failWrites = true;
         }
 
         public int Read(byte[] buffer, int offset, int count)
@@ -141,7 +127,7 @@ namespace Uniflag.Tests
                 // refuses progress faults rather than hanging forever.
                 throw new IOException("simulated write timeout");
             }
-            if (_failWrites || _disposed)
+            if (_disposed)
             {
                 throw new IOException("simulated write failure");
             }
@@ -233,17 +219,17 @@ namespace Uniflag.Tests
     /// <summary>Injected port enumeration for the discovery scan.</summary>
     internal sealed class FakePortEnumerator : IPortEnumerator
     {
-        private volatile SerialPortInfo[] _ports = Array.Empty<SerialPortInfo>();
+        private volatile string[] _ports = Array.Empty<string>();
         private int _scans;
 
         internal int Scans => Volatile.Read(ref _scans);
 
-        internal void SetPorts(params SerialPortInfo[] ports)
+        internal void SetPorts(params string[] ports)
         {
             _ports = ports;
         }
 
-        public IReadOnlyList<SerialPortInfo> EnumeratePorts()
+        public IReadOnlyList<string> EnumeratePorts()
         {
             Interlocked.Increment(ref _scans);
             return _ports;

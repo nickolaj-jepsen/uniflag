@@ -50,10 +50,10 @@ namespace Uniflag.Device
             string.Format(CultureInfo.InvariantCulture, "VID_{0:X4}&PID_{1:X4}", vid, pid);
 
         /// <inheritdoc />
-        public IReadOnlyList<SerialPortInfo> EnumeratePorts()
+        public IReadOnlyList<string> EnumeratePorts()
         {
             var present = new HashSet<string>(SerialPort.GetPortNames(), StringComparer.OrdinalIgnoreCase);
-            var found = new List<SerialPortInfo>();
+            var found = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             using (RegistryKey usb = Registry.LocalMachine.OpenSubKey(UsbEnumKeyPath))
@@ -64,37 +64,34 @@ namespace Uniflag.Device
                 }
                 foreach (string deviceKeyName in usb.GetSubKeyNames())
                 {
-                    if (!MatchesUniflagIdentity(deviceKeyName, out ushort pid))
+                    if (!MatchesUniflagIdentity(deviceKeyName))
                     {
                         continue;
                     }
-                    CollectInstances(usb, deviceKeyName, pid, present, seen, found);
+                    CollectInstances(usb, deviceKeyName, present, seen, found);
                 }
             }
             return found;
         }
 
-        private static bool MatchesUniflagIdentity(string deviceKeyName, out ushort pid)
+        private static bool MatchesUniflagIdentity(string deviceKeyName)
         {
             for (int i = 0; i < KeyPrefixes.Length; i++)
             {
                 if (deviceKeyName.StartsWith(KeyPrefixes[i], StringComparison.OrdinalIgnoreCase))
                 {
-                    pid = i == 0 ? DeviceDiscovery.UsbProductIdTest : DeviceDiscovery.UsbProductIdRegistered;
                     return true;
                 }
             }
-            pid = 0;
             return false;
         }
 
         private static void CollectInstances(
             RegistryKey usb,
             string deviceKeyName,
-            ushort pid,
             HashSet<string> present,
             HashSet<string> seen,
-            List<SerialPortInfo> found)
+            List<string> found)
         {
             using (RegistryKey device = usb.OpenSubKey(deviceKeyName))
             {
@@ -115,7 +112,7 @@ namespace Uniflag.Device
                     {
                         continue;
                     }
-                    found.Add(new SerialPortInfo(portName, DeviceDiscovery.UsbVendorId, pid));
+                    found.Add(portName);
                 }
             }
         }

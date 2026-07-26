@@ -11,6 +11,7 @@
 // its siblings.
 
 using System;
+using System.IO;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,17 +32,12 @@ namespace Uniflag.Web
         private readonly Action<OverlayClient> _onGone;
         private readonly CancellationTokenSource _cts;
 
-        // Depth-one outbound queue: _pending always holds the newest posted
-        // frame. Frames posted while a send is in flight overwrite it and
-        // ride the already-signalled wake-up (newest-frame coalescing —
-        // stale frames are dropped, never queued).
-        private readonly object _gate = new object();
-        private readonly byte[] _pending = new byte[FrameBuffer.ByteLength];
-        private bool _hasPending;
+        // Depth-one outbound queue (see LatestFrameSlot) plus its wake-up.
+        private readonly LatestFrameSlot _slot = new LatestFrameSlot(FrameBuffer.ByteLength);
         private readonly SemaphoreSlim _wake = new SemaphoreSlim(0, 1);
 
-        // Send snapshot: _pending is copied here under the lock so the write
-        // is not holding it. The send loop is the only writer on this stream.
+        // Send snapshot: the slot's newest frame is taken into here so the
+        // write is not holding its lock. The send loop is the only writer.
         private readonly byte[] _wire = new byte[FrameBuffer.ByteLength];
 
         private int _gone;
@@ -62,14 +58,9 @@ namespace Uniflag.Web
         /// </summary>
         internal void Post(byte[] rgb888)
         {
-            lock (_gate)
+            if (!_slot.Post(rgb888))
             {
-                Buffer.BlockCopy(rgb888, 0, _pending, 0, FrameBuffer.ByteLength);
-                if (_hasPending)
-                {
-                    return; // coalesce: the queued wake-up sends this frame instead
-                }
-                _hasPending = true;
+                return; // coalesce: the queued wake-up sends this frame instead
             }
             try
             {
@@ -77,8 +68,8 @@ namespace Uniflag.Web
             }
             catch (SemaphoreFullException)
             {
-                // _hasPending makes this unreachable; guarded so the render
-                // thread can never be taken down from here.
+                // The slot's pending flag makes this unreachable; guarded so
+                // the render thread can never be taken down from here.
             }
         }
 
@@ -122,14 +113,14 @@ namespace Uniflag.Web
                 while (!ct.IsCancellationRequested)
                 {
                     await _wake.WaitAsync(ct).ConfigureAwait(false);
-                    lock (_gate)
+                    if (!_slot.TryTake(_wire))
                     {
-                        Buffer.BlockCopy(_pending, 0, _wire, 0, FrameBuffer.ByteLength);
-                        _hasPending = false;
+                        continue;
                     }
-                    if (!await WriteBoundedAsync(_wire, ct).ConfigureAwait(false))
+                    if (!await BoundedIo.WriteAsync(_stream, _wire, SendTimeoutMs, ct).ConfigureAwait(false))
                     {
-                        break; // stalled beyond the bound; WriteBoundedAsync dropped us
+                        Drop(); // closing the socket faults the abandoned write
+                        break;
                     }
                 }
             }
@@ -141,30 +132,6 @@ namespace Uniflag.Web
             {
                 Drop();
             }
-        }
-
-        /// <summary>
-        /// Write one whole frame; false (after aborting) if the peer refuses
-        /// progress for <see cref="SendTimeoutMs"/>. net48 writes ignore
-        /// cancellation once started, so closing the socket is the only
-        /// reliable unblock — and aborting rather than resuming is what keeps
-        /// the unframed stream safe.
-        /// </summary>
-        private async Task<bool> WriteBoundedAsync(byte[] buffer, CancellationToken ct)
-        {
-            Task write = _stream.WriteAsync(buffer, 0, buffer.Length, CancellationToken.None);
-            if (!write.IsCompleted)
-            {
-                Task first = await Task.WhenAny(write, Task.Delay(SendTimeoutMs, ct)).ConfigureAwait(false);
-                if (first != write)
-                {
-                    DetachedTask.Observe(write);
-                    Drop(); // closing the socket faults the pending write
-                    return false;
-                }
-            }
-            await write.ConfigureAwait(false); // propagate socket faults
-            return true;
         }
 
         // Receive side
@@ -215,6 +182,32 @@ namespace Uniflag.Web
                 CancellationToken.None,
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
+        }
+    }
+
+    /// <summary>
+    /// The one bounded-write helper both overlay layers use: write the whole
+    /// buffer or give up. False when the stream refuses progress for
+    /// <paramref name="timeoutMs"/> — the abandoned write is observed, and
+    /// the caller must close the socket to fault it, because net48 writes
+    /// ignore cancellation once started.
+    /// </summary>
+    internal static class BoundedIo
+    {
+        internal static async Task<bool> WriteAsync(Stream stream, byte[] data, int timeoutMs, CancellationToken ct)
+        {
+            Task write = stream.WriteAsync(data, 0, data.Length, CancellationToken.None);
+            if (!write.IsCompleted)
+            {
+                Task first = await Task.WhenAny(write, Task.Delay(timeoutMs, ct)).ConfigureAwait(false);
+                if (first != write)
+                {
+                    DetachedTask.Observe(write);
+                    return false;
+                }
+            }
+            await write.ConfigureAwait(false); // propagate socket faults
+            return true;
         }
     }
 }

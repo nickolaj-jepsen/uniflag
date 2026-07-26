@@ -12,11 +12,8 @@ namespace Uniflag.Protocol
     /// payload layout; wrong-length payloads for known types never
     /// construct a packet (<see cref="PacketCodec.ParsePacket(byte[])"/>
     /// throws <see cref="ProtocolErrorKind.BadLength"/>).
-    ///
-    /// Packets compare by value (payload bytes included) so conformance
-    /// tests can assert decoded == expected directly.
     /// </summary>
-    public abstract class Packet : IEquatable<Packet>
+    public abstract class Packet
     {
         /// <summary>The wire type byte of this packet.</summary>
         public abstract byte TypeByte { get; }
@@ -40,36 +37,6 @@ namespace Uniflag.Protocol
         {
             return PacketCodec.EncodeWire(TypeByte, BuildPayload());
         }
-
-        public abstract bool Equals(Packet other);
-
-        public override bool Equals(object obj)
-        {
-            return Equals(obj as Packet);
-        }
-
-        public abstract override int GetHashCode();
-
-        /// <summary>Sequence equality for payload byte arrays (both non-null).</summary>
-        protected static bool BytesEqual(byte[] a, byte[] b)
-        {
-            if (ReferenceEquals(a, b))
-            {
-                return true;
-            }
-            if (a.Length != b.Length)
-            {
-                return false;
-            }
-            for (int i = 0; i < a.Length; i++)
-            {
-                if (a[i] != b[i])
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
     }
 
     /// <summary>
@@ -91,16 +58,6 @@ namespace Uniflag.Protocol
         public override byte[] BuildPayload()
         {
             return new[] { ProtocolVersion };
-        }
-
-        public override bool Equals(Packet other)
-        {
-            return other is HelloPacket p && p.ProtocolVersion == ProtocolVersion;
-        }
-
-        public override int GetHashCode()
-        {
-            return (TypeByte << 8) ^ ProtocolVersion;
         }
     }
 
@@ -139,21 +96,6 @@ namespace Uniflag.Protocol
         {
             return Pixels;
         }
-
-        public override bool Equals(Packet other)
-        {
-            return other is FramePacket p && BytesEqual(p.Pixels, Pixels);
-        }
-
-        public override int GetHashCode()
-        {
-            int hash = TypeByte;
-            foreach (byte b in Pixels)
-            {
-                hash = hash * 31 + b;
-            }
-            return hash;
-        }
     }
 
     /// <summary>
@@ -176,16 +118,6 @@ namespace Uniflag.Protocol
         public override byte[] BuildPayload()
         {
             return new[] { Value };
-        }
-
-        public override bool Equals(Packet other)
-        {
-            return other is BrightnessPacket p && p.Value == Value;
-        }
-
-        public override int GetHashCode()
-        {
-            return (TypeByte << 8) ^ Value;
         }
     }
 
@@ -243,25 +175,6 @@ namespace Uniflag.Protocol
             Array.Copy(FwVersion, 0, payload, PacketCodec.HelloAckMinPayloadLength, FwVersion.Length);
             return payload;
         }
-
-        public override bool Equals(Packet other)
-        {
-            return other is HelloAckPacket p
-                && p.ProtocolVersion == ProtocolVersion
-                && p.Width == Width
-                && p.Height == Height
-                && BytesEqual(p.FwVersion, FwVersion);
-        }
-
-        public override int GetHashCode()
-        {
-            int hash = (TypeByte << 24) ^ (ProtocolVersion << 16) ^ (Width << 8) ^ Height;
-            foreach (byte b in FwVersion)
-            {
-                hash = hash * 31 + b;
-            }
-            return hash;
-        }
     }
 
     /// <summary>
@@ -288,16 +201,6 @@ namespace Uniflag.Protocol
         public override byte[] BuildPayload()
         {
             return new[] { Button, Kind };
-        }
-
-        public override bool Equals(Packet other)
-        {
-            return other is ButtonEventPacket p && p.Button == Button && p.Kind == Kind;
-        }
-
-        public override int GetHashCode()
-        {
-            return (TypeByte << 16) ^ (Button << 8) ^ Kind;
         }
     }
 
@@ -329,21 +232,6 @@ namespace Uniflag.Protocol
         public override byte[] BuildPayload()
         {
             return Payload;
-        }
-
-        public override bool Equals(Packet other)
-        {
-            return other is UnknownPacket p && p.TypeByte == TypeByte && BytesEqual(p.Payload, Payload);
-        }
-
-        public override int GetHashCode()
-        {
-            int hash = TypeByte;
-            foreach (byte b in Payload)
-            {
-                hash = hash * 31 + b;
-            }
-            return hash;
         }
     }
 }

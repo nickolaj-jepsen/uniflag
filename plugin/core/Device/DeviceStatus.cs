@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 
+using Uniflag.Protocol;
+
 namespace Uniflag.Device
 {
     /// <summary>Connection lifecycle states of <see cref="DeviceConnectionManager"/>.</summary>
@@ -55,7 +57,7 @@ namespace Uniflag.Device
         /// </summary>
         public string LastError { get; }
 
-        public DeviceStatus(
+        private DeviceStatus(
             DeviceConnectionState state,
             string portName,
             string firmwareVersion,
@@ -72,6 +74,33 @@ namespace Uniflag.Device
             PanelHeight = panelHeight;
             LastError = lastError;
         }
+
+        /// <summary>Not started, or stopped (plugin End).</summary>
+        public static DeviceStatus Stopped { get; } =
+            new DeviceStatus(DeviceConnectionState.Stopped, null, null, null, null, null, null);
+
+        /// <summary>Scanning, with the most recent failure text (may be null).</summary>
+        public static DeviceStatus Scanning(string lastError) =>
+            new DeviceStatus(DeviceConnectionState.Scanning, null, null, null, null, null, lastError);
+
+        /// <summary>Candidate found; opening and handshaking.</summary>
+        public static DeviceStatus Connecting(string portName) =>
+            new DeviceStatus(DeviceConnectionState.Connecting, portName, null, null, null, null, null);
+
+        /// <summary>Refuse-with-message: the mismatch text, verbatim.</summary>
+        public static DeviceStatus Refused(string portName, string message) =>
+            new DeviceStatus(DeviceConnectionState.Refused, portName, null, null, null, null, message);
+
+        /// <summary>Streaming, with the identity the HelloAck carried.</summary>
+        public static DeviceStatus Streaming(string portName, HelloAckPacket ack) =>
+            new DeviceStatus(
+                DeviceConnectionState.Streaming,
+                portName,
+                ack.FwVersionString,
+                ack.ProtocolVersion,
+                ack.Width,
+                ack.Height,
+                null);
 
         /// <summary>
         /// Human-readable line for the settings tab. Never throws; never
