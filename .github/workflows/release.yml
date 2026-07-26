@@ -47,17 +47,14 @@ jobs:
         with:
           tool: just
 
+      # Build only: the test suite already ran in ci.yml on the same commit
+      # (tags are cut from main). The build is what produces the artifact —
+      # artifacts don't cross workflow boundaries.
       - name: Build plugin
         shell: pwsh
         env:
           UNIFLAG_SIMHUB_DIR: ${{ steps.simhub.outputs.refs-dir }}
         run: just plugin-build
-
-      - name: Test plugin
-        shell: pwsh
-        env:
-          UNIFLAG_SIMHUB_DIR: ${{ steps.simhub.outputs.refs-dir }}
-        run: just plugin-test
 
       # Path is the single DLL, not the bin directory: reference assemblies
       # are Private=false so they never land in bin, but uploading only the
