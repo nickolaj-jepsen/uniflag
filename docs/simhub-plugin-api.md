@@ -178,8 +178,8 @@ reference them through the MSBuild property `$(SimHubDir)` (defaults to
 
 Minimal reference set: `SimHub.Plugins.dll`, `GameReaderCommon.dll`,
 `log4net.dll` (2.0.15 at 9.11.21 — reference without a version pin; the
-SDK demo's 2.0.8 pin is stale and non-binding). CI also stages
-`SimHub.Logging.dll` beside them to avoid resolve warnings.
+SDK demo's 2.0.8 pin is stale and non-binding), and `SimHub.Logging.dll`
+(`SimHub.Logging.Current` is the plugin-facing log).
 
 - `plugin/simhub`: references use `Private=false` so the build output
   contains only `UniflagPlugin.dll` (the release-zip audit relies on
@@ -201,8 +201,9 @@ version: 6.4.3"). The working path — proven by other plugin repos on
 (launch via `Start-Process -Wait`; the setup exe is a GUI-subsystem
 app). .NET Framework 4.8 is preinstalled on `windows-latest`, so no
 prerequisite dialog fires. CI caches only the four staged reference
-DLLs (~10 MB) keyed by the pinned version — see the `plugin` job in
-`.github/workflows/ci.yml`.
+DLLs (~10 MB) keyed by the pinned version — the acquisition lives in
+the composite action `.github/actions/simhub-refs/action.yml`, shared
+by the CI plugin job and the release job.
 
 ## Build notes (SDK-style csproj targeting net48)
 

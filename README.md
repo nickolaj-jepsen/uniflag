@@ -47,8 +47,7 @@ install both from the same zip. Full guide:
 - `overlay/` — the browser virtual-panel page + the DashStudio dash file
 - `simhub/` — end-user plugin install / setup / troubleshooting guide
 - `testdata/` — golden fixtures: the cross-language protocol byte
-  vectors (the Rust and C# suites both verify against them), plus
-  C#-only adapter timeline scripts
+  vectors (the Rust and C# suites both verify against them)
 - `docs/` — the wire-protocol and flag-grammar specifications, SimHub and
   Cosmic Unicorn references ([index](docs/README.md))
 - `packaging/` — release-zip assembly (`package.ps1`) and the `INSTALL.md`
