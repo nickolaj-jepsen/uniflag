@@ -1,18 +1,25 @@
 [workspace]
 resolver = "2"
-members = ["proto", "render", "firmware", "sim"]
+members = ["proto", "screens", "firmware", "cli"]
 
 # Default to building only the host-side crates so workspace-wide cargo
 # commands don't try to cross-compile firmware to thumbv6m without a target
 # arg. Use `cd firmware && cargo ...` (or `cargo ... -p uniflag-firmware
 # --target thumbv6m-none-eabi`) for the firmware crate.
-default-members = ["proto", "render", "sim"]
+#
+# `screens` is firmware code but builds for the host on purpose — that is
+# how the §7a fallback screen gets tested at all (the firmware binary has
+# `test = false`).
+default-members = ["proto", "screens", "cli"]
 
 [workspace.package]
+# Every crate inherits this with `version.workspace = true`. A release bump
+# is this line plus plugin/Directory.Build.props (the tag check reads both).
+version = "2.0.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 authors = ["Nickolaj Jepsen <nickolaj1177@gmail.com>"]
-repository = "https://github.com/nickolaj1177/uniflag"
+repository = "https://github.com/nickolaj-jepsen/uniflag"
 
 [workspace.lints.clippy]
 unwrap_used = "warn"

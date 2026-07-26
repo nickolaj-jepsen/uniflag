@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Everything in the plugin that does not need SimHub, WPF or a Windows
+    API: the renderer, the wire codec, the device connection manager, the
+    overlay web server and the telemetry adapters.
+
+    Split out for ONE reason — so it can be tested without Windows, a .NET
+    Framework targeting pack, or SimHub's proprietary reference assemblies,
+    which puts it in the gating CI leg instead of the isolated Windows one.
+    The files next door in ..\simhub\ are exactly those that name a type
+    absent off Windows; each sits behind an interface declared here
+    (ISerialConnection, IPortEnumerator, IFrameSink) or fills a plain DTO
+    declared here (TelemetrySnapshot).
+
+    This assembly is NEVER shipped. UniflagPlugin.csproj compiles these same
+    source files directly (<Compile Include="..\core\**"/>) rather than
+    referencing the built DLL, so the release zip still contains exactly one
+    DLL and packaging/package.ps1's only-one-DLL audit is untouched.
+  -->
+
+  <PropertyGroup>
+    <!-- netstandard2.0 is the common denominator: consumable by the net48
+         plugin and by the net8.0 test project. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <RootNamespace>Uniflag</RootNamespace>
+    <AssemblyName>Uniflag.Core</AssemblyName>
+    <!-- Version comes from plugin/Directory.Build.props. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Uniflag.Core.Tests" />
+    <InternalsVisibleTo Include="Uniflag.Tools" />
+    <!-- The net48 plugin compiles these sources into its own assembly, so
+         the existing UniflagPlugin.Tests grant has to survive the move. -->
+    <InternalsVisibleTo Include="UniflagPlugin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Embedded in BOTH assemblies on purpose: OverlayWebServer resolves it
+         from its own assembly — Uniflag.Core.dll under test, UniflagPlugin.dll
+         when shipped. LogicalName is pinned: it is the manifest name
+         OverlayWebServer.PageResourceName looks up. -->
+    <EmbeddedResource Include="..\..\overlay\index.html" LogicalName="Uniflag.Web.index.html" />
+  </ItemGroup>
+
+</Project>

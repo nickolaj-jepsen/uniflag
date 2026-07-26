@@ -53,16 +53,8 @@ use embassy_rp::Peri;
 use embassy_time::Duration;
 use static_cell::ConstStaticCell;
 
-// =============================================================================
-// Public constants
-// =============================================================================
-
 pub const WIDTH: usize = 32;
 pub const HEIGHT: usize = 32;
-
-// =============================================================================
-// Bitstream shape (private)
-// =============================================================================
 
 const ROW_COUNT: usize = 16;
 const BCD_FRAME_COUNT: usize = 14;
@@ -75,10 +67,6 @@ const PIXEL_COUNT_PER_SCAN: u8 = 64;
 // `Display::new`. Both the chain setup and `present()` reach for them.
 const CH_DATA: usize = 0;
 const CH_CTRL: usize = 1;
-
-// =============================================================================
-// Storage: bitstream + DMA-readable pointer (both static)
-// =============================================================================
 
 /// 4-byte aligned wrapper around the bitstream array. The DMA performs
 /// word-sized transfers from this address; bare `[u8; N]` only guarantees
@@ -114,17 +102,9 @@ static BITSTREAM_B: ConstStaticCell<Bitstream> =
 // transfer length.
 static BITSTREAM_PTR: AtomicU32 = AtomicU32::new(0);
 
-// =============================================================================
-// PIO interrupt binding
-// =============================================================================
-
 embassy_rp::bind_interrupts!(pub struct PioIrqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
 });
-
-// =============================================================================
-// Pin grouping
-// =============================================================================
 
 pub struct DisplayPins {
     pub column_clock: Peri<'static, PIN_13>,
@@ -136,10 +116,6 @@ pub struct DisplayPins {
     pub row_bit_2: Peri<'static, PIN_19>,
     pub row_bit_3: Peri<'static, PIN_20>,
 }
-
-// =============================================================================
-// Display driver
-// =============================================================================
 
 pub struct Display {
     /// Buffer the CPU paints into. After a frame is finished, `present()`
@@ -156,7 +132,6 @@ pub struct Display {
     _common: Common<'static, PIO0>,
 }
 
-#[allow(dead_code)] // some accessors used by later phases (renderer, buttons)
 impl Display {
     pub fn new(
         pio: Peri<'static, PIO0>,
@@ -165,16 +140,15 @@ impl Display {
         irqs: PioIrqs,
         pins: DisplayPins,
     ) -> Self {
-        // 1. Initialise both bitstreams' framing bytes (pixel count, row
-        //    select, BCD ticks). Pixel data starts at zero in both — panel
-        //    dark until the renderer's first paint+present.
+        // Pixel data starts zeroed in both — panel dark until the first
+        // paint+present.
         let front = BITSTREAM_A.take();
         let back = BITSTREAM_B.take();
         init_bitstream_framing(front);
         init_bitstream_framing(back);
 
-        // 2. Publish the front buffer's address so the control DMA channel
-        //    can find it. The wrapper struct guarantees this is 4-aligned.
+        // Publish the front buffer's address for the control DMA channel.
+        // The wrapper struct is what guarantees the 4-byte alignment.
         let front_addr = front.0.as_ptr() as u32;
         debug_assert_eq!(front_addr & 0b11, 0, "bitstream must be 4-byte aligned");
         debug_assert_eq!(
@@ -184,9 +158,8 @@ impl Display {
         );
         BITSTREAM_PTR.store(front_addr, Ordering::Relaxed);
 
-        // 3. Bring up the column-driver chips by bit-banging their config
-        //    register. Without this, the chips don't drive the LEDs at full
-        //    current.
+        // Without the config-register write the column-driver chips don't
+        // drive the LEDs at full current.
         let DisplayPins {
             column_clock,
             column_data,
@@ -201,8 +174,6 @@ impl Display {
         let (column_clock, column_data, column_latch, column_blank) =
             configure_column_drivers(column_clock, column_data, column_latch, column_blank);
 
-        // 4. Hand the eight panel pins to PIO0 SM0 and load the bitstream
-        //    program.
         let pio = Pio::new(pio, irqs);
         let Pio {
             mut common,
@@ -290,16 +261,17 @@ impl Display {
             ],
         );
 
-        // 5. Configure the self-chaining DMA pair.
         setup_dma_chain(sm0.tx_fifo_ptr() as u32);
 
-        // 6. Enable SM and start the chain by triggering the control channel.
         sm0.set_enable(true);
         start_dma_chain();
 
         Display {
             back,
             front,
+            // 256 = unity. Full brightness at boot because the fallback's
+            // sole lit pixel is already the dim literal (40, 14, 0), and
+            // scaling it further risks making it invisible.
             brightness: 256,
             _sm: sm0,
             _common: common,
@@ -307,19 +279,16 @@ impl Display {
     }
 
     /// Set the brightness multiplier. 0..=255 (255 = full).
-    /// Applied to `r/g/b` *before* gamma correction.
+    /// Applied to `r/g/b` *before* gamma correction, matching the wire
+    /// contract for the Brightness packet: `(c * (value + 1)) >> 8`
+    /// (docs/protocol.md §Payload layouts).
     pub fn set_brightness(&mut self, value: u8) {
-        // Upstream stores 0..=256 ((value+1) gives 256 at max so unity).
         self.brightness = value as u16 + 1;
     }
 
-    pub fn brightness(&self) -> u8 {
-        // Round 256 (full) down to 255 for the public byte view.
-        self.brightness.saturating_sub(1).min(255) as u8
-    }
-
     /// Write a pixel. Coordinates are panel-logical: `(0,0)` is the
-    /// top-left corner.
+    /// top-left corner. Out-of-range coordinates are silently ignored —
+    /// the local screens clip by painting past the edge.
     pub fn set_pixel(&mut self, x: i32, y: i32, r: u8, g: u8, b: u8) {
         if !(0..WIDTH as i32).contains(&x) || !(0..HEIGHT as i32).contains(&y) {
             return;
@@ -357,28 +326,42 @@ impl Display {
             gamma_b >>= 1;
         }
     }
+
+    /// Blit one wire-format frame into the back buffer: RGB888, row-major
+    /// from the top-left, 3 bytes per pixel — exactly the `Frame` packet
+    /// payload (docs/protocol.md §Payload layouts). Layered on
+    /// [`Self::set_pixel`], so the brightness multiplier and gamma apply
+    /// per pixel. Writes only the back buffer; call [`Self::present`] to show it.
+    pub fn blit_rgb888(&mut self, rgb: &[u8; WIDTH * HEIGHT * 3]) {
+        for y in 0..HEIGHT {
+            for x in 0..WIDTH {
+                let i = (y * WIDTH + x) * 3;
+                self.set_pixel(x as i32, y as i32, rgb[i], rgb[i + 1], rgb[i + 2]);
+            }
+        }
+    }
 }
 
-impl uniflag_render::Surface for Display {
-    fn set_pixel(&mut self, x: i32, y: i32, (r, g, b): uniflag_render::Rgb) {
-        Display::set_pixel(self, x, y, r, g, b);
+/// Lets the `screens` crate paint the panel. The crate is generic over this
+/// trait so the same code the device runs can be exercised on the host.
+impl screens::Canvas for Display {
+    fn set_pixel(&mut self, x: i32, y: i32, r: u8, g: u8, b: u8) {
+        // Inherent methods win method resolution over trait methods, so this
+        // dispatches to `Display::set_pixel` above, not back into itself.
+        self.set_pixel(x, y, r, g, b);
     }
-    // `fill` / `fill_with` use the trait defaults (loop over set_pixel).
 }
 
 impl Display {
     /// Publish the just-painted `back` buffer to DMA, swap labels, and
     /// wait until the DMA chain has actually picked up the new pointer.
     ///
-    /// The control channel only re-reads `BITSTREAM_PTR` at the end of
-    /// each ~3.3 ms refresh cycle (300 fps), so for up to one cycle after
-    /// the pointer write, the data channel is still scanning out the
-    /// buffer that's about to become our new `back`. Returning before
-    /// the swap takes effect would let the next paint race that
-    /// in-progress refresh — exactly the tearing this function exists to
-    /// prevent. We poll the data channel's `read_addr` until it falls
-    /// inside the new front's range, yielding to the executor between
-    /// checks so other tasks (USB rx, buttons) keep running.
+    /// The control channel only re-reads `BITSTREAM_PTR` at the end of each
+    /// ~3.3 ms refresh cycle, so for up to one cycle the data channel is
+    /// still scanning out the buffer about to become the new `back`.
+    /// Returning early would let the next paint race that refresh — the
+    /// tearing this exists to prevent. Hence the `read_addr` poll, yielding
+    /// between checks so USB rx and buttons keep running.
     pub async fn present(&mut self) {
         core::mem::swap(&mut self.back, &mut self.front);
         let new_front_addr = self.front.0.as_ptr() as u32;
@@ -396,33 +379,23 @@ impl Display {
     }
 }
 
-// =============================================================================
-// Bitstream framing init
-// =============================================================================
-
 fn init_bitstream_framing(bs: &mut Bitstream) {
     for row in 0..ROW_COUNT {
         for frame in 0..BCD_FRAME_COUNT {
             let off = row * ROW_BYTES + frame * BCD_FRAME_BYTES;
             bs[off] = PIXEL_COUNT_PER_SCAN - 1;
             bs[off + 1] = row as u8;
-            // Pixel data (bytes 2..66) starts as zero — panel dark.
-            // Padding at 66..68 stays zero.
-            // BCD tick count: 1 << frame, little-endian. Doubles each frame.
+            // Pixel data (2..66) and alignment padding (66..68) stay zero.
+            // BCD tick count doubles each frame.
             let ticks = 1u32 << frame;
             bs[off + 68..off + 72].copy_from_slice(&ticks.to_le_bytes());
         }
     }
 }
 
-// =============================================================================
-// Column-driver bit-bang config
-// =============================================================================
-
-// Sends `0b1111111111001110` to each of the 12 column-driver chips. This
-// loads the chip's configuration register (full output current). Done with
-// raw GPIO before PIO takes over. Returns the four pin Peris back so PIO
-// can claim them.
+// Loads each of the 12 column-driver chips' configuration register (full
+// output current) over raw GPIO, before PIO claims the pins. Hands the four
+// pin Peris back so it can.
 fn configure_column_drivers(
     mut column_clock: Peri<'static, PIN_13>,
     mut column_data: Peri<'static, PIN_14>,
@@ -490,9 +463,8 @@ fn configure_column_drivers(
     (column_clock, column_data, column_latch, column_blank)
 }
 
-// =============================================================================
-// DMA chain (PAC-level — embassy-rp 0.10 has no high-level helper for this)
-// =============================================================================
+// The DMA chain is set up at PAC level: embassy-rp 0.10 has no high-level
+// helper for a self-chaining pair.
 
 fn setup_dma_chain(pio_tx_fifo_addr: u32) {
     use pac::dma::regs::CtrlTrig;
@@ -500,9 +472,9 @@ fn setup_dma_chain(pio_tx_fifo_addr: u32) {
 
     let dma = pac::DMA;
 
-    // Data channel: BITSTREAM_LENGTH/4 words → PIO TX FIFO. read_addr will be
-    // (re-)set by the control channel. Configure via al1_ctrl alias so this
-    // write does NOT trigger the channel.
+    // Data channel: BITSTREAM_LENGTH/4 words → PIO TX FIFO; read_addr is
+    // (re-)set by the control channel. Configured via the al1_ctrl alias so
+    // this write does NOT trigger the channel.
     dma.ch(CH_DATA).read_addr().write_value(0);
     dma.ch(CH_DATA).write_addr().write_value(pio_tx_fifo_addr);
     dma.ch(CH_DATA)
@@ -519,15 +491,11 @@ fn setup_dma_chain(pio_tx_fifo_addr: u32) {
     data_ctrl.set_en(true);
     dma.ch(CH_DATA).al1_ctrl().write_value(data_ctrl.0);
 
-    // Control channel: 1 word — copy bitstream pointer into the data
-    // channel's PLAIN read_addr (no trigger). The data channel is then
-    // restarted by the chain_to=CH_DATA below.
-    //
-    // Important: write to the *plain* read_addr, not al3_read_addr_trig.
-    // The trig alias would atomically restart data; combined with chain_to
-    // that creates a queued chain trigger that fires after data completes,
-    // racing with the next ctrl-driven restart and producing visibly
-    // wandering scan rows.
+    // Control channel: copy the bitstream pointer into the data channel's
+    // *plain* read_addr, not al3_read_addr_trig — the trig alias would
+    // atomically restart data, and combined with chain_to that queues a
+    // second trigger racing the next ctrl-driven restart, which shows up as
+    // visibly wandering scan rows. chain_to=CH_DATA below does the restart.
     dma.ch(CH_CTRL)
         .read_addr()
         .write_value(&BITSTREAM_PTR as *const _ as u32);
@@ -548,19 +516,15 @@ fn setup_dma_chain(pio_tx_fifo_addr: u32) {
 }
 
 fn start_dma_chain() {
-    // Trigger the control channel by writing 1 to its bit in
-    // multi_chan_trigger. The control channel runs once, kicks the data
-    // channel via al3_read_addr_trig, and from there the chain self-runs.
+    // The control channel runs once, kicks the data channel, and from there
+    // the chain self-runs.
     pac::DMA
         .multi_chan_trigger()
         .write(|w| w.set_multi_chan_trigger(1 << 1));
 }
 
-// =============================================================================
-// 14-bit gamma LUT (verbatim from pimoroni_common.hpp)
-//
+// 14-bit gamma LUT, verbatim from pimoroni_common.hpp:
 //   v = (uint16_t)(powf((float)(n) / 255.0f, 2.2) * 16383.0f + 0.5f)
-// =============================================================================
 
 const GAMMA_14BIT: [u16; 256] = [
     0, 0, 0, 1, 2, 3, 4, 6, 8, 10, 13, 16, 20, 23, 28, 32, 37, 42, 48, 54, 61, 67, 75, 82, 90, 99,

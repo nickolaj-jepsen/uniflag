@@ -46,3 +46,54 @@ jobs:
         with:
           tool: just
       - run: just test
+
+  # Gating, and the reason plugin/core/ exists: the renderer and the C# wire
+  # codec are the parts most likely to break, and until the split they were
+  # only covered by the non-gating Windows job below. No SimHub, no Windows,
+  # no proprietary assemblies — just dotnet.
+  core-test:
+    name: core test (renderer + codec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - run: just core-test
+
+  # Isolated and deliberately non-gating: no `needs:`, not in any required-checks
+  # group. A SimHub-installer outage must never red the Rust pipeline.
+  plugin:
+    name: plugin (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage SimHub reference assemblies
+        id: simhub
+        uses: ./.github/actions/simhub-refs
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Build plugin
+        shell: pwsh
+        env:
+          UNIFLAG_SIMHUB_DIR: ${{ steps.simhub.outputs.refs-dir }}
+        run: just plugin-build
+
+      - name: Test plugin
+        shell: pwsh
+        env:
+          UNIFLAG_SIMHUB_DIR: ${{ steps.simhub.outputs.refs-dir }}
+        run: just plugin-test
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UniflagPlugin
+          path: plugin/simhub/bin/Release/net48/UniflagPlugin.dll

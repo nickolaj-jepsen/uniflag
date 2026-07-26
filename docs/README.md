@@ -1,16 +1,30 @@
-# External references
+# Docs index
 
-This directory holds reference material for the external systems
-uniflag integrates with: the Cosmic Unicorn panel and SimHub. It
-intentionally does **not** describe how the firmware is currently
-built — that lives in the code itself.
+Two kinds of documents live here: **project docs** (how the wire protocol
+and the flag grammar currently work — written down so the firmware, the
+plugin and the docs stay in step) and **external references** (the Cosmic
+Unicorn panel and SimHub, written down because upstream doesn't).
+
+The project docs describe a prerelease hobby project and will keep
+changing with it. They're a record of the current design and the
+reasoning behind it, not a standard anyone has to live up to.
+
+## Project docs
+
+| File | Subject |
+|------|---------|
+| [`protocol.md`](./protocol.md) | The binary wire protocol: COBS framing, CRC-16, packet layouts, USB identity, handshake. Changing it costs a `PROTOCOL_VERSION` bump; the byte vectors in `testdata/proto/` are what both codecs get checked against. |
+| [`flag-grammar.md`](./flag-grammar.md) | **The renderer's design doc** — the signal language: the six grammar rules, tiers and the envelope, slots/precedence/suppression, the signal catalogue, the idle family, `SignalState`, adapter contracts. Implemented by `plugin/core/Rendering/Grammar/`; §7a is implemented by the firmware fallback screen. |
+| [`web-overlay.md`](./web-overlay.md) | The browser/overlay virtual panel: `OverlayWebServer`, the LED-dot page, the DashStudio dash, and the design contracts (localhost-only, newest-frame-wins, 30 fps). |
+
+## External references
 
 | File | Subject |
 |------|---------|
 | [`cosmic-unicorn-hardware.md`](./cosmic-unicorn-hardware.md) | Pin map, button layout, framebuffer / bitstream layout, BCM, gamma. **Includes the 4-byte alignment requirement on the DMA source.** |
 | [`cosmic-unicorn-pio.md`](./cosmic-unicorn-pio.md) | The Cosmic Unicorn bitstream PIO program, transcribed and annotated, plus the SM configuration that pairs with it. |
-| [`simhub-custom-serial.md`](./simhub-custom-serial.md) | SimHub's Custom Serial Devices plugin: protocol, NCalc syntax, gotchas. End-user setup steps live in [`../simhub/README.md`](../simhub/README.md). |
-| [`simhub-flag-properties.md`](./simhub-flag-properties.md) | The flag-related properties exposed by SimHub's `DataCorePlugin` — both the unified `GameData.Flag_*` set and the per-sim raw-data fallbacks. |
+| [`simhub-plugin-api.md`](./simhub-plugin-api.md) | SimHub's undocumented plugin API: loading contract, interfaces, settings persistence, UI integration. Reference SimHub version 9.11.21. |
+| [`simhub-flag-properties.md`](./simhub-flag-properties.md) | The flag-related properties exposed by SimHub's `DataCorePlugin` — the unified `GameData.Flag_*` set and the per-sim raw-data fallbacks, written down because upstream doesn't. |
 
 ## Hardware target — note on revisions
 
@@ -26,10 +40,9 @@ program — only the host MCU changed (RP2040 → RP2350). Everything in
 - Pimoroni Pico SDK — [`libraries/cosmic_unicorn/`](https://github.com/pimoroni/pimoroni-pico/tree/main/libraries/cosmic_unicorn)
   (`cosmic_unicorn.hpp`, `.cpp`, `.pio`, README, plus `common/pimoroni_common.hpp`
   for the GAMMA_14BIT table).
-- SimHub wiki — [Custom serial devices](https://github.com/SHWotever/SimHub/wiki/Custom-serial-devices),
-  [Custom Arduino Hardware Support](https://github.com/SHWotever/SimHub/wiki/Custom-Arduino-Hardware-Support),
-  [NCalc scripting](https://github.com/SHWotever/SimHub/wiki/NCalc-scripting).
-- SimHub manual — <https://manual.simhubdash.com>.
+- SimHub — the plugin SDK demo shipped inside the install
+  (`PluginSdk\User.PluginSdkDemo`), reflection over `SimHub.Plugins.dll`,
+  and the [manual](https://manual.simhubdash.com).
 - `kjagiello/hub75-pio-rs` — pattern reference for the DMA-chain idiom
   (`src/dma.rs`). Doesn't apply directly because the Cosmic Unicorn
   isn't HUB75.

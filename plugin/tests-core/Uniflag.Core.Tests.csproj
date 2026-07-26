@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The cross-platform test leg, and the suite CI gates on: renderer, wire
+    codec, device connection manager, overlay web server, telemetry
+    adapters. No SimHub, no WPF, no Windows.
+
+    When adding a test, default to here — it belongs in plugin/tests-simhub/
+    only if it cannot compile without GameReaderCommon, System.IO.Ports or
+    the registry.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- LTS target, but run on whatever runtime is present so a box with
+         only a newer .NET can still run the suite. -->
+    <RollForward>LatestMajor</RollForward>
+    <LangVersion>9.0</LangVersion>
+    <RootNamespace>Uniflag.Tests</RootNamespace>
+    <AssemblyName>Uniflag.Core.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\core\Uniflag.Core.csproj" />
+    <!-- No test references the frame viewer; this reference exists so the
+         gating leg compile-checks it. Without it a break in the dev-only
+         viewer would surface only in the non-gating Windows sln job. -->
+    <ProjectReference Include="..\tools\Uniflag.Tools.csproj" />
+  </ItemGroup>
+
+</Project>

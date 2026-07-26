@@ -1,0 +1,19 @@
+[package]
+name = "uniflag-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Binary-protocol test-pattern streamer and diagnostic CLI for the uniflag firmware."
+
+[[bin]]
+name = "uniflag-cli"
+path = "src/main.rs"
+
+[dependencies]
+proto      = { path = "../proto" }
+clap       = { version = "4.5", features = ["derive"] }
+serialport = "4.6"
+anyhow     = "1.0"
+
+[lints]
+workspace = true

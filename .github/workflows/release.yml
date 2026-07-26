@@ -1,5 +1,11 @@
 name: Release
 
+# Tag-triggered release: one versioned zip containing the plugin DLL, the
+# firmware UF2, the DashStudio overlay dash (as a double-click .simhubdash),
+# and INSTALL.md. The local `just package` recipe (packaging/package.ps1)
+# produces the identical layout — keep the two in lockstep. Both pack the
+# dash via the shared packaging/make-simhubdash.ps1.
+
 on:
   push:
     tags: ['v*']
@@ -8,7 +14,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  firmware:
+    name: firmware (uf2)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,10 +24,136 @@ jobs:
         with:
           tool: just,elf2uf2-rs
       - run: just img
-      - name: Rename UF2 with tag
-        run: cp target/uniflag.uf2 uniflag-${{ github.ref_name }}.uf2
-      - uses: softprops/action-gh-release@v2
+      - name: Upload UF2 artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: uniflag-${{ github.ref_name }}.uf2
+          name: uniflag-uf2
+          path: target/uniflag.uf2
+          if-no-files-found: error
+
+  plugin:
+    name: plugin (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same cache key as ci.yml, so tag builds hit entries the main-branch
+      # runs already populated.
+      - name: Stage SimHub reference assemblies
+        id: simhub
+        uses: ./.github/actions/simhub-refs
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      # Build only: the test suite already ran in ci.yml on the same commit
+      # (tags are cut from main). The build is what produces the artifact —
+      # artifacts don't cross workflow boundaries.
+      - name: Build plugin
+        shell: pwsh
+        env:
+          UNIFLAG_SIMHUB_DIR: ${{ steps.simhub.outputs.refs-dir }}
+        run: just plugin-build
+
+      # Path is the single DLL, not the bin directory: reference assemblies
+      # are Private=false so they never land in bin, but uploading only the
+      # exact file makes that a guarantee rather than an assumption.
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: UniflagPlugin
+          path: plugin/simhub/bin/Release/net48/UniflagPlugin.dll
+          if-no-files-found: error
+
+  package:
+    name: package + publish
+    runs-on: ubuntu-latest
+    needs: [firmware, plugin]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The zip is named after the tag, so refuse to publish if the tag
+      # disagrees with either stamped version. Prerelease tags (v2.0.0-rc1)
+      # share the base version with their final release.
+      - name: Check tag matches stamped versions
+        run: |
+          set -euo pipefail
+          tag='${{ github.ref_name }}'
+          base="${tag#v}"; base="${base%%-*}"
+          stamped=$(
+            sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml
+            sed -n 's|.*<UniflagVersion>\(.*\)</UniflagVersion>.*|\1|p' plugin/Directory.Build.props
+          )
+          echo "tag $tag → base version $base; stamped versions:"
+          echo "$stamped"
+          if [ "$(echo "$stamped" | wc -l)" -ne 2 ]; then
+            echo "::error::expected 2 stamped versions (Cargo.toml workspace, Directory.Build.props) — a version pattern changed; update this check"
+            exit 1
+          fi
+          if echo "$stamped" | grep -qvxF "$base"; then
+            echo "::error::tag $tag (base $base) disagrees with the stamped versions above — forgot a bump?"
+            exit 1
+          fi
+
+      - name: Download UF2 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: uniflag-uf2
+          path: stage
+
+      - name: Download plugin artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: UniflagPlugin
+          path: stage
+
+      - name: Assemble zip
+        run: |
+          set -euo pipefail
+          cp packaging/INSTALL.md stage/
+          # The help link floats on blob/main in the source tree; pin it to
+          # the tag so the shipped doc always matches the shipped code (the
+          # tag exists on the remote — this workflow only runs on tag push).
+          sed -i 's|/blob/main/|/blob/${{ github.ref_name }}/|' stage/INSTALL.md
+          grep -q '/blob/${{ github.ref_name }}/' stage/INSTALL.md
+          # Pack the overlay dash with the same generator `just package` uses
+          # (ubuntu runners ship pwsh) so the local and CI zips stay identical.
+          pwsh packaging/make-simhubdash.ps1 -DashFolder "overlay/dash/Uniflag Overlay" -OutFile "stage/Uniflag Overlay.simhubdash"
+          (cd stage && zip -r "../uniflag-${{ github.ref_name }}.zip" .)
+          unzip -l "uniflag-${{ github.ref_name }}.zip"
+
+      - name: Audit zip contents (never ship proprietary DLLs)
+        run: |
+          set -euo pipefail
+          zipfile="uniflag-${{ github.ref_name }}.zip"
+          entries=$(unzip -Z1 "$zipfile")
+
+          # No DLL other than our own — SimHub's reference assemblies are
+          # proprietary and must never leak into a release asset.
+          bad=$(echo "$entries" | grep -i '\.dll$' | grep -vx 'UniflagPlugin.dll' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::unexpected DLLs in release zip:"
+            echo "$bad"
+            exit 1
+          fi
+
+          # Exactly the four expected top-level entries.
+          top=$(echo "$entries" | sed 's|/.*|/|' | LC_ALL=C sort -u)
+          expected=$(printf 'INSTALL.md\nUniflag Overlay.simhubdash\nUniflagPlugin.dll\nuniflag.uf2\n')
+          if [ "$top" != "$expected" ]; then
+            echo "::error::zip top-level layout mismatch"
+            echo "--- expected ---"; echo "$expected"
+            echo "--- got ---"; echo "$top"
+            exit 1
+          fi
+          echo "audit OK: only UniflagPlugin.dll ships; top-level layout exact"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: uniflag-${{ github.ref_name }}.zip
           generate_release_notes: true
           fail_on_unmatched_files: true
+          # rc/beta tags (anything with a hyphen, e.g. v2.0.0-rc1) are prereleases.
+          prerelease: ${{ contains(github.ref_name, '-') }}

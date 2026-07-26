@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Only the tests that need SimHub's reference assemblies or a Windows API:
+    the GameData extractor, the iRacing raw-extraction path, the registry
+    port enumerator, the plugin-metadata contract, and the opt-in hardware
+    test. Everything else lives in plugin/tests-core/.
+
+    Non-gating in CI by design — a SimHub-installer outage must never red
+    the pipeline. Keeping it small is what makes that safe.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <RootNamespace>Uniflag.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <SimHubDir Condition="'$(SimHubDir)' == ''">C:\Program Files (x86)\SimHub</SimHubDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\simhub\UniflagPlugin.csproj" />
+    <!-- Private=true here (unlike src): the test runner needs SimHub.Plugins.dll on
+         disk to reflect over plugin metadata. bin/ is gitignored; release artifacts
+         are built from src only, so nothing proprietary ships. -->
+    <Reference Include="SimHub.Plugins">
+      <HintPath>$(SimHubDir)\SimHub.Plugins.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="GameReaderCommon">
+      <HintPath>$(SimHubDir)\GameReaderCommon.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

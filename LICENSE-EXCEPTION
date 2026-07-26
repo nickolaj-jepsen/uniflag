@@ -1,0 +1,31 @@
+uniflag SimHub linking exception
+
+Additional permission under GNU GPL version 3 section 7
+
+If you modify this Program, or any covered work, by linking or combining
+it with the SimHub plugin API assemblies (SimHub.Plugins.dll,
+GameReaderCommon.dll, and any other assembly distributed as part of a
+standard SimHub installation) (or a modified version of that library),
+containing parts covered by the terms of SimHub's proprietary license,
+the licensors of this Program grant you additional permission to convey
+the resulting work.
+
+-----------------------------------------------------------------------
+
+Notes (informative, not part of the license grant):
+
+- The operative paragraph above follows the FSF's recommended template
+  from the GPL FAQ (the same form GNU Wget used for its OpenSSL
+  exception), which is the SPDX-listed exception
+  "GPL-3.0-linking-exception". Sources under plugin/ are tagged
+  "GPL-3.0-or-later WITH GPL-3.0-linking-exception".
+- In practice only the SimHub plugin (the plugin/ directory) links those
+  assemblies. The firmware and the Rust crates neither link nor need
+  this permission and remain plain GPL-3.0-or-later.
+- SimHub is proprietary software by Wotever (https://www.simhubdash.com).
+  Its assemblies are not covered by this Program's license and are never
+  distributed with this Program; obtain them by installing SimHub.
+- As provided by GPLv3 section 7, you may remove this additional
+  permission from your copies.
+- Contributions to plugin/ are accepted only under GPL-3.0-or-later
+  including this additional permission.

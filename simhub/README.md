@@ -1,223 +1,114 @@
 # SimHub setup
 
-The `uniflag` firmware doesn't need a custom SimHub plugin. It uses
-SimHub's built-in **Custom Serial Devices** plugin, which sends
-formula-driven ASCII strings over USB-CDC. You author one device profile
-on the SimHub side that emits the wire format the firmware expects.
+uniflag v2 ships as a native SimHub plugin. The plugin owns all state and
+rendering — it reads the game's flag telemetry, renders 32×32 frames at
+60 fps, and streams them to the panel over USB. The panel is a dumb
+framebuffer device; there is nothing to configure on it.
 
-> Tested with SimHub **9.x** (the modern release line). Older versions
-> may not expose every flag property listed below.
+> Tested with SimHub **9.11.21** (the project's pinned reference
+> version). Any modern 9.x should work.
 
-## Wire format
+Grab `uniflag-<version>.zip` from the [releases
+page](https://github.com/nickolaj-jepsen/uniflag/releases). One zip holds
+everything, versioned together: `UniflagPlugin.dll` (the plugin),
+`uniflag.uf2` (the firmware), the `Uniflag Overlay/` dash folder, and
+`INSTALL.md` (a condensed version of this guide). Always install plugin
+and firmware from the same zip — releases are only tested as a matched
+pair, and the plugin refuses to drive a panel whose protocol version
+differs.
 
-The firmware accepts one line per update, terminated by `\n`. **SimHub
-does not append the terminator automatically**, despite what its wiki
-implies — the formula must end with `'\r\n'` (or `'\n'`). Without it
-the panel stays dark, since the firmware never sees a complete line to
-parse. Fields are semicolon-separated `key=value` pairs:
+## Install the plugin
 
-```
-F=Y;B=1;S=racing
-```
+1. Copy `UniflagPlugin.dll` from the release zip into the SimHub
+   install directory (`C:\Program Files (x86)\SimHub` by default) — the
+   same folder that holds `SimHubWPF.exe`. Do **not** put it in a
+   subfolder; SimHub only scans its own directory.
+2. Start SimHub. It shows a *"New plugins have been detected!"* dialog —
+   enable **Uniflag** there (or later via **Settings → Plugins**).
+3. A **Uniflag** entry appears in the left-hand menu. That tab holds the
+   device status block, the brightness slider, the manual COM-port
+   override, a live preview of the rendered panel, and the web-overlay
+   server status.
 
-| Field | Values                                                           | Meaning                                |
-|-------|------------------------------------------------------------------|----------------------------------------|
-| `F`   | `N` `Y` `B` `K` `W` `R` `G` `C` `O`                              | Active flag                            |
-| `B`   | `0` `1` `2`                                                      | Wave level (none / single-waved / double-waved) |
-| `S`   | `pre-race` `racing` `paused` `post-race` `replay` `unknown`      | Session state                          |
-| `C`   | `N` `V` `S`                                                      | Caution: none / Virtual Safety Car / Safety Car |
-| `Z`   | (empty) `1` `2` `3` `12` `13` `23` `123`                         | Sector-yellow mask (ascending unique digits) |
+Building the DLL yourself: `just plugin-build` (needs a SimHub install
+for the reference assemblies — override the location with
+`$env:UNIFLAG_SIMHUB_DIR`).
 
-`B=0` is a static / displayed flag. `B=1` is single-waved (the marshal is
-actively signalling — local caution, faster car approaching, etc.); the
-firmware renders this with a 2 Hz strobe (or breathing pulse for blue).
-`B=2` is double-waved, signalling a more serious incident; the renderer
-treats it as a more urgent variant — typically a 4 Hz strobe. Sims that
-don't distinguish single from double should map any "waved" state to
-`B=1`.
+## Plug in the panel
 
-`C=` and `Z=` are orthogonal to `F=`. Caution renderings (VSC / SC)
-fill the panel and override the per-flag base for everything except a
-red flag, which always wins. The sector mask paints a bottom-edge
-indicator strip, suppressed only under red. `F=N;Z=2` is the canonical
-"yellow ahead in S2, clear at your location" warning.
+Flash the firmware first: hold **BOOTSEL** on the Cosmic Unicorn while
+plugging in USB (it mounts as the `RPI-RP2` drive), then copy the
+release zip's `uniflag.uf2` onto that drive. (Building from source
+instead: `just flash`, see the top-level README.) Then just plug the
+panel in — no port picking needed:
 
-Unknown keys are silently ignored, so adding new fields later won't
-break older firmware. See `proto/src/lib.rs` for the canonical
-definition and unit tests.
+- **Auto-discovery**: the plugin scans for the panel's USB identity
+  (VID `0x1209`, PID `0x0001` — pid.codes test PID; the registered PID
+  `0xF1A6` is also accepted). It opens the port, performs the
+  Hello/HelloAck handshake, and starts streaming frames at 30 fps.
+- **Status**: the Uniflag tab shows the connection state (*Scanning* →
+  *Connecting* → *Streaming*), the port, and the firmware version,
+  protocol version, and panel size reported by the device.
+- **Manual override**: if discovery can't see the port (unusual cabling,
+  odd USB stack), enter a COM port in the tab's override field. This
+  bypasses the VID/PID filter but the handshake still has to succeed —
+  the plugin never streams to an unverified device.
 
-## Option A — import the shipped profile (recommended)
+## Brightness
 
-A pre-authored profile lives at [`uniflag.shsds`](uniflag.shsds). It
-ships the canonical formula (with the required `'\r\n'` terminator),
-DTR/RTS enabled, 10 Hz update rate, and a placeholder COM port that
-you'll re-pick in the UI. To install:
+- **Slider** in the Uniflag tab.
+- **Device buttons**: short-press the panel's brightness-up /
+  brightness-down buttons to step, and the third button to toggle sleep
+  (panel near-off, wakes back to the remembered level). Button presses
+  are sent to the plugin, which owns the policy — the value in the
+  slider and the panel always agree.
+- The setting persists in SimHub's plugin settings (never on the
+  device) and is re-applied on every reconnect.
+- **Long-press** any panel button to toggle the firmware's local test
+  screen (corner markers, R/G/B bars, firmware version) — useful for
+  checking the panel without SimHub.
 
-1. Open SimHub.
-2. **Settings → General → Properties cache → Open data folder**.
-3. Navigate to `PluginsData\CustomSerialDevices\`.
-4. Drop `uniflag.shsds` into that folder.
-5. Restart SimHub.
-6. **Available add-ons → Additional plugins → Custom serial devices**:
-   tick the imported entry, pick the COM port the device enumerates
-   as (the shipped value is `COM5` from the authoring host — change
-   it to whatever your board enumerates as), and apply.
+## Web overlay + dash
 
-> **Note**: SimHub stores Custom Serial Device profiles as `.shsds`
-> JSON. The format is **not officially documented** and changes
-> between SimHub versions, so we treat the file as an opaque export
-> — author it through the GUI on a Windows install, then commit the
-> result. Don't hand-edit it.
-
-## Option B — author it manually
-
-If the import doesn't work on your SimHub version, set the profile up
-by hand. Steps:
-
-1. **Available add-ons → Additional plugins → Custom serial devices →
-   Enable**, then in the same screen, add a new device.
-2. **General**:
-   - **Name**: `uniflag`
-   - **Serial port**: pick the COM port (Windows) or `/dev/ttyACM*`
-     (Linux SimHub) the device enumerates as. The board self-identifies
-     as `uniflag / uniflag` (VID `0x1209`, PID `0x0001`).
-   - **Baud rate**: `115200` (USB CDC ignores this — any value works).
-   - **DTR / RTS**: leave default.
-   - **Auto-reconnect on error**: enable.
-3. **Update messages → Add message**:
-   - **Name**: `state`
-   - **Trigger**: every 200 ms (5 Hz). Higher rates are wasted on a flag
-     display; the free SimHub tier caps at 10 Hz anyway.
-   - **Formula type**: NCalc.
-   - **Formula**: paste the block below.
-
-```ncalc
-'F=' +
-if([DataCorePlugin.GameData.Flag_Yellow],   'Y',
-if([DataCorePlugin.GameData.Flag_Blue],     'B',
-if([DataCorePlugin.GameData.Flag_Black],    'K',
-if([DataCorePlugin.GameData.Flag_White],    'W',
-if([DataCorePlugin.GameData.Flag_Checkered],'C',
-if([DataCorePlugin.GameData.Flag_Green],    'G',
-if([DataCorePlugin.GameData.Flag_Orange],   'O',
-                                            'N')))))))
-+ ';B=' + if([DataCorePlugin.GameData.Flag_Yellow], '1', '0')
-+ ';S=' + if(isnull([DataCorePlugin.GameData.SessionTypeName]), 'unknown',
-          if([DataCorePlugin.GameData.SessionTypeName] = 'Race', 'racing',
-          if([DataCorePlugin.GameData.SessionTypeName] = 'Practice', 'pre-race',
-          if([DataCorePlugin.GameData.SessionTypeName] = 'Qualifying', 'pre-race',
-          'unknown'))))
-+ '\r\n'
-```
-
-Notes:
-
-- The trailing `'\r\n'` is **required**. SimHub doesn't add a line
-  terminator automatically; without it the firmware never gets a
-  complete line and the panel stays dark. If you extend the formula
-  with the caution / sector blocks below, move the `'\r\n'` to the end.
-- `Flag_Yellow` triggering both the `F=Y` field *and* `B=1` is
-  intentional: the unified property doesn't distinguish static from
-  waved, so we treat any yellow as single-waved. If your sim *does*
-  distinguish, swap the `B=` line for one that maps the bits explicitly.
-  For iRacing, `SessionFlags` exposes `YellowWaving` / `CautionWaving`;
-  for ACC, `[DataCorePlugin.GameRawData.Graphics.flag] = 2` plus
-  `[DataCorePlugin.GameRawData.Graphics.globalYellow]` distinguishes
-  global vs sector yellows. The firmware understands `B=2` (double-waved)
-  for situations a sim flags as more urgent — wire it up if the data is
-  available, otherwise leave at `1`.
-- The unified `Flag_Orange` property was added late; very old SimHub
-  versions may not have it. If your formula errors on save, drop that
-  line.
-- Session-state mapping is sim-dependent. The list above covers iRacing
-  / ACC / common-case Codemasters games. Add cases for your sim if
-  needed, or replace with `[DataCorePlugin.GameData.SessionState]`.
-- The basic formula above doesn't emit `C=` or `Z=`. The firmware
-  tolerates their absence (defaults: `C=N`, empty `Z=`), so existing
-  setups keep working. Add the extension below if you want VSC /
-  Safety Car / sector indicators.
-
-### Extended formula — caution + sector yellows
-
-Append the following to the basic formula to drive the `C=` (caution)
-and `Z=` (sector mask) fields. Pick the sim-specific block that
-matches your install; if you race more than one sim, copy the relevant
-block on a per-device-profile basis. Move the `+ '\r\n'` from the basic
-formula to the end of the extended one so the line terminator stays
-last.
-
-**iRacing** — bit-test the `SessionFlags` mask (see `irsdk_Flags`).
-`Caution` is bit `0x4000`, `SafetyCarActive` exposes the physical SC.
-
-```ncalc
-+ ';C=' + if(([DataCorePlugin.GameRawData.Telemetry.SessionFlags] & 0x4000) > 0, 'V',
-          if([DataCorePlugin.GameData.SafetyCarActive], 'S', 'N'))
-+ ';Z='   // iRacing has no per-sector flag in stock telemetry
-```
-
-**ACC** — concatenate the three `globalYellow*` raw properties into a
-canonical sector mask. ACC has no first-class VSC / SC concept.
-
-```ncalc
-+ ';C=N'
-+ ';Z=' +
-  (if([DataCorePlugin.GameRawData.Graphics.globalYellow1], '1', '') +
-   if([DataCorePlugin.GameRawData.Graphics.globalYellow2], '2', '') +
-   if([DataCorePlugin.GameRawData.Graphics.globalYellow3], '3', ''))
-```
-
-**rF2 / Le Mans Ultimate** — `mGamePhase` enum surfaces pace-car /
-FCY phases. Verify the bit values against your install; the values
-below are the common ISI ModDev mapping.
-
-```ncalc
-+ ';C=' + if([DataCorePlugin.GameRawData.Scoring.mGamePhase] = 6, 'V',
-          if([DataCorePlugin.GameRawData.Scoring.mGamePhase] = 5, 'S', 'N'))
-+ ';Z='   // mSectorFlag is per-corner; needs host-side aggregation (TODO)
-```
-
-If the formula errors on save, the property names may differ on your
-build — check **Available properties → Show game specific properties
-('rawdata')** in SimHub and adjust. Bad property paths return null in
-NCalc, which silently breaks `+`-concatenation; wrap risky references
-in `isnull(x, fallback)`.
-
-4. **Apply**, then **Save**. The device should connect; its solid-flag
-   LED corner of the panel changes colour as you toggle a flag in-game.
-
-## Re-exporting after edits
-
-If you tweak the formula in SimHub's UI and want the change committed:
-
-1. **Settings → General → Properties cache → Open data folder →
-   `PluginsData\CustomSerialDevices\`**.
-2. Find the `.shsds` file matching the device name.
-3. Copy it over `simhub/uniflag.shsds` and commit.
+The plugin serves a browser-rendered virtual panel at
+`http://127.0.0.1:8972/` (localhost-only, by design). A ready-made
+DashStudio overlay ships in the release zip as `Uniflag Overlay.simhubdash`
+(source: `overlay/dash/Uniflag Overlay/`) — with SimHub running,
+double-click it to import, then add *Uniflag Overlay* as an overlay in
+Dash Studio to get the virtual panel in-game. Details, wire format, and
+design contracts: [`docs/web-overlay.md`](../docs/web-overlay.md).
 
 ## Troubleshooting
 
-- **Panel stays dark with SimHub connected, but lights up under
-  `uniflag-sim`**: the formula is missing its line terminator. SimHub
-  does not append `\n` automatically — the formula must end with
-  `+ '\r\n'`. The "Connected" indicator in SimHub's UI just means the
-  COM port is open; it doesn't imply the device is parsing what's
-  arriving. Without a terminator the firmware buffers bytes
-  indefinitely and never invokes the parser, so the panel never
-  leaves its disconnected state.
-- **Panel boot-splash visible but doesn't react to flags**: open
-  SimHub's **Logs** screen and check for the device line. Common cause:
-  the formula is being evaluated before a sim is connected, so all
-  `[DataCorePlugin.GameData.Flag_*]` properties are null and the
-  formula returns an empty string (which SimHub silently drops). Tick
-  **Available properties → Show game specific properties ('rawdata')**
-  to confirm the values are populating in your sim.
-- **Wrong colour for a flag**: verify your sim is running the version
-  SimHub claims it supports. Some sims need their telemetry plugin
-  separately installed (e.g. iRacing wants the iRSDK pipe alive).
-- **No device appears**: check `dmesg` (Linux) or Device Manager
-  (Windows). The board enumerates as VID `0x1209`, PID `0x0001`. If
-  SimHub doesn't see it, the OS isn't either.
-- **Device sees data but flag is wrong**: run `uniflag-sim --port
-  COMx --no-port` (or just `--no-port`) on the same host to verify the
-  firmware accepts your formula's output. The simulator emits the same
-  format the firmware expects, so any divergence shows up immediately.
+- **Status stuck at *Scanning* — no device found**: check Device Manager
+  for a COM port with VID `1209` / PID `0001` (or `F1A6`). If the OS
+  doesn't see it, the plugin can't either — recheck cable and flashing.
+  If the port exists but the plugin won't take it, another program may
+  be holding it open (a serial terminal, or a leftover v1 *Custom Serial
+  Devices* profile still bound to the port — delete that profile, it is
+  obsolete in v2). The tab's last-error text names the failure; the
+  manual override forces a specific port.
+- **Panel dark except a brief amber blink in the top-left corner**:
+  that's the firmware's fallback screen — the device is powered and
+  healthy but receiving no frames. SimHub isn't running, the plugin
+  isn't enabled, or the connection isn't in *Streaming*. Check the
+  Uniflag tab.
+- **Status shows *Refused* with a protocol-version (or panel-size)
+  message**: plugin and firmware are from different releases. The plugin
+  refuses to drive a mismatched device rather than failing silently —
+  reflash the UF2 that shipped in the same release zip as the DLL.
+- **Panel lit but shows a dim blue breathing dot at the bottom
+  centre**: that's the plugin's connected-idle marker — the stream is
+  alive but no game session is delivering telemetry. Start the sim (a
+  game in menus/replay counts as no live session).
+- **Wrong flag / no flag while racing**: the settings-tab preview, the
+  web overlay, and the panel all render the same frames — compare them.
+  If the preview matches the panel, the rendering path is fine and the
+  problem is game-side mapping (see
+  [`docs/simhub-flag-properties.md`](../docs/simhub-flag-properties.md)
+  for what each sim exposes; some flags simply don't exist in some
+  sims' telemetry).
+- **Isolating hardware from SimHub**: close SimHub (it holds the COM
+  port), then run `just cli` — `uniflag-cli` speaks the same protocol
+  and streams a test pattern. If the panel responds, the hardware and
+  firmware are good and the issue is on the SimHub side.

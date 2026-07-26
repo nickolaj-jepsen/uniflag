@@ -1,9 +1,9 @@
 [package]
 name = "proto"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "uniflag wire-protocol types — shared between firmware and the simulator."
+description = "uniflag wire-protocol types — shared by the firmware, uniflag-cli, and (as a C# mirror) the SimHub plugin."
 
 [lints]
 workspace = true

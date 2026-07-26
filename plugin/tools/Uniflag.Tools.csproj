@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Dev tooling: the frame viewer and the scenario catalogue it renders.
+    Never packaged — packaging/package.ps1 stages the plugin DLL, the UF2,
+    the dash and INSTALL.md, and audits that nothing else ships.
+
+    Cross-platform on purpose: seeing what the renderer paints must not
+    require Windows, SimHub, or a panel.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Uniflag.Tools</RootNamespace>
+    <AssemblyName>Uniflag.Tools</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\core\Uniflag.Core.csproj" />
+  </ItemGroup>
+
+</Project>

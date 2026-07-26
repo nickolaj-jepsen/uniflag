@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>9.0</LangVersion>
+    <RootNamespace>Uniflag</RootNamespace>
+    <AssemblyName>UniflagPlugin</AssemblyName>
+    <!-- Version comes from plugin/Directory.Build.props. -->
+    <!-- SimHub's own DLLs are the reference surface; they are proprietary and never
+         committed or shipped. Point SimHubDir at an install or an extracted installer. -->
+    <SimHubDir Condition="'$(SimHubDir)' == ''">C:\Program Files (x86)\SimHub</SimHubDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- PrivateAssets keeps the reference assemblies a build-time-only dependency, so
+         builds work without a Visual Studio .NET Framework targeting pack. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Internal test seams (registry key parsing, correlation tie-breaks) are unit
+         tested without touching the real registry or serial ports. -->
+    <InternalsVisibleTo Include="UniflagPlugin.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Everything portable lives in plugin/core/; what is left in this directory
+         is only what touches GameReaderCommon, System.IO.Ports, the registry or WPF.
+
+         Those sources are COMPILED IN rather than referenced as Uniflag.Core.dll
+         on purpose: the release zip must contain exactly one DLL
+         (packaging/package.ps1 audits it, and SimHub users drop a single file into
+         their plugins folder). A ProjectReference would ship two. -->
+    <Compile Include="..\core\**\*.cs"
+             Exclude="..\core\obj\**\*.cs;..\core\bin\**\*.cs"
+             LinkBase="Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- overlay/index.html is the single source of the overlay page: OverlayWebServer
+         serves this embedded copy at GET /, and `just overlay-serve` serves the same
+         file from disk for iteration. LogicalName is pinned — it is the manifest name
+         OverlayWebServer.PageResourceName looks up.
+
+         Uniflag.Core.csproj embeds the same file: EmbeddedResource is a project
+         item, not a source file, so the <Compile> above does not carry it over
+         and both assemblies need their own copy. -->
+    <EmbeddedResource Include="..\..\overlay\index.html" LogicalName="Uniflag.Web.index.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Private=false: never copy SimHub's proprietary DLLs into our output. -->
+    <Reference Include="SimHub.Plugins">
+      <HintPath>$(SimHubDir)\SimHub.Plugins.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="GameReaderCommon">
+      <HintPath>$(SimHubDir)\GameReaderCommon.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="log4net">
+      <HintPath>$(SimHubDir)\log4net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- SimHub.Logging.Current is the plugin-facing log (sink faults land there). -->
+    <Reference Include="SimHub.Logging">
+      <HintPath>$(SimHubDir)\SimHub.Logging.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

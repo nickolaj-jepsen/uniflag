@@ -1,0 +1,14 @@
+[package]
+name = "screens"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Firmware-local screens for uniflag: the roaming-ember fallback and the button test pattern."
+
+[dependencies]
+# Panel geometry only. Deliberately the sole dependency: this crate must
+# build for the host (so its tests can run) as well as thumbv6m.
+proto = { path = "../proto" }
+
+[lints]
+workspace = true
