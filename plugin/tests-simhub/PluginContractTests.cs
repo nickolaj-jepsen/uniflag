@@ -7,19 +7,12 @@ using Xunit;
 namespace Uniflag.Tests
 {
     /// <summary>
-    /// The plugin type exposes exactly the contract SimHub's loader scans for.
+    /// The plugin type carries the metadata SimHub's loader scans for. The
+    /// interfaces it implements are compiler-enforced by the declaration and
+    /// need no test; these attributes are not.
     /// </summary>
     public class PluginContractTests
     {
-        [Fact]
-        public void ImplementsSimHubPluginInterfaces()
-        {
-            var t = typeof(UniflagPlugin);
-            Assert.True(typeof(IPlugin).IsAssignableFrom(t));
-            Assert.True(typeof(IDataPlugin).IsAssignableFrom(t));
-            Assert.True(typeof(IWPFSettingsV2).IsAssignableFrom(t));
-        }
-
         [Fact]
         public void CarriesPluginMetadataAttributes()
         {

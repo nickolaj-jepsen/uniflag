@@ -35,12 +35,6 @@
             <Image x:Name="PreviewImage"
                    RenderOptions.BitmapScalingMode="NearestNeighbor" />
         </Border>
-        <CheckBox x:Name="CycleStatesCheckBox"
-                  Content="Cycle test states"
-                  ToolTip="Step the preview through every flag, wave, caution and sector state every 2 s — no game and no device needed. Overrides live game data until unticked."
-                  Margin="0,8,0,0"
-                  Checked="OnCycleStatesToggled"
-                  Unchecked="OnCycleStatesToggled" />
 
         <TextBlock Text="Web overlay" FontWeight="Bold" Margin="0,16,0,0" />
         <TextBlock x:Name="WebOverlayStatusText"

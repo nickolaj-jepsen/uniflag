@@ -251,9 +251,9 @@ namespace Uniflag.Tests
     }
 
     /// <summary>
-    /// Registration-counting stand-in for the renderer: the manager only
-    /// needs AddSink/RemoveSink, so tests observe the refcount without
-    /// spinning up a render thread.
+    /// Registration-counting stand-in for the renderer, shared by the device
+    /// and overlay suites: both consumers only need AddSink/RemoveSink, so
+    /// tests observe the refcount without spinning up a render thread.
     /// </summary>
     internal sealed class CountingSinkHost : IFrameSinkHost
     {

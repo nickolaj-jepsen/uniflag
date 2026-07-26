@@ -24,7 +24,7 @@ reasoning behind it, not a standard anyone has to live up to.
 | [`cosmic-unicorn-hardware.md`](./cosmic-unicorn-hardware.md) | Pin map, button layout, framebuffer / bitstream layout, BCM, gamma. **Includes the 4-byte alignment requirement on the DMA source.** |
 | [`cosmic-unicorn-pio.md`](./cosmic-unicorn-pio.md) | The Cosmic Unicorn bitstream PIO program, transcribed and annotated, plus the SM configuration that pairs with it. |
 | [`simhub-plugin-api.md`](./simhub-plugin-api.md) | SimHub's undocumented plugin API: loading contract, interfaces, settings persistence, UI integration. Reference SimHub version 9.11.21. |
-| [`simhub-flag-properties.md`](./simhub-flag-properties.md) | The flag-related properties exposed by SimHub's `DataCorePlugin` — the unified `GameData.Flag_*` set, per-sim raw-data fallbacks, and the generic adapter's mapping contract. |
+| [`simhub-flag-properties.md`](./simhub-flag-properties.md) | The flag-related properties exposed by SimHub's `DataCorePlugin` — the unified `GameData.Flag_*` set and the per-sim raw-data fallbacks, written down because upstream doesn't. |
 
 ## Hardware target — note on revisions
 

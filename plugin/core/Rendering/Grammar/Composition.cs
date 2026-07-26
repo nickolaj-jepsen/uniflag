@@ -2,9 +2,8 @@
 //
 // The Grammar compositor — docs/flag-grammar.md §5. Pure dispatch, separate
 // from the painters so slot selection is unit-testable in isolation. Three
-// slots render concurrently:
-// one field, at most one board, at most one frame accent, plus the sector
-// strip painted last. Precedence works WITHIN slots; red and checkered are
+// slots render concurrently: one field, at most one board, at most one frame
+// accent. Precedence works WITHIN slots; red and checkered are
 // field-exclusive takeovers.
 
 namespace Uniflag.Rendering.Grammar
@@ -29,11 +28,7 @@ namespace Uniflag.Rendering.Grammar
     {
         None,
         SafetyCar,
-        VirtualSafetyCar,
-        FullCourseYellow,
         Disqualified,
-        StopAndGo,
-        DriveThrough,
 
         /// <summary>Demoted bare black flag: the X-glyph board (docs/flag-grammar.md §5).</summary>
         BlackFlag,
@@ -41,7 +36,6 @@ namespace Uniflag.Rendering.Grammar
         /// <summary>Demoted meatball: the disc-icon board.</summary>
         MeatballFlag,
 
-        TimePenalty,
         Countdown,
         StartGantry,
     }
@@ -67,12 +61,10 @@ namespace Uniflag.Rendering.Grammar
 
         public BoardKind Board;
 
-        /// <summary>Payload for value-carrying boards: penalty seconds, countdown laps, gantry lights lit.</summary>
+        /// <summary>Payload for the one value-carrying board: countdown laps.</summary>
         public byte BoardValue;
 
         public FrameKind Frame;
-
-        public bool SectorStrip;
     }
 
     /// <summary>Pure slot selection. No animation state — that lives in <see cref="EnvelopeTracker"/>.</summary>
@@ -114,47 +106,30 @@ namespace Uniflag.Rendering.Grammar
                 field = TrackField(s.Flag);
             }
 
-            // A neutralisation regime rides a yellow field (§5): the yielding
+            // A full-course caution rides a yellow field (§5): the yielding
             // kinds give way; red/checkered takeovers and driver-directed
             // fields keep the slot (their boards/demotions carry the rest).
-            if (s.Caution != Caution.None && Yields(field))
+            if (s.SafetyCar && Yields(field))
             {
                 field = FieldKind.Yellow;
                 tier = Tier.Alert;
             }
 
             bool takeover = field == FieldKind.Red || field == FieldKind.Checkered;
-            bool disqualified = s.BlackDetail == BlackDetail.Disqualified;
 
-            // Board slot (suppressed entirely by takeovers): regime > DQ > SG
-            // > DT > demoted X > demoted disc > +N > countdown > gantry.
+            // Board slot (suppressed entirely by takeovers): SC > DQ >
+            // demoted X > demoted disc > countdown > gantry.
             BoardKind board = BoardKind.None;
             byte boardValue = 0;
             if (!takeover)
             {
-                if (s.Caution == Caution.SafetyCar)
+                if (s.SafetyCar)
                 {
                     board = BoardKind.SafetyCar;
                 }
-                else if (s.Caution == Caution.VirtualSafetyCar)
-                {
-                    board = BoardKind.VirtualSafetyCar;
-                }
-                else if (s.Caution == Caution.FullCourseYellow)
-                {
-                    board = BoardKind.FullCourseYellow;
-                }
-                else if (s.BlackDetail == BlackDetail.Disqualified)
+                else if (s.Disqualified)
                 {
                     board = BoardKind.Disqualified;
-                }
-                else if (s.BlackDetail == BlackDetail.StopAndGo)
-                {
-                    board = BoardKind.StopAndGo;
-                }
-                else if (s.BlackDetail == BlackDetail.DriveThrough)
-                {
-                    board = BoardKind.DriveThrough;
                 }
                 else if (blackActive && field != FieldKind.Black)
                 {
@@ -164,11 +139,6 @@ namespace Uniflag.Rendering.Grammar
                 {
                     board = BoardKind.MeatballFlag;
                 }
-                else if (s.TimePenaltySeconds > 0)
-                {
-                    board = BoardKind.TimePenalty;
-                    boardValue = s.TimePenaltySeconds;
-                }
                 else if (s.CountdownLaps > 0)
                 {
                     board = BoardKind.Countdown;
@@ -177,14 +147,13 @@ namespace Uniflag.Rendering.Grammar
                 else if (s.StartPhase != StartPhase.Off)
                 {
                     board = BoardKind.StartGantry;
-                    boardValue = s.StartLightsLit;
                 }
             }
 
             // Frame slot: suppressed by takeovers and by DQ (your race is
             // over — heads-up advisories are moot). Furled > incident.
             FrameKind frame = FrameKind.None;
-            if (!takeover && !disqualified)
+            if (!takeover && !s.Disqualified)
             {
                 if (s.Furled)
                 {
@@ -196,10 +165,6 @@ namespace Uniflag.Rendering.Grammar
                 }
             }
 
-            // Strip: local yellows only — never under takeovers, never for
-            // full-course states (the whole track is the sector).
-            bool strip = !takeover && s.Caution == Caution.None && !s.Sectors.IsEmpty;
-
             return new Composition
             {
                 Connected = true,
@@ -208,7 +173,6 @@ namespace Uniflag.Rendering.Grammar
                 Board = board,
                 BoardValue = boardValue,
                 Frame = frame,
-                SectorStrip = strip,
             };
         }
 

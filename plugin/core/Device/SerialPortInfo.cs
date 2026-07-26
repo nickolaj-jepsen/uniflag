@@ -3,24 +3,21 @@
 namespace Uniflag.Device
 {
     /// <summary>
-    /// One enumerated serial port with its USB identity, when the platform
-    /// enumeration could correlate it. Ports that exist but could not be
-    /// correlated to a USB VID/PID (legacy UARTs, virtual ports) carry null
-    /// ids — they never pass the discovery filter, but a manual port
-    /// override can still target them.
+    /// One enumerated serial port with the USB identity it enumerated under.
+    /// Ports that carry no USB identity at all (legacy UARTs, virtual ports)
+    /// are simply not enumerated — they could never pass the discovery
+    /// filter, and the manual port override does not go through enumeration.
     /// </summary>
     public sealed class SerialPortInfo
     {
         /// <summary>The OS port name, e.g. <c>COM5</c>.</summary>
         public string PortName { get; }
 
-        /// <summary>USB vendor id, or null when uncorrelated.</summary>
-        public ushort? VendorId { get; }
+        public ushort VendorId { get; }
 
-        /// <summary>USB product id, or null when uncorrelated.</summary>
-        public ushort? ProductId { get; }
+        public ushort ProductId { get; }
 
-        public SerialPortInfo(string portName, ushort? vendorId, ushort? productId)
+        public SerialPortInfo(string portName, ushort vendorId, ushort productId)
         {
             PortName = portName;
             VendorId = vendorId;

@@ -1,17 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// The whole signal vocabulary on one page.
-//
-// Two artefacts, because two audiences read them differently:
-//
-//  - contact-sheet.png — every scenario in catalogue order on a single
-//    grid. No labels: naming the cells would mean hand-authoring a pixel
-//    font, and the printed running order does the same job. This is the
-//    one file to open (or attach to a review) to answer "did anything move
-//    that I didn't mean to move".
-//  - contact-sheet.html — the same grid with real text labels and
-//    descriptions, each cell an embedded data-URI PNG. Self-contained, so
-//    it opens from disk with no server.
+// The whole signal vocabulary on one page: contact-sheet.html, every
+// scenario in catalogue order with its name and description, each cell an
+// embedded data-URI PNG. Self-contained, so it opens from disk with no
+// server, and each cell can be saved or copied on its own. For one frame as
+// a standalone image, `just frames <scenario>`.
 
 using System;
 using System.Collections.Generic;
@@ -22,12 +15,6 @@ namespace Uniflag.Tools
 {
     internal static class ContactSheet
     {
-        private const int Gutter = 6;
-
-        /// <summary>Background behind and between the cells — mid-grey, so a
-        /// black frame is still visible as a cell rather than a hole.</summary>
-        private static readonly (byte R, byte G, byte B) Backdrop = (48, 48, 56);
-
         internal sealed class Cell
         {
             public Cell(string name, string description, byte[] rgb)
@@ -40,52 +27,6 @@ namespace Uniflag.Tools
             public string Name { get; }
             public string Description { get; }
             public byte[] Rgb { get; }
-        }
-
-        /// <summary>Compose the cells into one RGB image, row-major.</summary>
-        public static (byte[] Rgb, int Width, int Height) Compose(
-            IReadOnlyList<Cell> cells, int frameSize, int scale, int columns)
-        {
-            int cell = frameSize * scale;
-            int rows = (cells.Count + columns - 1) / columns;
-            int width = columns * cell + (columns + 1) * Gutter;
-            int height = rows * cell + (rows + 1) * Gutter;
-
-            var canvas = new byte[width * height * 3];
-            for (int i = 0; i < canvas.Length; i += 3)
-            {
-                canvas[i] = Backdrop.R;
-                canvas[i + 1] = Backdrop.G;
-                canvas[i + 2] = Backdrop.B;
-            }
-
-            for (int i = 0; i < cells.Count; i++)
-            {
-                int col = i % columns;
-                int row = i / columns;
-                int originX = Gutter + col * (cell + Gutter);
-                int originY = Gutter + row * (cell + Gutter);
-                Blit(canvas, width, cells[i].Rgb, frameSize, scale, originX, originY);
-            }
-
-            return (canvas, width, height);
-        }
-
-        private static void Blit(
-            byte[] canvas, int canvasWidth, byte[] frame, int frameSize, int scale, int originX, int originY)
-        {
-            for (int y = 0; y < frameSize * scale; y++)
-            {
-                int srcRow = (y / scale) * frameSize * 3;
-                for (int x = 0; x < frameSize * scale; x++)
-                {
-                    int src = srcRow + (x / scale) * 3;
-                    int dst = ((originY + y) * canvasWidth + originX + x) * 3;
-                    canvas[dst] = frame[src];
-                    canvas[dst + 1] = frame[src + 1];
-                    canvas[dst + 2] = frame[src + 2];
-                }
-            }
         }
 
         /// <summary>

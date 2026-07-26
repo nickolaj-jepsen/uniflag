@@ -2,9 +2,9 @@
 //
 // The one-renderer→N-sinks core: a dedicated background thread ticks the
 // 60 fps internal frame counter that all animation math assumes
-// (docs/flag-grammar.md §4), paints the whole panel into a back buffer,
-// publishes the completed 3072-byte RGB888 frame, and hands it to every
-// registered IFrameSink. Sinks sample this clock; the counter is never
+// (docs/flag-grammar.md §4), paints the whole panel, and hands the finished
+// 3072-byte RGB888 buffer to every registered IFrameSink (which must copy
+// out before returning). Sinks sample this clock; the counter is never
 // rebased to a sink's rate (30 fps USB, the overlay's measured fps, WPF's
 // display cadence) — that would halve every strobe rate.
 //
@@ -47,25 +47,14 @@ namespace Uniflag.Rendering
     /// unconditionally). The animation clock (frame index, flag age) is
     /// preserved across stop/start cycles.
     ///
-    /// <para><b>Input arbitration:</b> two channels feed the loop. The
-    /// <i>normal</i> channel (<see cref="SetState"/>,
-    /// <see cref="SetConnectedIdle"/>) is for the live telemetry path; the
-    /// <i>override</i> channel (<see cref="SetOverrideState"/>,
-    /// <see cref="ClearOverride"/>) is for diagnostics like the settings-tab
-    /// state cycler. While an override is active it wins every tick — a
-    /// 60 Hz DataUpdate stream cannot clobber it; clearing it falls back to
-    /// whatever the normal channel last said (boot-dark blank if it never
-    /// spoke).</para>
-    ///
-    /// <para><b>Hot path:</b> zero allocation per frame — the paint target,
-    /// the publish buffer and the sink snapshot array are all reused;
-    /// allocations happen only on sink add/remove and thread start.</para>
+    /// <para>Input is latched once at the top of every tick. Zero allocation
+    /// per frame: the paint target and sink snapshot array are reused.</para>
     ///
     /// <para><b>Pacing:</b> monotonic <see cref="Stopwatch"/> deadlines, with
     /// missed ticks skipped rather than slewed, so animation rates stay
     /// wall-clock true when the thread falls behind.</para>
     /// </summary>
-    public sealed class RendererLoop : IDisposable
+    public sealed class RendererLoop : IFrameSinkHost, IDisposable
     {
         /// <summary>
         /// The internal animation tick rate. Fixed by the Grammar animation
@@ -86,23 +75,15 @@ namespace Uniflag.Rendering
         private ManualResetEventSlim _stop;
         private bool _disposed;
 
-        // Latest input, latched once at the top of every tick. The normal
-        // channel boots blank (firmware's boot-dark posture) until someone
-        // feeds it; the override channel, when active, shadows it entirely.
+        // Latest input, latched once at the top of every tick. Boots blank
+        // (firmware's boot-dark posture) until someone feeds it.
         private readonly object _inputGate = new object();
-        private RenderInputMode _normalMode = RenderInputMode.Blank;
-        private SignalState _normalState = SignalState.Default;
-        private bool _overrideActive;
-        private RenderInputMode _overrideMode = RenderInputMode.Blank;
-        private SignalState _overrideState = SignalState.Default;
+        private RenderInputMode _mode = RenderInputMode.Blank;
+        private SignalState _state = SignalState.Default;
 
-        // Double buffer: _back is painted each tick; _front is the published
-        // copy handed to sinks and pull-readers, published under _publishGate
-        // so no consumer ever observes a partially painted frame.
+        // Handed to sinks directly: the IFrameSink borrow rule makes them
+        // copy out before returning, and nothing repaints until the next tick.
         private readonly FrameBuffer _back = new FrameBuffer();
-        private readonly byte[] _front = new byte[FrameBuffer.ByteLength];
-        private readonly object _publishGate = new object();
-        private long _publishedIndex = -1;
 
         // Next frame index to render. Interlocked so a stop/start cycle
         // resumes the clock instead of restarting it.
@@ -133,23 +114,20 @@ namespace Uniflag.Rendering
         }
 
         /// <summary>
-        /// Replace the renderer's <b>normal</b> input. Thread-safe; the new
-        /// value is latched at the start of the next tick (or shadowed until
-        /// an active override clears). The envelope tracker diffs successive
-        /// latched states, so onset flashes, attention windows and fade-outs
-        /// follow the rules of docs/flag-grammar.md §4 automatically.
+        /// Thread-safe. The envelope tracker diffs successive latched
+        /// states, so docs/flag-grammar.md §4 transients follow automatically.
         /// </summary>
         public void SetState(SignalState state, bool connected)
         {
             lock (_inputGate)
             {
-                _normalMode = connected ? RenderInputMode.Live : RenderInputMode.Blank;
-                _normalState = state;
+                _mode = connected ? RenderInputMode.Live : RenderInputMode.Blank;
+                _state = state;
             }
         }
 
         /// <summary>
-        /// Switch the <b>normal</b> input to the connected-idle marker
+        /// Switch the input to the connected-idle marker
         /// (docs/flag-grammar.md §7b) — renderer alive, no game session.
         /// The latched state becomes <see cref="SignalState.Default"/> and
         /// the envelope resets, so a game session opening straight into a
@@ -159,37 +137,8 @@ namespace Uniflag.Rendering
         {
             lock (_inputGate)
             {
-                _normalMode = RenderInputMode.ConnectedIdle;
-                _normalState = SignalState.Default;
-            }
-        }
-
-        /// <summary>
-        /// Activate (or update) the <b>override</b> input: it wins over the
-        /// normal channel every tick until <see cref="ClearOverride"/>.
-        /// Same (state, connected) semantics as <see cref="SetState"/>;
-        /// the envelope follows whichever channel is being painted.
-        /// </summary>
-        public void SetOverrideState(SignalState state, bool connected)
-        {
-            lock (_inputGate)
-            {
-                _overrideActive = true;
-                _overrideMode = connected ? RenderInputMode.Live : RenderInputMode.Blank;
-                _overrideState = state;
-            }
-        }
-
-        /// <summary>
-        /// Deactivate the override input, falling back to the last normal
-        /// input (boot-dark blank if the normal channel was never fed).
-        /// Idempotent.
-        /// </summary>
-        public void ClearOverride()
-        {
-            lock (_inputGate)
-            {
-                _overrideActive = false;
+                _mode = RenderInputMode.ConnectedIdle;
+                _state = SignalState.Default;
             }
         }
 
@@ -242,33 +191,6 @@ namespace Uniflag.Rendering
                 {
                     StopLocked();
                 }
-            }
-        }
-
-        /// <summary>
-        /// Copy the latest completed frame into <paramref name="destination"/>
-        /// (at least <see cref="FrameBuffer.ByteLength"/> bytes). Returns the
-        /// frame's tick index, or -1 if nothing has been rendered yet.
-        /// </summary>
-        public long CopyLatestFrame(byte[] destination)
-        {
-            if (destination == null)
-            {
-                throw new ArgumentNullException(nameof(destination));
-            }
-            if (destination.Length < FrameBuffer.ByteLength)
-            {
-                throw new ArgumentException(
-                    $"destination must hold at least {FrameBuffer.ByteLength} bytes", nameof(destination));
-            }
-            lock (_publishGate)
-            {
-                if (_publishedIndex < 0)
-                {
-                    return -1;
-                }
-                Buffer.BlockCopy(_front, 0, destination, 0, FrameBuffer.ByteLength);
-                return _publishedIndex;
             }
         }
 
@@ -386,16 +308,8 @@ namespace Uniflag.Rendering
             SignalState state;
             lock (_inputGate)
             {
-                if (_overrideActive)
-                {
-                    mode = _overrideMode;
-                    state = _overrideState;
-                }
-                else
-                {
-                    mode = _normalMode;
-                    state = _normalState;
-                }
+                mode = _mode;
+                state = _state;
             }
 
             uint frame = unchecked((uint)frameIndex);
@@ -415,21 +329,13 @@ namespace Uniflag.Rendering
                 Painter.Paint(_back, comp, env, state, frame);
             }
 
-            lock (_publishGate)
-            {
-                Buffer.BlockCopy(_back.Pixels, 0, _front, 0, FrameBuffer.ByteLength);
-                _publishedIndex = frameIndex;
-            }
-
-            // Push the published frame to every sink. _front is stable until
-            // the next tick's publish, and all sinks have returned by then —
-            // the IFrameSink borrow rule covers anyone who copies out.
+            byte[] pixels = _back.Pixels;
             IFrameSink[] sinks = _sinkSnapshot;
             for (int i = 0; i < sinks.Length; i++)
             {
                 try
                 {
-                    sinks[i].OnFrame(_front, frameIndex);
+                    sinks[i].OnFrame(pixels, frameIndex);
                 }
                 catch (Exception ex)
                 {

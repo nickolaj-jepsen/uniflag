@@ -13,6 +13,9 @@ members = ["proto", "screens", "firmware", "cli"]
 default-members = ["proto", "screens", "cli"]
 
 [workspace.package]
+# Every crate inherits this with `version.workspace = true`. A release bump
+# is this line plus plugin/Directory.Build.props (the tag check reads both).
+version = "2.0.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 authors = ["Nickolaj Jepsen <nickolaj1177@gmail.com>"]

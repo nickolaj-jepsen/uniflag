@@ -403,16 +403,6 @@ fn raw_vectors_parse_to_the_expected_typed_packet() {
 }
 
 #[test]
-fn raw_vectors_reencode_byte_identically() {
-    let pixels = frame_pixels();
-    for v in POSITIVE {
-        let raw = read_vector(&format!("{}.raw", v.name));
-        let rebuilt = raw_of(v.ty, &payload_of(v.name, &pixels));
-        assert_bytes_eq(&format!("{}.raw re-encode", v.name), &rebuilt, &raw);
-    }
-}
-
-#[test]
 fn wire_vectors_decode_parse_and_reencode_byte_identically() {
     let pixels = frame_pixels();
     for v in POSITIVE {
@@ -474,8 +464,6 @@ fn frame_vector_payload_stresses_cobs() {
 #[test]
 fn cobs_boundary_254_raw_ends_in_254_nonzero_bytes_after_a_zero() {
     let raw = read_vector("cobs_boundary_254.raw");
-    assert_bytes_eq("cobs_boundary_254.raw", &raw, &boundary_raw());
-
     let boundary = raw.len() - 255;
     assert_eq!(raw[boundary], 0x00, "no zero before the trailing run");
     assert!(
@@ -515,9 +503,6 @@ fn cobs_boundary_254_wire_is_the_canonical_listing_1_form() {
     let mut raw = vec![0u8; MAX_RAW_LEN];
     let n = cobs::decode(&wire[..len - 1], &mut raw).expect("COBS decode");
     assert_bytes_eq("cobs_boundary_254 decoded wire body", &raw[..n], &raw_file);
-
-    let rebuilt = wire_of_raw(&raw_file);
-    assert_bytes_eq("cobs_boundary_254.wire re-encode", &rebuilt, &wire);
 
     // The non-canonical (Wikipedia) form — the same bytes minus the
     // trailing 0x01 header — decodes to the identical raw packet. That

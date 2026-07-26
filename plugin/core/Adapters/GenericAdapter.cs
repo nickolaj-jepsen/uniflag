@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // The generic game adapter: maps SimHub's unified Flag_* layer to a
-// SignalState (docs/flag-grammar.md §10). The mapping contract is documented
-// in docs/simhub-flag-properties.md ("Generic adapter mapping") — doc and
-// code must state the same rules; change them together.
+// SignalState (docs/flag-grammar.md §10). This file is the mapping contract;
+// docs/simhub-flag-properties.md records what SimHub's unified layer actually
+// carries per sim, which is research rather than a restatement of this code.
 
 using Uniflag.Rendering;
 using Uniflag.Rendering.Grammar;
-using Caution = Uniflag.Rendering.Grammar.Caution;
 
 namespace Uniflag.Adapters
 {
@@ -26,34 +25,27 @@ namespace Uniflag.Adapters
     /// layer cannot distinguish displayed from waved); everything else at
     /// <see cref="Tier.Ambient"/>.</item>
     /// <item><b>Session</b>: see <see cref="MapSession"/>.</item>
-    /// <item><b>Everything else</b> (caution, sectors, penalty details,
-    /// start sequence, notices, advisories) is pinned to its default —
-    /// those signals only exist in per-sim raw data and belong to the
-    /// refiners.</item>
+    /// <item><b>Everything else</b> (safety car, DQ, start sequence,
+    /// notices, advisories) is pinned to its default — those signals only
+    /// exist in per-sim raw data and belong to the refiners.</item>
     /// </list>
     /// The unified layer never surfaces a red flag, so this adapter never
     /// emits <see cref="TrackFlag.Red"/> either.
     /// </summary>
-    public sealed class GenericAdapter : IGameAdapter
+    public static class GenericAdapter
     {
-        /// <inheritdoc />
-        public bool Matches(string gameName) => true;
-
-        /// <inheritdoc />
-        public void Map(TelemetrySnapshot snapshot, ref SignalState state)
+        /// <summary>Runs for every game; there is no match gate.</summary>
+        public static void Map(TelemetrySnapshot snapshot, ref SignalState state)
         {
             TrackFlag flag = MapFlag(snapshot);
             state.Flag = flag;
             state.Tier = flag == TrackFlag.Yellow ? Tier.Alert : Tier.Ambient;
             state.BlackFlag = snapshot.FlagBlack;
-            state.BlackDetail = BlackDetail.None;
+            state.Disqualified = false;
             state.Meatball = snapshot.FlagOrange;
             state.Session = MapSession(snapshot.SessionTypeName, snapshot.GamePaused);
-            state.Caution = Caution.None;
-            state.Sectors = SectorSet.Empty;
+            state.SafetyCar = false;
             state.StartPhase = StartPhase.Off;
-            state.StartLightsLit = 0;
-            state.TimePenaltySeconds = 0;
             state.CountdownLaps = 0;
             state.Furled = false;
             state.IncidentWarning = false;

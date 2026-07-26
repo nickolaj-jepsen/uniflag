@@ -158,9 +158,9 @@ frames-list:
 frames SCENARIO *ARGS:
     dotnet run --project plugin/tools -c Release -- render {{SCENARIO}} {{ARGS}}
 
-# The whole catalogue: one contact-sheet.png plus a labelled contact-sheet.html.
+# The whole catalogue as one labelled, self-contained contact-sheet.html.
 # This is the visual review the painters are checked by.
-[doc("Render the whole catalogue to one contact sheet + HTML page.")]
+[doc("Render the whole catalogue to one labelled HTML contact sheet.")]
 frames-sheet *ARGS:
     dotnet run --project plugin/tools -c Release -- sheet {{ARGS}}
 

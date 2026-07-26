@@ -97,22 +97,6 @@ namespace Uniflag.Rendering
         }
 
         /// <summary>
-        /// Floor division. C#'s <c>/</c> truncates
-        /// toward zero and disagrees for negative dividends:
-        /// <c>-5 / 4 == -1</c> but <c>FloorDiv(-5, 4) == -2</c>. All effect
-        /// call sites use <paramref name="b"/> &gt; 0, where the two coincide.
-        /// </summary>
-        public static int FloorDiv(int a, int b)
-        {
-            int q = a / b;
-            if (a % b != 0 && (a ^ b) < 0)
-            {
-                q--;
-            }
-            return q;
-        }
-
-        /// <summary>
         /// Floor modulus. C#'s <c>%</c> is a
         /// remainder and goes negative for negative dividends:
         /// <c>-5 % 32 == -5</c> but <c>FloorMod(-5, 32) == 27</c>. All effect

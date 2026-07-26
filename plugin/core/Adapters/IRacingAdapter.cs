@@ -5,8 +5,8 @@
 // than the unified Flag_* layer. Every bit value below was verified against
 // the iRacingSDK.dll shipped inside SimHub 9.11.21 (the assembly SimHub's
 // own reader consumes), and SimHub's unified mapping was IL-verified for
-// cross-checking — both documented in docs/simhub-flag-properties.md
-// ("iRacing"), which holds the mapping contract; change doc and code together.
+// cross-checking. docs/simhub-flag-properties.md records that research — what
+// the sim exposes and how it was established; this file is the mapping.
 
 using System;
 using Uniflag.Rendering.Grammar;
@@ -26,12 +26,11 @@ namespace Uniflag.Adapters
     /// flag that matters at a start/restart, and honouring the suppression
     /// keeps the panel consistent with every other SimHub-driven display.</para>
     ///
-    /// <para>Two absences worth knowing: iRacing exposes no DT-vs-SG
-    /// distinction in telemetry (verified), so a bare <c>black</c> bit stays a
-    /// bare black flag; and it has no start-light counts, so
-    /// <see cref="SignalState.StartLightsLit"/> stays 0 (= all five).</para>
+    /// <para>One absence worth knowing: iRacing exposes no DT-vs-SG
+    /// distinction in telemetry (verified), so a bare <c>black</c> bit stays
+    /// a bare black flag.</para>
     /// </summary>
-    public sealed class IRacingAdapter : IGameAdapter
+    public static class IRacingAdapter
     {
         /// <summary>
         /// SimHub's <c>GameData.GameName</c> for iRacing — also names the
@@ -75,12 +74,14 @@ namespace Uniflag.Adapters
         /// </summary>
         internal const int IncidentWarnMargin = 4;
 
-        /// <inheritdoc />
-        public bool Matches(string gameName) =>
+        public static bool Matches(string gameName) =>
             string.Equals(gameName, IRacingGameName, StringComparison.OrdinalIgnoreCase);
 
-        /// <inheritdoc />
-        public void Map(TelemetrySnapshot snapshot, ref SignalState state)
+        /// <summary>
+        /// Refine the generic verdict in <paramref name="state"/> with raw
+        /// iRacing telemetry. Runs after <see cref="GenericAdapter.Map"/>.
+        /// </summary>
+        public static void Map(TelemetrySnapshot snapshot, ref SignalState state)
         {
             // Incident-limit warning is independent of the SessionFlags mask
             // (it reads the incident count from telemetry and the limit from
@@ -88,6 +89,10 @@ namespace Uniflag.Adapters
             // guard — a tick that lost the mask can still warn. Only fires
             // when both are known and the limit is finite (>0; an "unlimited"
             // limit leaves HasIncidentLimit false in the extractor).
+            //
+            // It renders as the red perimeter frame, which the compositor
+            // suppresses under a red/checkered takeover and under DQ — so
+            // raising it here does not guarantee it is visible.
             if (snapshot.HasIncidentCount && snapshot.HasIncidentLimit && snapshot.IncidentLimit > 0)
             {
                 state.IncidentWarning =
@@ -112,7 +117,7 @@ namespace Uniflag.Adapters
             // Full-course caution → SC board (pace car; no VSC in iRacing).
             if ((bits & (FlagCaution | FlagCautionWaving)) != 0)
             {
-                state.Caution = Caution.SafetyCar;
+                state.SafetyCar = true;
             }
 
             // Tier refinement (never fabricate a flag here — SimHub's
@@ -136,13 +141,13 @@ namespace Uniflag.Adapters
             if ((bits & FlagDisqualify) != 0)
             {
                 state.BlackFlag = true;
-                state.BlackDetail = BlackDetail.Disqualified;
+                state.Disqualified = true;
             }
 
             // Penalty dimensions. repair also sets unified Flag_Orange, so
             // the generic adapter already raised Meatball — this just keeps
-            // raw and unified in lockstep. No DT/SG guessing: a bare black
-            // bit stays a bare black flag (see class doc).
+            // raw and unified in lockstep. A bare black bit stays a bare
+            // black flag (see class doc).
             state.Meatball = (bits & FlagRepair) != 0;
             state.Furled = (bits & FlagFurled) != 0;
 
@@ -169,6 +174,12 @@ namespace Uniflag.Adapters
         /// into Set (furled green in the starter's hand — green imminent).
         /// <c>startHidden</c> and the unset case are
         /// <see cref="StartPhase.Off"/>.
+        ///
+        /// <para><c>greenHeld</c> is deliberately <b>not</b> mapped to a green
+        /// flag. iRacing raises it while the starter is still holding the
+        /// green <i>furled</i>, so surfacing it as green made the panel jump
+        /// the start. The panel goes green only when the <c>green</c> bit
+        /// itself flies.</para>
         /// </summary>
         private static StartPhase MapStartPhase(uint bits)
         {

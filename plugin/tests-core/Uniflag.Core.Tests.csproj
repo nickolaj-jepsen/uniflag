@@ -3,7 +3,7 @@
   <!--
     The cross-platform test leg, and the suite CI gates on: renderer, wire
     codec, device connection manager, overlay web server, telemetry
-    adapters, state cycler. No SimHub, no WPF, no Windows.
+    adapters. No SimHub, no WPF, no Windows.
 
     When adding a test, default to here — it belongs in plugin/tests-simhub/
     only if it cannot compile without GameReaderCommon, System.IO.Ports or
@@ -29,8 +29,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\core\Uniflag.Core.csproj" />
-    <!-- The scenario catalogue lives with the frame viewer; the smoke pass
-         replays it. -->
+    <!-- No test references the frame viewer; this reference exists so the
+         gating leg compile-checks it. Without it a break in the dev-only
+         viewer would surface only in the non-gating Windows sln job. -->
     <ProjectReference Include="..\tools\Uniflag.Tools.csproj" />
   </ItemGroup>
 

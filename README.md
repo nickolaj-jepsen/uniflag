@@ -110,9 +110,10 @@ no game, no hardware, any OS:
 just frames-sheet
 ```
 
-writes `target/frames/contact-sheet.png` (the whole signal vocabulary on
-one grid) and a labelled `contact-sheet.html`. `just frames-list` names
-the scenarios, `just frames <name>` renders one to a PNG, and
+writes `target/frames/contact-sheet.html` — the whole signal vocabulary on
+one page, every cell labelled and self-contained (no server needed).
+`just frames-list` names the scenarios, `just frames <name>` renders one
+to a PNG, and
 `just frames-ansi <name>` draws it straight into the terminal — it
 takes a scenario name or a path to a raw `.rgb` frame, so it also
 renders frames written by `just frames <name> --rgb`.

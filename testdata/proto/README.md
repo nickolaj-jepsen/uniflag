@@ -3,8 +3,7 @@
 Cross-language byte vectors for the uniflag v2 binary protocol. These are
 the bytes the Rust and C# codecs are **both** checked against:
 
-- Rust: `proto/tests/golden_vectors.rs`, `cli/tests/rx_decode.rs`,
-  `cli/tests/golden_conformance.rs`
+- Rust: `proto/tests/golden_vectors.rs`, `cli/src/rx.rs`
 - C#: `plugin/tests-core/ProtoConformanceTests.cs`
 
 Neither side generates its own fixtures. The prose specification is
@@ -46,20 +45,11 @@ Each has a `.raw` and a `.wire`.
 
 ### The `frame` payload
 
-Deterministic and piecewise, so the framing layer sees every case that
-matters. Byte `i` is:
-
-| Range | Value |
-|---|---|
-| `i < 256` | `0` if `i % 8 == 0`, else `i` |
-| `i < 512` | `0xFF` |
-| `i < 1024` | `(i * 7) % 256` |
-| `i < 1342` | `(i % 253) + 1` |
-| otherwise | `i % 256` |
-
-That yields zero bytes, a 257-byte `0xFF` run (byte 255 is already `0xFF`,
-then 256..=511), and non-zero runs longer than 254 bytes — so COBS group
-handling is exercised end to end.
+Deterministic and piecewise, so COBS group handling is exercised end to end:
+zero bytes, a `0xFF` run longer than 254, and non-zero runs longer than 254.
+The generator is `frame_pixel` in `proto/tests/golden_vectors.rs`;
+`frame_vector_payload_stresses_cobs` asserts those properties against the
+committed bytes rather than the formula.
 
 ## Boundary vector
 
@@ -76,12 +66,6 @@ byte comparison catches it.
 
 Type byte `0x7E` is unassigned, so receivers parse this as an unknown
 packet and ignore it (forward compat) rather than erroring.
-
-Re-derivable as `[0x7E, 0x51, tweak, 0x00, 0x01, 0x02, .., 0xFC, crc_lo,
-crc_hi]`, where `tweak` is the smallest value in `0x00..=0xFF` for which
-neither CRC-16 byte of the whole preceding sequence is zero. In the
-committed file `tweak = 0x00`, giving 252 ascending pattern bytes + 2 CRC
-bytes = 254 zero-free trailing bytes after the `0x00` at raw offset 3.
 
 ## Negative vectors
 

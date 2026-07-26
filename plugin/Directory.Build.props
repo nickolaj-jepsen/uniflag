@@ -1,0 +1,14 @@
+<Project>
+
+  <!-- The C# half's version; every project under plugin/ inherits it. A
+       release bump is this file plus the root Cargo.toml, which is what the
+       release workflow's tag check reads. -->
+
+  <PropertyGroup>
+    <UniflagVersion>2.0.0</UniflagVersion>
+    <Version>$(UniflagVersion)</Version>
+    <AssemblyVersion>$(UniflagVersion).0</AssemblyVersion>
+    <FileVersion>$(UniflagVersion).0</FileVersion>
+  </PropertyGroup>
+
+</Project>

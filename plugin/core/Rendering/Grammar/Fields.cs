@@ -24,7 +24,7 @@ namespace Uniflag.Rendering.Grammar
                     return;
 
                 case FieldKind.Black:
-                    if (state.BlackDetail == BlackDetail.Disqualified)
+                    if (state.Disqualified)
                     {
                         // Terminal variant: steady solid X, no motion (§6.1).
                         BlackField(s, 200);
@@ -175,7 +175,7 @@ namespace Uniflag.Rendering.Grammar
             {
                 for (int x = 0; x < FrameBuffer.Width; x++)
                 {
-                    int cell = (Anim.FloorDiv(x + off, 4) + Anim.FloorDiv(y + off, 4)) & 1;
+                    int cell = ((x + off) / 4 + (y + off) / 4) & 1;
                     s.SetPixel(x, y, cell == 0 ? Palette.Black : Palette.White);
                 }
             }
@@ -188,7 +188,7 @@ namespace Uniflag.Rendering.Grammar
             {
                 for (int x = 0; x < FrameBuffer.Width; x++)
                 {
-                    int stripe = Anim.FloorDiv(x + y + off, 4) & 1;
+                    int stripe = ((x + y + off) / 4) & 1;
                     s.SetPixel(x, y, stripe == 0 ? Palette.Yellow : Palette.Red);
                 }
             }

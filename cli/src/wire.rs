@@ -1,9 +1,8 @@
-//! Wire-byte builders shared by the stream and emit modes.
+//! Wire-byte builders for the stream mode.
 //!
 //! Thin wrappers over [`proto::packet::Packet::encode`] that allocate the
 //! right-sized buffers and hand back owned byte vectors. All host→device
-//! bytes the CLI ever sends originate here, so pinning these functions
-//! against the golden vectors pins every mode at once.
+//! bytes the CLI ever sends originate here.
 
 use anyhow::{anyhow, Result};
 use proto::packet::{Packet, FRAME_PAYLOAD_LEN, MAX_RAW_LEN, MAX_WIRE_LEN, PROTOCOL_VERSION};
@@ -38,12 +37,7 @@ pub fn brightness(value: u8) -> Result<Vec<u8>> {
 pub fn frame(pattern: Pattern, frame_index: u64) -> Result<Vec<u8>> {
     let mut pixels = [0u8; FRAME_PAYLOAD_LEN];
     pattern.paint(frame_index, &mut pixels);
-    frame_from_pixels(&pixels)
-}
-
-/// One `Frame` carrying `pixels` verbatim.
-pub fn frame_from_pixels(pixels: &[u8; FRAME_PAYLOAD_LEN]) -> Result<Vec<u8>> {
-    encode_packet(&Packet::Frame { pixels })
+    encode_packet(&Packet::Frame { pixels: &pixels })
 }
 
 #[cfg(test)]

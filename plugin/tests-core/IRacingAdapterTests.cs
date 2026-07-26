@@ -26,7 +26,7 @@ namespace Uniflag.Tests
         [InlineData(null, false)]
         public void MatchesExactlyTheIRacingGameCode(string gameName, bool want)
         {
-            Assert.Equal(want, new IRacingAdapter().Matches(gameName));
+            Assert.Equal(want, IRacingAdapter.Matches(gameName));
         }
 
         /// <summary>
@@ -67,7 +67,7 @@ namespace Uniflag.Tests
 
         private static SignalState MapThroughPipeline(TelemetrySnapshot snapshot)
         {
-            return new AdapterPipeline(new IRacingAdapter()).Map(snapshot);
+            return SignalMapping.Map(snapshot);
         }
 
         [Fact]
@@ -115,7 +115,7 @@ namespace Uniflag.Tests
             // iRacing's full-course caution is a deployed pace car; it has
             // no VSC concept, so the SC board is always the right board.
             SignalState state = MapThroughPipeline(IRacingSnapshot(bits));
-            Assert.Equal(Caution.SafetyCar, state.Caution);
+            Assert.True(state.SafetyCar);
 
             Composition comp = Compositor.Select(state, connected: true);
             Assert.Equal(FieldKind.Yellow, comp.Field);
@@ -150,7 +150,7 @@ namespace Uniflag.Tests
             Assert.True(state.BlackFlag);
             // No DT/SG distinction exists in iRacing telemetry — the detail
             // must stay None (never guess a service type).
-            Assert.Equal(BlackDetail.None, state.BlackDetail);
+            Assert.False(state.Disqualified);
             Assert.Equal(FieldKind.Black, Compositor.Select(state, connected: true).Field);
         }
 
@@ -159,7 +159,7 @@ namespace Uniflag.Tests
         {
             SignalState alone = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagDisqualify));
             Assert.True(alone.BlackFlag);
-            Assert.Equal(BlackDetail.Disqualified, alone.BlackDetail);
+            Assert.True(alone.Disqualified);
 
             // A concurrent blue keeps the track flag, but the DQ order is
             // never discarded: the black family outranks blue in the field
@@ -332,4 +332,141 @@ namespace Uniflag.Tests
         }
     }
 
+    /// <summary>
+    /// iRacing sequences through generic+iRacing. Masks are hand-built from
+    /// the irsdk_Flags layout verified against the iRacingSDK.dll inside
+    /// SimHub 9.11.21 — SYNTHETIC, never captured from a live session. A
+    /// live-session pass is on the maintainer's checklist.
+    /// </summary>
+    public class IRacingSyntheticSequenceTests
+    {
+        private sealed class Expect
+        {
+            public Expect(uint mask, TrackFlag flag, Tier tier, bool safetyCar,
+                bool blackFlag = false, bool meatball = false, bool furled = false,
+                StartPhase startPhase = StartPhase.Off, byte countdown = 0, string because = null)
+            {
+                Mask = mask;
+                Flag = flag;
+                Tier = tier;
+                SafetyCar = safetyCar;
+                BlackFlag = blackFlag;
+                Meatball = meatball;
+                Furled = furled;
+                StartPhase = startPhase;
+                Countdown = countdown;
+                Because = because ?? string.Empty;
+            }
+
+            public uint Mask { get; }
+            public TrackFlag Flag { get; }
+            public Tier Tier { get; }
+            public bool SafetyCar { get; }
+            public bool BlackFlag { get; }
+            public bool Meatball { get; }
+            public bool Furled { get; }
+            public StartPhase StartPhase { get; }
+            public byte Countdown { get; }
+            public string Because { get; }
+        }
+
+        [Fact]
+        public void RaceArcWithCautionAndPenaltiesMapsPerStep()
+        {
+            // A plausible race arc: start held → green → local yellow
+            // (displayed, then waved) → caution → restart → warning → repair
+            // → black → red → finish.
+            Expect[] sequence =
+            {
+                new Expect(IRacingAdapter.FlagGreenHeld, TrackFlag.None, Tier.Ambient, false,
+                    startPhase: StartPhase.Set,
+                    because: "greenHeld: green still furled — gantry Set, no flag yet"),
+                new Expect(IRacingAdapter.FlagGreen, TrackFlag.Green, Tier.Alert, false),
+                new Expect(0, TrackFlag.None, Tier.Ambient, false),
+                new Expect(IRacingAdapter.FlagYellow, TrackFlag.Yellow, Tier.Ambient, false,
+                    because: "displayed yellow: raw kills the generic Alert guess"),
+                new Expect(IRacingAdapter.FlagYellow | IRacingAdapter.FlagYellowWaving,
+                    TrackFlag.Yellow, Tier.Alert, false),
+                new Expect(IRacingAdapter.FlagCaution | IRacingAdapter.FlagCautionWaving
+                        | IRacingAdapter.FlagYellowWaving,
+                    TrackFlag.Yellow, Tier.Urgent, safetyCar: true,
+                    because: "waving full-course caution: SC board over an urgent yellow field"),
+                new Expect(IRacingAdapter.FlagOneLapToGreen | IRacingAdapter.FlagCaution,
+                    TrackFlag.Yellow, Tier.Alert, safetyCar: true,
+                    startPhase: StartPhase.Ready,
+                    because: "one-to-green: caution still up, gantry arms on the rolling restart"),
+                new Expect(0, TrackFlag.None, Tier.Ambient, false),
+                new Expect(IRacingAdapter.FlagFurled, TrackFlag.None, Tier.Ambient, false,
+                    furled: true),
+                new Expect(IRacingAdapter.FlagRepair, TrackFlag.None, Tier.Ambient, false,
+                    meatball: true,
+                    because: "repair: the meatball field (unified orange maps to the orthogonal dimension)"),
+                new Expect(IRacingAdapter.FlagBlack, TrackFlag.None, Tier.Ambient, false,
+                    blackFlag: true),
+                new Expect(IRacingAdapter.FlagTenToGo, TrackFlag.None, Tier.Ambient, false,
+                    countdown: 10),
+                new Expect(IRacingAdapter.FlagRed, TrackFlag.Red, Tier.Urgent, false),
+                new Expect(IRacingAdapter.FlagWhite, TrackFlag.White, Tier.Ambient, false),
+                new Expect(IRacingAdapter.FlagCheckered, TrackFlag.Checkered, Tier.Ambient, false),
+            };
+
+            for (int i = 0; i < sequence.Length; i++)
+            {
+                Expect expect = sequence[i];
+                SignalState got = SignalMapping.Map(IRacingAdapterTests.IRacingSnapshot(expect.Mask));
+                string context = $"step {i} (mask 0x{expect.Mask:X}) {expect.Because}";
+                Assert.True(expect.Flag == got.Flag, $"{context}: flag {got.Flag}, want {expect.Flag}");
+                Assert.True(expect.Tier == got.Tier, $"{context}: tier {got.Tier}, want {expect.Tier}");
+                Assert.True(expect.SafetyCar == got.SafetyCar,
+                    $"{context}: safety car {got.SafetyCar}, want {expect.SafetyCar}");
+                Assert.True(expect.BlackFlag == got.BlackFlag,
+                    $"{context}: black {got.BlackFlag}, want {expect.BlackFlag}");
+                Assert.True(expect.Meatball == got.Meatball,
+                    $"{context}: meatball {got.Meatball}, want {expect.Meatball}");
+                Assert.True(expect.Furled == got.Furled,
+                    $"{context}: furled {got.Furled}, want {expect.Furled}");
+                Assert.True(expect.StartPhase == got.StartPhase,
+                    $"{context}: start phase {got.StartPhase}, want {expect.StartPhase}");
+                Assert.True(expect.Countdown == got.CountdownLaps,
+                    $"{context}: countdown {got.CountdownLaps}, want {expect.Countdown}");
+                // Never fabricated from iRacing telemetry:
+                Assert.False(got.Disqualified && (expect.Mask & IRacingAdapter.FlagDisqualify) == 0,
+                    $"{context}: DQ must never be fabricated");
+            }
+        }
+
+        [Fact]
+        public void RedDuringCautionIsATotalTakeover()
+        {
+            // Red + caution simultaneously: the adapter reports both; the
+            // compositor resolves red on top and suppresses the board.
+            SignalState state = SignalMapping.Map(IRacingAdapterTests.IRacingSnapshot(
+                IRacingAdapter.FlagRed | IRacingAdapter.FlagCaution));
+            Assert.Equal(TrackFlag.Red, state.Flag);
+            Assert.True(state.SafetyCar);
+
+            Composition comp = Compositor.Select(state, connected: true);
+            Assert.Equal(FieldKind.Red, comp.Field);
+            Assert.Equal(BoardKind.None, comp.Board);
+            Assert.Equal(FrameKind.None, comp.Frame);
+        }
+
+        [Fact]
+        public void PenaltyBitsComposeWithTheCautionRegime()
+        {
+            // Meatball + furled during a caution: the adapter carries all
+            // three dimensions; the compositor stacks the yellow field, the
+            // SC board and the furled frame.
+            SignalState state = SignalMapping.Map(IRacingAdapterTests.IRacingSnapshot(
+                IRacingAdapter.FlagCaution | IRacingAdapter.FlagRepair | IRacingAdapter.FlagFurled));
+            Assert.True(state.SafetyCar);
+            Assert.True(state.Meatball);
+            Assert.True(state.Furled);
+
+            Composition comp = Compositor.Select(state, connected: true);
+            Assert.Equal(FieldKind.Yellow, comp.Field);
+            Assert.Equal(BoardKind.SafetyCar, comp.Board);
+            Assert.Equal(FrameKind.Furled, comp.Frame);
+        }
+    }
 }

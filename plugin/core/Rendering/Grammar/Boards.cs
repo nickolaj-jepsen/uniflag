@@ -62,7 +62,7 @@ namespace Uniflag.Rendering.Grammar
             }
             else if (kind == BoardKind.StartGantry)
             {
-                PaintGantryLights(s, x0 + 3, y0 + 4, state.StartPhase, value, frame);
+                PaintGantryLights(s, x0 + 3, y0 + 4, state.StartPhase, frame);
             }
             else if (kind == BoardKind.MeatballFlag)
             {
@@ -85,20 +85,10 @@ namespace Uniflag.Rendering.Grammar
             {
                 case BoardKind.SafetyCar:
                     return new[] { Font7x11.S, Font7x11.C };
-                case BoardKind.VirtualSafetyCar:
-                    return new[] { Font7x11.V, Font7x11.S, Font7x11.C };
-                case BoardKind.FullCourseYellow:
-                    return new[] { Font7x11.F, Font7x11.C, Font7x11.Y };
                 case BoardKind.Disqualified:
                     return new[] { Font7x11.D, Font7x11.Q };
-                case BoardKind.StopAndGo:
-                    return new[] { Font7x11.S, Font7x11.G };
-                case BoardKind.DriveThrough:
-                    return new[] { Font7x11.D, Font7x11.T };
                 case BoardKind.BlackFlag:
                     return new[] { Font7x11.X };
-                case BoardKind.TimePenalty:
-                    return Prepend(Font7x11.Plus, DigitRow(value));
                 case BoardKind.Countdown:
                     return DigitRow(value);
                 default:
@@ -116,21 +106,10 @@ namespace Uniflag.Rendering.Grammar
             return new[] { Digits[tens], Digits[value % 10] };
         }
 
-        private static byte[][] Prepend(byte[] head, byte[][] tail)
-        {
-            var row = new byte[tail.Length + 1][];
-            row[0] = head;
-            for (int i = 0; i < tail.Length; i++)
-            {
-                row[i + 1] = tail[i];
-            }
-            return row;
-        }
-
-        private static void PaintGantryLights(FrameBuffer s, int x, int y, StartPhase phase, byte lit, uint frame)
+        private static void PaintGantryLights(FrameBuffer s, int x, int y, StartPhase phase, uint frame)
         {
             // Five 4×4 lights, 1-px gaps (§6.4). Ready: amber standby breathe;
-            // Set: N-of-5 red (0 = all five); Go (and fade): dark sockets.
+            // Set: all five red; Go (and fade): dark sockets.
             Rgb readyColor = default;
             int litCount = 0;
             if (phase == StartPhase.Ready)
@@ -140,7 +119,7 @@ namespace Uniflag.Rendering.Grammar
             }
             else if (phase == StartPhase.Set)
             {
-                litCount = lit == 0 ? 5 : lit;
+                litCount = 5;
             }
 
             for (int i = 0; i < 5; i++)

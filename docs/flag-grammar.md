@@ -50,8 +50,8 @@ the side of it.
   vision.
 - **R3 — geometry = real-world form.** Field (full panel) = things that are
   cloth flags in real life. Board (centred chrome box, §8) = things that are
-  physical boards/panels (SC/VSC/FCY boards, penalty notices, the start
-  gantry). Frame (1-px perimeter accent) = synthetic advisories with no
+  physical boards/panels (the SC and DQ boards, lap-countdown notices, the
+  start gantry). Frame (1-px perimeter accent) = synthetic advisories with no
   physical form.
 - **R4 — universal onset transient.** Every signal *entry* opens with the
   same white flash (§4), scoped to its slot. Two signature exceptions: green's onset **is** its sweep; red's onset **is** the flash it
@@ -108,7 +108,7 @@ Envelope rules:
 
 - **Entry** (slot content kind changes) → flash + fresh window.
 - **Escalation** (same kind: tier increases, or the detail tuple *gains* —
-  sector added, DT→SG, VSC→SC, more gantry lights) → flash + window re-arm.
+  bare black → DQ, gantry Ready → Set) → flash + window re-arm.
 - **De-escalation** (tier decreases or detail recedes) → no transient; the
   running window/epoch continues (or the settled state simply re-renders at
   the lower form).
@@ -126,13 +126,12 @@ Envelope rules:
 Safety outranks driver-directed orders because of the demotion rule:
 
 - **Demotion rule**: when Black or Meatball is active but loses the field,
-  it renders as a **board** instead (`DT`/`SG`/`DQ` when detail is known;
-  otherwise the X-glyph board / disc-icon board). Nothing is silently
-  dropped.
+  it renders as a **board** instead (`DQ` when disqualified; otherwise the
+  X-glyph board / disc-icon board). Nothing is silently dropped.
 
 **Board slot** (at most one): precedence
-`SC > VSC > FCY > DQ > SG > DT > demoted black (X) > demoted meatball (disc)
-> time penalty (+N) > countdown (10/5) > start gantry`.
+`SC > DQ > demoted black (X) > demoted meatball (disc) > countdown (10/5)
+> start gantry`.
 
 **Frame slot** (at most one): `furled > incident-limit`. Because furled
 clears and incident persists, incident re-emerges after a furled window —
@@ -140,31 +139,29 @@ without re-arming its own blink (no state change).
 
 **Takeovers and suppression**:
 
-- **Red**: field-exclusive — suppresses board, frame, and sector strip
-  (session stopped; extra signalling is noise).
-- **Checkered**: field-exclusive — suppresses board, frame, and strip (race
-  over; orders moot).
+- **Red**: field-exclusive — suppresses board and frame (session stopped;
+  extra signalling is noise).
+- **Checkered**: field-exclusive — suppresses board and frame (race over;
+  orders moot).
 - **DQ**: suppresses frame advisories (your race is over) but keeps the board
   slot (it *is* a board) and paints the steady X field.
 - **Disconnected**: the firmware fallback owns the panel (§7); the plugin
   renders nothing.
 
-**Paint order**: field → board → frame → sector strip. The strip paints last
-and owns its two rows outright; a perimeter frame missing its bottom-centre
-pixels still reads as a frame.
+**Paint order**: field → board → frame.
 
 ## 6. Signal catalogue
 
 Shared palette (LED-tuned): `YELLOW (255,220,0)`, `BLUE (0,64,255)`,
 `RED (255,0,0)`, `GREEN (0,220,0)`, `WHITE (255,255,255)`,
-`ORANGE (255,90,0)`, `SECTOR_DIM (40,30,0)`, `TEAL (0,255,192)`,
-`VIOLET (176,0,255)`, `AMBER (255,120,8)`.
+`ORANGE (255,90,0)`, `TEAL (0,255,192)`, `VIOLET (176,0,255)`,
+`AMBER (255,120,8)`.
 
 ### 6.1 Fields
 
 | Field | Ambient (T0 / settled) | Notes |
 |---|---|---|
-| Yellow | cloth-wave `(150,255)` | Tier from source severity: displayed→T0, waving→T1, double-waved / "be prepared to stop"→T2 — wave level is a tier input, never a render concept |
+| Yellow | cloth-wave `(150,255)` | Tier from source severity: displayed→T0, waving→T1, waving full-course caution→T2 — wave level is a tier input, never a render concept |
 | Red | cloth-wave `(150,255)` | Enters at T2 (4 Hz strobe through the window), settles to calm red. Total takeover |
 | Green | cloth-wave `(220,255)` | Onset = signature sweep: 30 frames, band half-width 4, `pos = age * 40 / 30 − 4`, in-band `(200,255,200)`; then T1 for the window remainder |
 | Blue | cloth-wave `(150,255)` | T1: sweep band 1 px / 2 frames; T2: 1 px / frame. Band = 4 px, multiplier 255, wrapping (`FloorMod`) |
@@ -172,19 +169,16 @@ Shared palette (LED-tuned): `YELLOW (255,220,0)`, `BLUE (0,64,255)`,
 | Black | black + white X (`|x−y| ≤ 1` or `|x+y−31| ≤ 1`) | X ambient: breathe 240 mapped to 80..180. T1 window: X pulses 2 Hz between 255 and 90. **DQ variant**: steady X at 200, no motion, + `DQ` board |
 | Meatball | black + orange disc | Disc: half-pixel metric `dx2 = 2x−31, dy2 = 2y−31`, lit iff `dx2² + dy2² ≤ 400` (r = 10.0). Ambient: disc breathes 150..255; T1 window: 2 Hz pulse. The real flag's form |
 | Checkered | scrolling checker, `off = frame/8` | Attention window: `off = frame/2` (4× scroll), settling to the lazy drift. Field-exclusive |
-| Debris | diagonal stripes: `(FloorDiv(x + y + off, 4) & 1)` → YELLOW/RED, `off = frame/16` | Enters T0, lowest precedence |
+| Debris | diagonal stripes: `((x + y + off) / 4 & 1)` → YELLOW/RED, `off = frame/16` | Enters T0, lowest precedence |
 
 ### 6.2 Boards (all wear the §8 chrome; all static — motion lives in the field)
 
 | Board | Glyphs | Producer |
 |---|---|---|
-| `SC` | S·C | iRacing caution bits (a full-course caution *is* a pace car); LMU phase 6 + pace car; F1 status 1 |
-| `VSC` | V·S·C | F1 status 2; LMU if distinguishable |
-| `FCY` | F·C·Y | LMU FCY-without-SC |
-| `DT` / `SG` / `DQ` | D·T / S·G / D·Q | LMU `mPenalties`, F1 penalty events, iRacing `disqualify` (DQ) |
+| `SC` | S·C | iRacing caution bits (a full-course caution *is* a pace car) |
+| `DQ` | D·Q | iRacing `disqualify` |
 | Demoted black | single X glyph | demotion rule, §5 |
 | Demoted meatball | disc icon (9×9) | demotion rule, §5 |
-| Time penalty | `+N` (e.g. +5, +10) | F1/LMU steward notices; board-only, no field change |
 | Countdown | `10` / `5` | iRacing `tenToGo`/`fiveToGo` |
 | Start gantry | 5 lights, 4×4 px each, 1-px gaps (24 px row) | see §6.4 |
 
@@ -199,25 +193,16 @@ Shared palette (LED-tuned): `YELLOW (255,220,0)`, `BLUE (0,64,255)`,
 
 Gantry board (chrome per §8, lights as content):
 
-- **Ready** (iRacing `startReady`/`oneLapToGreen`, F1 formation lap): all five
-  lights amber standby breathe (`80 + Breathe(f,240)*80/255`, range 80..160 —
-  board content must read at a glance, unlike the idle-dim envelope).
-- **Set**: lights solid RED — `StartLightsLit` N of 5 left-to-right when the
-  sim provides a count (LMU `mStartLight`/`mNumRedLights`), all five otherwise
-  (iRacing `startSet`).
+- **Ready** (iRacing `startReady`/`oneLapToGreen`): all five lights amber
+  standby breathe (`80 + Breathe(f,240)*80/255`, range 80..160 — board
+  content must read at a glance, unlike the idle-dim envelope).
+- **Set** (iRacing `startSet`/`greenHeld`): all five lights solid RED. No
+  sim uniflag ships an adapter for exposes a per-light count, so there is no
+  N-of-5 rendering.
 - **Go**: all lights out; the green flag takes the field naturally (iRacing
   raises the green bit at go).
 
 `crossed` (halfway) stays unmapped — future candidate, no glyph invented.
-
-### 6.5 Sector strip
-
-Bottom 2 rows (y = 30, 31), segments S1 x 0..=9 / S2 11..=20 / S3 22..=31,
-gap columns 10 and 21 untouched. Shown for *local* yellows with known
-locality; never for full-course states; never under red or checkered.
-Active segment: attention window pulses at the field's tier rate (2 Hz at
-T0/T1, 4 Hz at T2), settling to steady cloth-wave YELLOW `(180,255)`;
-inactive segments constant `SECTOR_DIM`. Painted last (§5).
 
 ## 7. Idle states — the Watchline Embers family
 
@@ -248,8 +233,10 @@ appear with a 2-frame white-box onset (§4) and then sit. The gantry is the
 the one board with animated content (§3). Boards carry no coloured
 border of their own — the field behind them carries the mood.
 
-Glyph inventory (7×11 grid): `V S C F Y D T G Q`, digits
-`0–9`, `+`, the X glyph, and the 9×9 disc icon.
+Glyph inventory (7×11 grid): `S C D Q`, digits `0–9`, the X glyph, and the
+9×9 disc icon — exactly what the shipped boards spell (`SC`, `DQ`, `10`/`5`,
+the demoted X, the demoted disc). Draw new glyphs when a refiner needs a new
+word.
 
 ## 9. State model — `SignalState`
 
@@ -261,18 +248,19 @@ Flag        None | Yellow | Blue | White | Red | Green | Checkered | Debris
             (the winning TRACK-STATE flag, adapter priority; C#: TrackFlag)
 Tier        0 Ambient | 1 Alert | 2 Urgent      (urgency of Flag; replaces WaveLevel)
 BlackFlag   bool                        (black-family order — orthogonal, see below)
-BlackDetail None | DriveThrough | StopAndGo | Disqualified
+Disqualified bool                       (terminal black-family order; steady X + DQ board)
 Meatball    bool                        (mechanical flag — orthogonal, see below)
-Session     PreRace | Racing | Paused | PostRace | Replay | Unknown   (unchanged)
-Caution     None | VirtualSafetyCar | SafetyCar | FullCourseYellow
-Sectors     SectorSet                  (unchanged)
+Session     PreRace | Racing | Paused | Unknown
+SafetyCar   bool                        (full-course caution: pace car out)
 StartPhase  Off | Ready | Set | Go
-StartLightsLit      byte 0..5          (0 = derive from phase)
-TimePenaltySeconds  byte               (0 = none)
 CountdownLaps       byte               (0 = none; else 10 / 5)
 Furled              bool
 IncidentWarning     bool
 ```
+
+Every field here is one a shipped adapter can set. Add a dimension when a
+refiner is about to produce it, not before: an unreachable field costs
+painters, glyphs and tests that no telemetry can exercise.
 
 Black and Meatball are **orthogonal** to the track flag rather than values of
 it: the demotion rule (§5) must see them even while another flag wins the
@@ -285,33 +273,26 @@ slow-down meter is not in telemetry).
 
 ## 10. Adapter contracts
 
-**Generic** (all sims, unchanged posture): unified flags → fields; yellow
-enters at Tier 1 (the marshal-is-waving guess), everything else Tier 0;
-`Flag_Orange` → Meatball; session mapping and the no-game predicate carry
-over verbatim; caution/sectors/boards/penalty detail only from refiners.
+**Generic** (all sims): unified flags → fields; yellow enters at Tier 1
+(the marshal-is-waving guess), everything else Tier 0; `Flag_Orange` →
+Meatball; session mapping and the no-game predicate as documented in
+`plugin/core/Adapters/GenericAdapter.cs`; safety car, DQ, start sequence and
+notices only from refiners.
 
 **iRacing** (refiner): red→Red T2 · yellow/yellowWaving→
 Yellow T0/T1 · caution/cautionWaving→Yellow field T1/T2 + SC board ·
 black→Black T1 · disqualify→Black + Disqualified · repair→Meatball T1 ·
 furled→Furled · debris→Debris T0 · blue→Blue T1 (keeping SimHub's
 `blue && !green` suppression) · white→White T0 · green/greenHeld→Green T1 ·
-startReady/oneLapToGreen→Ready, startSet→Set, startGo→Go ·
-tenToGo/fiveToGo→CountdownLaps (new) · incident count vs limit−margin→
+startReady/oneLapToGreen→Ready, startSet/greenHeld→Set, startGo→Go ·
+tenToGo/fiveToGo→CountdownLaps · incident count vs limit−margin→
 IncidentWarning.
 
-The LMU and F1 refiners below are **designed, not implemented**. Both are
-gated on a live-verification session — every mapping is verified against real
-telemetry before it is trusted, because prose-only rF2 claims have been wrong
-here before. Until then those sims run on the generic adapter, so the sector
-strip, FCY board, gantry light counts and DT/SG boards are unreachable.
-
-**LMU**: `mYellowFlagState` severity→tiers · `mSectorFlag[0..2]`→Sectors ·
-phase 6 split into FCY vs SC via `mYellowFlagState`/pace-car fields ·
-`mStartLight`/`mNumRedLights`→Set + StartLightsLit · `mPenalties`→DT/SG.
-
-**F1**: `m_safetyCarStatus` 1→SC, 2→VSC, 3→Ready (formation) · marshal zones
-aggregated to thirds→Sectors, zone severity→tier · penalty events→
-DT/SG/TimePenaltySeconds.
+**LMU and F1 are not implemented.** Every mapping has to be checked against
+real telemetry before it is trusted — prose-only rF2 claims have been wrong
+here before — and that live-verification session has not happened. Until a
+refiner is written and verified, every sim except iRacing runs on the generic
+adapter.
 
 ## 11. Conformance strategy
 
@@ -320,7 +301,8 @@ moving, byte-exactness is the wrong contract for the painters: pinning frames
 makes every intended visual tweak a mass regeneration whose diff reads
 `Binary files differ`. What covers them instead:
 
-- **The scenario catalogue** (`plugin/tools/ScenarioCatalogue.cs`) — ~40
+- **The scenario catalogue**
+  (`plugin/core/Rendering/Grammar/ScenarioCatalogue.cs`) — ~33
   curated scripts covering the signal vocabulary, each a
   `{ name, description, script: [{frame, state}, …], sample_frame }` replayed
   from frame 0. The envelope makes rendering a function of state *history*, so
@@ -337,7 +319,8 @@ makes every intended visual tweak a mass regeneration whose diff reads
 - **Visual review is a tool, not a test.** `just frames-sheet` renders the
   whole catalogue to one labelled contact sheet; `just frames <scenario>`
   renders one frame to PNG.
-- **Timelines** (`testdata/timelines/`) remain the adapter-side contract:
-  C#-only, hand-authored, schema-revved in deliberate commits.
+- **The adapters** are covered by plain C# tests (`AdapterTests`,
+  `IRacingAdapterTests`), including hand-built synthetic `SessionFlags`
+  sequences.
 - **The wire protocol keeps its golden vectors.** That contract is about
   bytes, so bytes are the right fixture; nothing here changes it.

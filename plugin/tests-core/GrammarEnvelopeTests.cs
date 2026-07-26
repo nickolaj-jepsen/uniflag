@@ -7,7 +7,6 @@
 
 using Uniflag.Rendering.Grammar;
 using Xunit;
-using SectorSet = Uniflag.Rendering.SectorSet;
 
 namespace Uniflag.Tests
 {
@@ -90,20 +89,21 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void SectorGainRearmsSectorLossDoesNot()
+        public void BlackDetailGainRearmsLossDoesNot()
         {
+            // Bare black settles; escalating it to DQ re-arms the window;
+            // dropping back to bare black does not (§4 de-escalation).
             var t = new EnvelopeTracker();
             uint frame = 0;
             var s = S();
-            s.Flag = TrackFlag.Yellow;
-            s.Sectors = SectorSet.Empty.With(1);
+            s.BlackFlag = true;
             Assert.Equal(EnvelopePhase.Ambient, Run(t, s, ref frame, 400).Field.Phase);
 
-            s.Sectors = SectorSet.Empty.With(1).With(2);
+            s.Disqualified = true;
             Assert.Equal(EnvelopePhase.Flash, Run(t, s, ref frame, 1).Field.Phase);
 
             Run(t, s, ref frame, 400);
-            s.Sectors = SectorSet.Empty.With(2);
+            s.Disqualified = false;
             Assert.Equal(EnvelopePhase.Ambient, Run(t, s, ref frame, 1).Field.Phase);
         }
 
@@ -173,7 +173,7 @@ namespace Uniflag.Tests
             var t = new EnvelopeTracker();
             uint frame = 0;
             var s = S();
-            s.Caution = Caution.SafetyCar;
+            s.SafetyCar = true;
             Run(t, s, ref frame, 100);
 
             // Red takeover hides the board without clearing its condition.

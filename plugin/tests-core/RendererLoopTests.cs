@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // Renderer-loop unit tests: frame-index monotonicity, sink isolation (one
-// broken sink must not kill the loop), the sink-refcounted lifecycle, the
-// published-frame pull contract, and the input arbitration (normal vs
-// override channel, connected-idle mode). Pure Uniflag.Rendering — no WPF,
+// broken sink must not kill the loop), the sink-refcounted lifecycle, and
+// the input modes (blank, connected-idle). Pure Uniflag.Rendering — no WPF,
 // no SimHub assemblies.
 
 using System;
@@ -19,10 +18,18 @@ namespace Uniflag.Tests
 {
     public class RendererLoopTests
     {
+        /// <summary>
+        /// Records the indices it is handed and keeps a copy of the most
+        /// recent pixels. Copying inside <see cref="OnFrame"/> is what every
+        /// production sink does — the loop hands out its live paint buffer
+        /// and reuses it on the next tick.
+        /// </summary>
         private sealed class RecordingSink : IFrameSink
         {
             private readonly object _gate = new object();
             private readonly List<long> _indices = new List<long>();
+            private readonly byte[] _latest = new byte[FrameBuffer.ByteLength];
+            private long _latestIndex = -1;
             private int _badBuffers;
 
             public void OnFrame(byte[] rgb888, long frameIndex)
@@ -33,7 +40,28 @@ namespace Uniflag.Tests
                     {
                         _badBuffers++;
                     }
+                    else
+                    {
+                        Buffer.BlockCopy(rgb888, 0, _latest, 0, FrameBuffer.ByteLength);
+                        _latestIndex = frameIndex;
+                    }
                     _indices.Add(frameIndex);
+                }
+            }
+
+            /// <summary>
+            /// Copy the most recent frame out; returns its index, or -1 if
+            /// none has arrived yet.
+            /// </summary>
+            public long Latest(byte[] destination)
+            {
+                lock (_gate)
+                {
+                    if (_latestIndex >= 0)
+                    {
+                        Buffer.BlockCopy(_latest, 0, destination, 0, FrameBuffer.ByteLength);
+                    }
+                    return _latestIndex;
                 }
             }
 
@@ -154,65 +182,28 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void PublishesTheLatestCompletedFrame()
+        public void TheDefaultInputPaintsTheBootDarkPanel()
         {
-            using var loop = new RendererLoop();
-            var dest = new byte[FrameBuffer.ByteLength];
-            Assert.Equal(-1, loop.CopyLatestFrame(dest));
-
             // The default input is the blank mode, which paints every pixel
             // black (the firmware boot-dark posture) — deterministic bytes
             // without pinning any animation timing.
+            using var loop = new RendererLoop();
             var sink = new RecordingSink();
+            var dest = new byte[FrameBuffer.ByteLength];
+            Assert.Equal(-1, sink.Latest(dest));
+
             loop.AddSink(sink);
             WaitUntil(() => sink.Count >= 1, "the first frame");
-            long index = loop.CopyLatestFrame(dest);
+            long index = sink.Latest(dest);
             loop.RemoveSink(sink);
 
-            Assert.True(index >= 0, "expected a published frame index");
+            Assert.True(index >= 0, "expected a delivered frame index");
             Assert.All(dest, b => Assert.Equal((byte)0, b));
         }
 
-        // Input arbitration. The frame predicates below hold at every SETTLED
-        // frame (ambient cloth-wave fills never strobe dark; the idle
+        // The frame predicate below holds at every SETTLED frame (the idle
         // beacon's breathe never leaves its range); the onset flash makes the
         // first ~8 frames white, which the polling WaitForFrame simply skips.
-
-        private static SignalState LiveFlag(TrackFlag flag)
-        {
-            SignalState state = SignalState.Default;
-            state.Flag = flag;
-            state.Session = Session.Racing;
-            return state;
-        }
-
-        // Blue static base: scale_rgb((0,64,255), 150..255) — every pixel
-        // has R == 0 and B > 0 at any frame.
-        private static bool IsBlueFill(byte[] frame)
-        {
-            for (int i = 0; i < frame.Length; i += 3)
-            {
-                if (frame[i] != 0 || frame[i + 2] == 0)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        // Yellow static base: scale_rgb((255,220,0), 150..255) — every pixel
-        // has R > 0 and B == 0 at any frame.
-        private static bool IsYellowFill(byte[] frame)
-        {
-            for (int i = 0; i < frame.Length; i += 3)
-            {
-                if (frame[i] == 0 || frame[i + 2] != 0)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
 
         // Connected-idle (docs/flag-grammar.md §7b): the teal docked beacon —
         // cores (15,30)/(16,30), shoulders (14,30)/(17,30), halos
@@ -243,27 +234,15 @@ namespace Uniflag.Tests
             return true;
         }
 
-        private static bool IsAllBlack(byte[] frame)
-        {
-            foreach (byte b in frame)
-            {
-                if (b != 0)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
         /// <summary>
-        /// Wait until the published frame satisfies <paramref name="predicate"/>
-        /// (input changes latch at the next tick, so a matching frame
-        /// appears within a tick or two).
+        /// Wait until the frame the sink last received satisfies
+        /// <paramref name="predicate"/> (input changes latch at the next
+        /// tick, so a matching frame appears within a tick or two).
         /// </summary>
-        private static void WaitForFrame(RendererLoop loop, Func<byte[], bool> predicate, string what)
+        private static void WaitForFrame(RecordingSink sink, Func<byte[], bool> predicate, string what)
         {
             var dest = new byte[FrameBuffer.ByteLength];
-            WaitUntil(() => loop.CopyLatestFrame(dest) >= 0 && predicate(dest), what);
+            WaitUntil(() => sink.Latest(dest) >= 0 && predicate(dest), what);
         }
 
         [Fact]
@@ -273,76 +252,38 @@ namespace Uniflag.Tests
             loop.SetConnectedIdle();
             var sink = new RecordingSink();
             loop.AddSink(sink);
-            WaitForFrame(loop, IsConnectedIdle, "the §7b connected-idle frame");
+            WaitForFrame(sink, IsConnectedIdle, "the §7b connected-idle frame");
             loop.RemoveSink(sink);
         }
 
         [Fact]
-        public void OverrideWinsAndClearingFallsBackToTheNormalInput()
+        public void SetStatePaintsTheLiveFlag()
         {
+            // Blue static base: scale_rgb((0,64,255), 150..255) — every
+            // pixel has R == 0 and B > 0 at any settled frame.
             using var loop = new RendererLoop();
             var sink = new RecordingSink();
             loop.AddSink(sink);
 
-            // Normal input: live blue.
-            loop.SetState(LiveFlag(TrackFlag.Blue), connected: true);
-            WaitForFrame(loop, IsBlueFill, "the normal-input blue frame");
+            SignalState state = SignalState.Default;
+            state.Flag = TrackFlag.Blue;
+            state.Session = Session.Racing;
+            loop.SetState(state, connected: true);
 
-            // Override with live yellow — must clobber the normal view.
-            loop.SetOverrideState(LiveFlag(TrackFlag.Yellow), connected: true);
-            WaitForFrame(loop, IsYellowFill, "the override yellow frame");
-
-            // Normal input keeps updating underneath: it must NOT show.
-            // Wait for at least two further ticks, then check the frame
-            // painted after the normal-channel update is still the override.
-            loop.SetState(LiveFlag(TrackFlag.Blue), connected: true);
-            var scratch = new byte[FrameBuffer.ByteLength];
-            long seen = loop.CopyLatestFrame(scratch);
-            WaitUntil(
-                () => loop.CopyLatestFrame(scratch) >= seen + 2,
-                "two ticks after the shadowed normal-channel update");
-            Assert.True(IsYellowFill(scratch), "override must keep winning over normal-channel updates");
-
-            // Clearing the override falls back to the last normal input.
-            loop.ClearOverride();
-            WaitForFrame(loop, IsBlueFill, "the blue frame after clearing the override");
-
-            loop.RemoveSink(sink);
-        }
-
-        [Fact]
-        public void ClearingTheOverrideWithoutNormalInputFallsBackToBlank()
-        {
-            using var loop = new RendererLoop();
-            var sink = new RecordingSink();
-            loop.AddSink(sink);
-
-            loop.SetOverrideState(LiveFlag(TrackFlag.Yellow), connected: true);
-            WaitForFrame(loop, IsYellowFill, "the override yellow frame");
-
-            // The normal channel was never fed: fall back to boot-dark.
-            loop.ClearOverride();
-            WaitForFrame(loop, IsAllBlack, "the blank frame after clearing the override");
-
-            loop.RemoveSink(sink);
-        }
-
-        [Fact]
-        public void OverrideWinsOverConnectedIdle()
-        {
-            using var loop = new RendererLoop();
-            var sink = new RecordingSink();
-            loop.AddSink(sink);
-
-            // The DataUpdate arbitration case: cycler override active while
-            // the telemetry path keeps reporting "no game".
-            loop.SetOverrideState(LiveFlag(TrackFlag.Yellow), connected: true);
-            loop.SetConnectedIdle();
-            WaitForFrame(loop, IsYellowFill, "the override frame despite connected-idle on the normal channel");
-
-            loop.ClearOverride();
-            WaitForFrame(loop, IsConnectedIdle, "the connected-idle frame after clearing the override");
-
+            WaitForFrame(
+                sink,
+                frame =>
+                {
+                    for (int i = 0; i < frame.Length; i += 3)
+                    {
+                        if (frame[i] != 0 || frame[i + 2] == 0)
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                },
+                "the blue field frame");
             loop.RemoveSink(sink);
         }
 

@@ -1,15 +1,13 @@
 //! uniflag-cli — binary-protocol test-pattern streamer and the firmware's
 //! diagnostic instrument.
 //!
-//! Three modes:
+//! Two modes:
 //!
 //! - **stream** (default): `Hello`/`HelloAck` handshake (prints fw
 //!   version, protocol version, and panel size; refuses on a protocol
 //!   mismatch), then COBS-framed `Frame` packets at a
 //!   monotonic-deadline-paced 30 fps. Inbound `ButtonEvent` packets are
 //!   decoded and printed live.
-//! - **emit**: write exactly one encoded wire packet to the sink and exit
-//!   — makes golden byte-diff verification executable from the shell.
 //! - **doctor**: report the toolchains, SimHub assemblies and devices
 //!   present on this machine (`just doctor` is a thin wrapper).
 //!
@@ -71,9 +69,6 @@ struct Cli {
 enum Command {
     /// Stream Frame packets at a paced rate (the default subcommand).
     Stream(StreamArgs),
-    /// Write exactly one encoded wire packet to the sink and exit.
-    #[command(subcommand)]
-    Emit(EmitPacket),
     /// Report the toolchains, SimHub assemblies and devices present here.
     Doctor(DoctorArgs),
 }
@@ -133,28 +128,9 @@ impl Default for StreamArgs {
     }
 }
 
-#[derive(Subcommand, Debug)]
-enum EmitPacket {
-    /// Hello carrying the host protocol version.
-    Hello,
-    /// Brightness set-point.
-    Brightness {
-        #[arg(long)]
-        value: u8,
-    },
-    /// One Frame of a test pattern.
-    Frame {
-        #[arg(long, default_value = DEFAULT_PATTERN, value_parser = Pattern::from_str)]
-        pattern: Pattern,
-        #[arg(long, default_value_t = 0)]
-        frame_index: u64,
-    },
-}
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
-        Some(Command::Emit(packet)) => run_emit(&cli, packet),
         Some(Command::Doctor(args)) => {
             doctor::report(&Targets {
                 serial: &args.serial,
@@ -453,27 +429,6 @@ fn describe_button_event(button: u8, kind: u8) -> String {
     format!("{button_name}, {kind_name}")
 }
 
-fn run_emit(cli: &Cli, packet: &EmitPacket) -> Result<()> {
-    let (bytes, what) = match packet {
-        EmitPacket::Hello => (wire::hello()?, "Hello".to_string()),
-        EmitPacket::Brightness { value } => (
-            wire::brightness(*value)?,
-            format!("Brightness {{ value: {value} }}"),
-        ),
-        EmitPacket::Frame {
-            pattern,
-            frame_index,
-        } => (
-            wire::frame(*pattern, *frame_index)?,
-            format!("Frame {{ {pattern:?}, frame_index: {frame_index} }}"),
-        ),
-    };
-    let mut sink = open_sink(cli, STREAM_TIMEOUT)?;
-    sink.send(&bytes)?;
-    eprintln!("emitted {what} ({} wire bytes)", bytes.len());
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -493,33 +448,6 @@ mod tests {
             panic!("expected the stream subcommand");
         };
         assert_eq!(parsed, StreamArgs::default());
-    }
-
-    #[test]
-    fn emit_subcommands_parse() {
-        let cli = Cli::try_parse_from(["uniflag-cli", "emit", "brightness", "--value", "200"])
-            .expect("parse");
-        assert!(matches!(
-            cli.command,
-            Some(Command::Emit(EmitPacket::Brightness { value: 200 }))
-        ));
-        let cli = Cli::try_parse_from([
-            "uniflag-cli",
-            "emit",
-            "frame",
-            "--pattern",
-            "moving-pixel",
-            "--frame-index",
-            "42",
-        ])
-        .expect("parse");
-        assert!(matches!(
-            cli.command,
-            Some(Command::Emit(EmitPacket::Frame {
-                pattern: Pattern::MovingPixel,
-                frame_index: 42,
-            }))
-        ));
     }
 
     #[test]

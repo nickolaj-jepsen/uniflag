@@ -20,19 +20,6 @@ namespace Uniflag.Tests
     public class Crc16Tests
     {
         [Fact]
-        public void CheckValueMatchesCrc16CcittFalse()
-        {
-            // The catalogue "check" value: CRC-16/CCITT-FALSE of "123456789".
-            Assert.Equal(0x29B1, Crc16.Checksum(Encoding.ASCII.GetBytes("123456789")));
-        }
-
-        [Fact]
-        public void EmptyInputIsInit()
-        {
-            Assert.Equal(Crc16.Init, Crc16.Checksum(new byte[0]));
-        }
-
-        [Fact]
         public void StreamingEqualsOneShot()
         {
             byte[] data = Encoding.ASCII.GetBytes("the quick brown fox jumps over the lazy dog");
@@ -90,34 +77,8 @@ namespace Uniflag.Tests
             RoundTrip(new byte[0]);
         }
 
-        [Fact]
-        public void KnownVectors()
-        {
-            // From the COBS paper / Wikipedia examples.
-            var cases = new[]
-            {
-                (new byte[] { 0x00 }, new byte[] { 0x01, 0x01 }),
-                (new byte[] { 0x00, 0x00 }, new byte[] { 0x01, 0x01, 0x01 }),
-                (new byte[] { 0x11, 0x22, 0x00, 0x33 }, new byte[] { 0x03, 0x11, 0x22, 0x02, 0x33 }),
-                (new byte[] { 0x11, 0x22, 0x33, 0x44 }, new byte[] { 0x05, 0x11, 0x22, 0x33, 0x44 }),
-                (new byte[] { 0x11, 0x00, 0x00, 0x00 }, new byte[] { 0x02, 0x11, 0x01, 0x01, 0x01 }),
-            };
-            foreach (var (payload, expected) in cases)
-            {
-                Assert.Equal(expected, Cobs.Encode(payload));
-                RoundTrip(payload);
-            }
-        }
-
-        [Fact]
-        public void AllZeroPayloads()
-        {
-            for (int len = 1; len <= 520; len++)
-            {
-                RoundTrip(new byte[len]);
-            }
-            Assert.Equal(new byte[] { 1, 1, 1, 1 }, Cobs.Encode(new byte[] { 0, 0, 0 }));
-        }
+        // FullGroupRuns is the unit-level statement of the trailing-0x01
+        // trap; cobs_boundary_254 is the only committed vector reaching it.
 
         [Fact]
         public void FullGroupRuns()
@@ -212,41 +173,17 @@ namespace Uniflag.Tests
         [Fact]
         public void ConstantsAreStable()
         {
-            // Wire-visible numbers; changing any of these is a protocol break.
+            // Only the numbers no committed vector reaches; type bytes,
+            // version, payload lengths and button ids are pinned by fixtures.
             Assert.Equal(3072, PacketCodec.FramePayloadLength);
             Assert.Equal(3075, PacketCodec.MaxRawLength);
             Assert.Equal(3089, PacketCodec.MaxWireLength);
             Assert.Equal(PacketCodec.MaxWireLength, Cobs.MaxEncodedLength(PacketCodec.MaxRawLength) + 1);
-            Assert.Equal(0x01, (byte)PacketType.Hello);
-            Assert.Equal(0x02, (byte)PacketType.Frame);
-            Assert.Equal(0x03, (byte)PacketType.Brightness);
-            Assert.Equal(0x81, (byte)PacketType.HelloAck);
-            Assert.Equal(0x82, (byte)PacketType.ButtonEvent);
-            Assert.Equal(1, PacketCodec.HelloPayloadLength);
-            Assert.Equal(1, PacketCodec.BrightnessPayloadLength);
-            Assert.Equal(2, PacketCodec.ButtonEventPayloadLength);
-            Assert.Equal(3, PacketCodec.HelloAckMinPayloadLength);
-            Assert.Equal(1, PacketCodec.ProtocolVersion);
-            Assert.Equal(0, (byte)Button.BrightnessUp);
-            Assert.Equal(1, (byte)Button.BrightnessDown);
-            Assert.Equal(2, (byte)Button.Sleep);
-            Assert.Equal(0, (byte)PressKind.Short);
-            Assert.Equal(1, (byte)PressKind.Long);
         }
 
         [Fact]
         public void IdBytesRoundTripAndUnassignedOnesDoNot()
         {
-            foreach (PacketType ty in new[]
-            {
-                PacketType.Hello, PacketType.Frame, PacketType.Brightness,
-                PacketType.HelloAck, PacketType.ButtonEvent,
-            })
-            {
-                Assert.Equal(ty, ProtocolIds.PacketTypeFromByte((byte)ty));
-            }
-            Assert.Null(ProtocolIds.PacketTypeFromByte(0x00));
-            Assert.Null(ProtocolIds.PacketTypeFromByte(0x7F));
             foreach (Button button in new[] { Button.BrightnessUp, Button.BrightnessDown, Button.Sleep })
             {
                 Assert.Equal(button, ProtocolIds.ButtonFromByte((byte)button));
@@ -401,9 +338,9 @@ namespace Uniflag.Tests
     /// </summary>
     public class ProtoConformanceTests
     {
-        // The C# mirror of the Rust tables that generate the committed
-        // vectors. The Rust suite asserts the files match those tables
-        // byte-for-byte, so these must agree with them.
+        // What the bytes MEAN, named so a field-symmetric parse/encode bug
+        // cannot round-trip past this suite. The bytes are never recomputed
+        // here — they are read from testdata/proto.
 
         private const byte BrightnessValue = 200;
         private const byte BoundaryTypeByte = 0x7E;
@@ -430,39 +367,14 @@ namespace Uniflag.Tests
             };
 
         /// <summary>
-        /// Byte <paramref name="i"/> of the 3072-byte frame payload —
-        /// mirrors <c>frame_pixel</c> in the Rust suite (and the prose in the
-        /// README's frame-payload table).
+        /// The 3072-byte frame payload, read from the committed
+        /// <c>frame.raw</c>. Porting the Rust generator's arithmetic here
+        /// would be a second expectation table to hand-sync.
         /// </summary>
-        private static byte FramePixel(int i)
-        {
-            if (i < 256)
-            {
-                return i % 8 == 0 ? (byte)0 : (byte)i;
-            }
-            if (i < 512)
-            {
-                return 0xFF;
-            }
-            if (i < 1024)
-            {
-                return (byte)(i * 7 % 256);
-            }
-            if (i < 1342)
-            {
-                return (byte)(i % 253 + 1);
-            }
-            return (byte)(i % 256);
-        }
-
         private static byte[] FramePixels()
         {
-            var pixels = new byte[PacketCodec.FramePayloadLength];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = FramePixel(i);
-            }
-            return pixels;
+            byte[] raw = RepoPaths.ReadVector("frame.raw");
+            return Slice(raw, 1, PacketCodec.FramePayloadLength);
         }
 
         /// <summary>The typed packet each positive vector must parse to.</summary>

@@ -22,17 +22,6 @@ namespace Uniflag.Rendering
             glyphCount * Font7x11.GlyphWidth + (glyphCount - 1) * gap;
 
         /// <summary>
-        /// Left x of a horizontally centred row. Truncating division, so odd
-        /// leftovers bias one pixel left, which is how the boards are drawn.
-        /// </summary>
-        public static int CenterRowX(int glyphCount, int gap) =>
-            (FrameBuffer.Width - MeasureRow(glyphCount, gap)) / 2;
-
-        /// <summary>Top y of a vertically centred glyph row.</summary>
-        public static int CenterRowY() =>
-            (FrameBuffer.Height - Font7x11.GlyphHeight) / 2;
-
-        /// <summary>
         /// Stamp one 7×11 glyph at (<paramref name="ox"/>, <paramref name="oy"/>).
         /// Bit 6 of each row byte is the leftmost column; only set bits are
         /// painted, so the background shows through.
@@ -63,9 +52,5 @@ namespace Uniflag.Rendering
                 DrawGlyph(s, glyphs[i], xLeft + i * (Font7x11.GlyphWidth + gap), yTop, color);
             }
         }
-
-        /// <summary>Stamp a row centred both horizontally and vertically.</summary>
-        public static void DrawCenteredRow(FrameBuffer s, byte[][] glyphs, int gap, Rgb color) =>
-            DrawRow(s, glyphs, gap, CenterRowX(glyphs.Length, gap), CenterRowY(), color);
     }
 }

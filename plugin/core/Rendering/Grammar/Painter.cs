@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
 // Grammar renderer entry point (docs/flag-grammar.md §4–§5). Paint order is
-// field → board → frame → sector strip; the strip owns its two rows
-// outright. All animation state arrives via the Envelopes — Paint itself is
-// a pure function of (composition, envelopes, state, frame).
+// field → board → frame. All animation state arrives via the Envelopes —
+// Paint itself is a pure function of (composition, envelopes, state, frame).
 
 namespace Uniflag.Rendering.Grammar
 {
@@ -20,7 +19,6 @@ namespace Uniflag.Rendering.Grammar
             PaintFieldSlot(s, comp, env.Field, state, frame);
             Boards.Paint(s, comp, env.Board, state, frame);
             Frames.Paint(s, comp, env.Frame, frame);
-            PaintSectorStrip(s, comp, env.Field, state, frame);
         }
 
         private static void PaintFieldSlot(FrameBuffer s, in Composition comp, in SlotEnvelope env, in SignalState state, uint frame)
@@ -60,43 +58,6 @@ namespace Uniflag.Rendering.Grammar
                     Fields.Paint(s, (FieldKind)env.PriorKind, env.PriorTier, state, frame, env.Age, attention: false);
                     ScaleAll(s, FadeScale(env.Age));
                     return;
-            }
-        }
-
-        private static void PaintSectorStrip(FrameBuffer s, in Composition comp, in SlotEnvelope fieldEnv, in SignalState state, uint frame)
-        {
-            if (!comp.SectorStrip)
-            {
-                return;
-            }
-            // The strip's motion decays with the field's envelope (rule R5):
-            // it pulses only while the field is inside its attention window.
-            bool live = fieldEnv.Phase == EnvelopePhase.Flash || fieldEnv.Phase == EnvelopePhase.Attention;
-            uint hz = comp.FieldTier == Tier.Urgent ? 4u : 2u;
-            bool off = live && !Anim.Strobe60(frame, hz);
-            for (int seg = 0; seg < 3; seg++)
-            {
-                int xStart = seg * 11;
-                int xEnd = xStart + 9;
-                bool active = state.Sectors.Contains(seg + 1);
-                for (int y = FrameBuffer.Height - 2; y < FrameBuffer.Height; y++)
-                {
-                    for (int x = xStart; x <= xEnd; x++)
-                    {
-                        if (!active)
-                        {
-                            s.SetPixel(x, y, Palette.SectorDim);
-                        }
-                        else if (off)
-                        {
-                            s.SetPixel(x, y, Palette.Black);
-                        }
-                        else
-                        {
-                            s.SetPixel(x, y, Anim.ScaleRgb(Palette.Yellow, Anim.WaveMult(x, y, frame, 180, 255)));
-                        }
-                    }
-                }
             }
         }
 

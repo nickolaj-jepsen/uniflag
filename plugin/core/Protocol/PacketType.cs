@@ -65,20 +65,6 @@ namespace Uniflag.Protocol
     /// </summary>
     public static class ProtocolIds
     {
-        /// <summary>The assigned <see cref="PacketType"/> for a type byte, or <c>null</c> if unassigned.</summary>
-        public static PacketType? PacketTypeFromByte(byte value)
-        {
-            switch (value)
-            {
-                case (byte)PacketType.Hello: return PacketType.Hello;
-                case (byte)PacketType.Frame: return PacketType.Frame;
-                case (byte)PacketType.Brightness: return PacketType.Brightness;
-                case (byte)PacketType.HelloAck: return PacketType.HelloAck;
-                case (byte)PacketType.ButtonEvent: return PacketType.ButtonEvent;
-                default: return null;
-            }
-        }
-
         /// <summary>The assigned <see cref="Button"/> for an id byte, or <c>null</c> if unassigned.</summary>
         public static Button? ButtonFromByte(byte value)
         {

@@ -34,64 +34,14 @@ jobs:
   plugin:
     name: plugin (windows)
     runs-on: windows-latest
-    env:
-      SIMHUB_VERSION: '9.11.21'
-      # SHA-256 of the SimHub.9.11.21.zip GitHub release asset (computed 2026-07-03).
-      SIMHUB_ZIP_SHA256: '4660A46FC741CD108E472AFFCD6E05B294C9D34407FA2A14863BB63461C6FF70'
     steps:
       - uses: actions/checkout@v4
 
-      # Same cache key as ci.yml so tag builds hit the entries the CI runs on
-      # main already populated. The proprietary DLLs live only in this
-      # ephemeral, repo-scoped cache — never in the repo or any published
-      # artifact (the packaging job audits that).
-      - name: Cache SimHub reference assemblies
-        id: simhub-cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}\simhub-refs
-          key: ${{ runner.os }}-simhub-refs-${{ env.SIMHUB_VERSION }}-v1
-
-      - name: Install SimHub silently and stage reference DLLs
-        if: steps.simhub-cache.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          # innoextract (newest release 1.9, Inno Setup ceiling 6.0.5) cannot
-          # unpack SimHub's Inno Setup 6.4.3 installer, so the headless silent
-          # install is the primary path, not a fallback.
-          $ErrorActionPreference = 'Stop'
-          $v    = $env:SIMHUB_VERSION
-          $zip  = "$env:RUNNER_TEMP\SimHub.$v.zip"
-          $tmp  = "$env:RUNNER_TEMP\simhub-setup"
-          $app  = "$env:RUNNER_TEMP\simhub-app"
-          $refs = "$env:RUNNER_TEMP\simhub-refs"
-          $log  = "$env:RUNNER_TEMP\simhub-install.log"
-
-          curl.exe -fsSL -o $zip "https://github.com/SHWotever/SimHub/releases/download/$v/SimHub.$v.zip"
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
-          if ($hash -ne $env:SIMHUB_ZIP_SHA256) {
-            throw "SimHub.$v.zip SHA-256 mismatch: got $hash, expected $env:SIMHUB_ZIP_SHA256"
-          }
-
-          Expand-Archive $zip -DestinationPath $tmp -Force
-          $setup = Get-ChildItem $tmp -Filter 'SimHubSetup_*.exe' | Select-Object -First 1
-          if (-not $setup) { throw 'SimHubSetup_*.exe not found inside release zip' }
-
-          # The setup exe is a GUI-subsystem app: Start-Process -Wait is required.
-          $p = Start-Process -FilePath $setup.FullName -Wait -PassThru -ArgumentList @(
-            '/VERYSILENT', '/SP-', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS',
-            "/DIR=$app", "/LOG=$log"
-          )
-          if ($p.ExitCode -ne 0) {
-            if (Test-Path $log) { Get-Content $log -Tail 120 }
-            throw "SimHub installer exited with code $($p.ExitCode)"
-          }
-
-          New-Item -ItemType Directory -Force $refs | Out-Null
-          foreach ($dll in 'SimHub.Plugins.dll', 'GameReaderCommon.dll', 'log4net.dll', 'SimHub.Logging.dll') {
-            Copy-Item (Join-Path $app $dll) $refs
-          }
-          Get-ChildItem $refs | Format-Table Name, Length
+      # Same cache key as ci.yml, so tag builds hit entries the main-branch
+      # runs already populated.
+      - name: Stage SimHub reference assemblies
+        id: simhub
+        uses: ./.github/actions/simhub-refs
 
       - uses: taiki-e/install-action@v2
         with:
@@ -100,13 +50,13 @@ jobs:
       - name: Build plugin
         shell: pwsh
         env:
-          UNIFLAG_SIMHUB_DIR: ${{ runner.temp }}\simhub-refs
+          UNIFLAG_SIMHUB_DIR: ${{ steps.simhub.outputs.refs-dir }}
         run: just plugin-build
 
       - name: Test plugin
         shell: pwsh
         env:
-          UNIFLAG_SIMHUB_DIR: ${{ runner.temp }}\simhub-refs
+          UNIFLAG_SIMHUB_DIR: ${{ steps.simhub.outputs.refs-dir }}
         run: just plugin-test
 
       # Path is the single DLL, not the bin directory: reference assemblies
@@ -126,10 +76,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Versions are hand-bumped in five places (csproj → DLL self-report,
-      # firmware/Cargo.toml → HelloAck fw tail, cli/Cargo.toml, flake.nix ×2).
       # The zip is named after the tag, so refuse to publish if the tag
-      # disagrees with any stamped version. Prerelease tags (v2.0.0-rc1)
+      # disagrees with either stamped version. Prerelease tags (v2.0.0-rc1)
       # share the base version with their final release.
       - name: Check tag matches stamped versions
         run: |
@@ -137,16 +85,13 @@ jobs:
           tag='${{ github.ref_name }}'
           base="${tag#v}"; base="${base%%-*}"
           stamped=$(
-            sed -n 's/^version = "\(.*\)"$/\1/p' firmware/Cargo.toml cli/Cargo.toml
-            sed -n 's/^ *version = "\(.*\)";$/\1/p' flake.nix
-            sed -n 's|.*<Version>\(.*\)</Version>.*|\1|p' plugin/simhub/UniflagPlugin.csproj
-            sed -n 's|.*<AssemblyVersion>\(.*\)\.0</AssemblyVersion>.*|\1|p' plugin/simhub/UniflagPlugin.csproj
-            sed -n 's|.*<FileVersion>\(.*\)\.0</FileVersion>.*|\1|p' plugin/simhub/UniflagPlugin.csproj
+            sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml
+            sed -n 's|.*<UniflagVersion>\(.*\)</UniflagVersion>.*|\1|p' plugin/Directory.Build.props
           )
           echo "tag $tag → base version $base; stamped versions:"
           echo "$stamped"
-          if [ "$(echo "$stamped" | wc -l)" -ne 7 ]; then
-            echo "::error::expected 7 stamped versions (firmware, cli, flake ×2, csproj ×3) — a version pattern changed; update this check"
+          if [ "$(echo "$stamped" | wc -l)" -ne 2 ]; then
+            echo "::error::expected 2 stamped versions (Cargo.toml workspace, Directory.Build.props) — a version pattern changed; update this check"
             exit 1
           fi
           if echo "$stamped" | grep -qvxF "$base"; then

@@ -11,7 +11,7 @@
 // Usage:
 //   list                                 catalogue names + descriptions
 //   render <scenario> [--frame N] [--scale N] [--out PATH] [--rgb]
-//   sheet  [--scale N] [--columns N] [--out DIR]
+//   sheet  [--scale N] [--out DIR]
 //   ansi   <scenario|PATH.rgb> [--frame N]
 
 using System;
@@ -28,7 +28,6 @@ namespace Uniflag.Tools
         private const int FrameSize = FrameBuffer.Width;
         private const int DefaultScale = 8;
         private const int DefaultSheetScale = 4;
-        private const int DefaultColumns = 7;
         private const string DefaultOutDir = "target/frames";
 
         public static int Main(string[] args)
@@ -75,13 +74,12 @@ namespace Uniflag.Tools
 
   list                                       scenario names and descriptions
   render <scenario> [options]                one frame to PNG
-  sheet [options]                            every scenario, one grid + a labelled HTML page
+  sheet [options]                            every scenario, one labelled HTML page
   ansi <scenario|PATH.rgb> [--frame N]       one frame as terminal half-blocks
 
 Options:
   --frame N     frame to render (default: the scenario's sample frame)
   --scale N     nearest-neighbour upscale (default: 8 for render, 4 for sheet)
-  --columns N   sheet columns (default: 7)
   --out PATH    output file (render) or directory (sheet); default target/frames
   --rgb         also write the raw 3072-byte RGB888 frame next to the PNG");
         }
@@ -127,7 +125,6 @@ Options:
         private static int Sheet(string[] args)
         {
             int scale = OptInt(args, "--scale") ?? DefaultSheetScale;
-            int columns = OptInt(args, "--columns") ?? DefaultColumns;
             string outDir = Opt(args, "--out") ?? DefaultOutDir;
             Directory.CreateDirectory(outDir);
 
@@ -137,20 +134,10 @@ Options:
                 cells.Add(new ContactSheet.Cell(sc.Name, sc.Description, ScenarioCatalogue.Render(sc)));
             }
 
-            var (rgb, width, height) = ContactSheet.Compose(cells, FrameSize, scale, columns);
-            string pngPath = Path.Combine(outDir, "contact-sheet.png");
-            File.WriteAllBytes(pngPath, Png.Encode(rgb, width, height, 1));
-
             string htmlPath = Path.Combine(outDir, "contact-sheet.html");
             File.WriteAllText(htmlPath, ContactSheet.BuildHtml(cells, FrameSize, scale));
 
-            // The grid is unlabelled, so the running order IS the legend.
-            Console.Error.WriteLine($"{cells.Count} scenarios, {columns} per row, reading order:");
-            for (int i = 0; i < cells.Count; i++)
-            {
-                Console.Error.WriteLine($"  {i + 1,3}. {cells[i].Name}");
-            }
-            Console.WriteLine(Path.GetFullPath(pngPath));
+            Console.Error.WriteLine($"{cells.Count} scenarios");
             Console.WriteLine(Path.GetFullPath(htmlPath));
             return 0;
         }

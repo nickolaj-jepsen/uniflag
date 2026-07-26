@@ -1,6 +1,6 @@
 [package]
 name = "uniflag-cli"
-version = "2.0.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Binary-protocol test-pattern streamer and diagnostic CLI for the uniflag firmware."

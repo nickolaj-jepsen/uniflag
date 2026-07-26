@@ -27,7 +27,6 @@ using System.Diagnostics;
 using System.Threading;
 using Uniflag.Protocol;
 using Uniflag.Rendering;
-using Uniflag.Web;
 
 namespace Uniflag.Device
 {

@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Session state, shared by the adapter pipeline and the Grammar renderer
+// Session state, shared by the adapters and the Grammar renderer
 // (docs/flag-grammar.md §9). Host-only — the v2 wire protocol carries
 // rendered frames, not state.
+//
+// Only words an adapter can actually produce: the renderer distinguishes
+// Racing/Paused from everything else, so an unmappable word is invisible.
 
 namespace Uniflag.Rendering
 {
@@ -12,8 +15,6 @@ namespace Uniflag.Rendering
         PreRace,
         Racing,
         Paused,
-        PostRace,
-        Replay,
         Unknown,
     }
 }

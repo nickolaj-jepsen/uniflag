@@ -3,14 +3,15 @@
   <!--
     Everything in the plugin that does not need SimHub, WPF or a Windows
     API: the renderer, the wire codec, the device connection manager, the
-    overlay web server, the telemetry adapters and the debug state cycler.
+    overlay web server and the telemetry adapters.
 
     Split out for ONE reason — so it can be tested without Windows, a .NET
     Framework targeting pack, or SimHub's proprietary reference assemblies,
     which puts it in the gating CI leg instead of the isolated Windows one.
     The files next door in ..\simhub\ are exactly those that name a type
     absent off Windows; each sits behind an interface declared here
-    (IGameAdapter, ISerialConnection, IPortEnumerator, IFrameSink).
+    (ISerialConnection, IPortEnumerator, IFrameSink) or fills a plain DTO
+    declared here (TelemetrySnapshot).
 
     This assembly is NEVER shipped. UniflagPlugin.csproj compiles these same
     source files directly (<Compile Include="..\core\**"/>) rather than
@@ -25,8 +26,7 @@
     <LangVersion>9.0</LangVersion>
     <RootNamespace>Uniflag</RootNamespace>
     <AssemblyName>Uniflag.Core</AssemblyName>
-    <!-- Kept in lockstep with UniflagPlugin.csproj / firmware / cli. -->
-    <Version>2.0.0</Version>
+    <!-- Version comes from plugin/Directory.Build.props. -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

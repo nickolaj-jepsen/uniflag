@@ -1,6 +1,6 @@
 [package]
 name = "screens"
-version = "2.0.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Firmware-local screens for uniflag: the roaming-ember fallback and the button test pattern."

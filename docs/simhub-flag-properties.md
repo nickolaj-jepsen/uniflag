@@ -140,7 +140,7 @@ slow-down meter** (the on-screen SLOW DOWN bar isn't in telemetry — the
 closest signal is the `furled` bit) and **no drive-through vs stop-and-go
 distinction** (only the single `black` bit). Don't invent either from
 prose; the plugin's penalty model keeps those dimensions defaulted for
-iRacing (see "iRacing adapter mapping" below).
+iRacing (see `plugin/core/Adapters/IRacingAdapter.cs`).
 
 ### rFactor 2 / Le Mans Ultimate
 
@@ -226,107 +226,27 @@ double-waved flag. To recover that, fall back to raw data:
 | iRacing                 | (none)                                  | `SessionFlags` is global only.                                      |
 | Assetto Corsa (vanilla) | (none)                                  | No per-sector flags exposed.                                        |
 
-## Generic adapter mapping (plugin)
+## How the plugin maps all this
 
-How the plugin's generic adapter (`plugin/core/Adapters/GenericAdapter.cs`) maps
-the unified layer to the Grammar `SignalState` (docs/flag-grammar.md §9-§10).
-Doc and code state the same contract — change them together.
+The mapping itself is code, and only code:
 
-- **Inputs**: the seven typed unified flags off `StatusDataBase` (int 0/1, see
-  above), `SessionTypeName`, and `GameData.GamePaused`. No raw data — per-sim
-  refinements (tiers, VSC/SC/FCY, sector yellows, notices) layer on via
-  game-keyed adapters that run after the generic one and override its result.
-- **Track-flag priority** when several are set:
-  **Yellow > Blue > White > Checkered > Green.** The unified black and orange
-  flags are *not* in this ladder — they map to the orthogonal
-  `BlackFlag`/`Meatball` dimensions so the compositor's demotion rule
-  (docs/flag-grammar.md §5) can keep them visible under a winning track flag.
-  The unified layer never surfaces a red flag, so the generic adapter never
-  emits one either.
-- **Tier heuristic**: the unified booleans can't distinguish a displayed from a
-  waved flag, so a yellow always enters at **Tier 1 (Alert)** — the
-  marshal-is-waving guess; every other flag enters at Tier 0 (Ambient).
-- **Session mapping** from `SessionTypeName` (ordinal case-insensitive substring
-  matching): `GamePaused` → *Paused* outright; null/empty → *Unknown*; names
-  containing `practice`, `qualif`, `test`, `warmup`, `hotlap`, `hotstint` or
-  `superpole` → *PreRace* (covers iRacing's "Offline Testing" / "Lone Qualify" /
-  "Open Practice", ACC's "HOTSTINT" / "SUPERPOLE", Codemasters' "Practice n" /
-  "Qualifying n"); otherwise names containing `race` → *Racing*; anything else →
-  *Unknown*. Pre-race keywords are checked before `race` so a combined name can't
-  misroute.
-- **Caution / sectors / notices**: always defaults from the generic adapter —
-  first-class VSC/SC/FCY, sector-local yellows, start sequences and penalty
-  notices only exist in per-sim raw data (see the tables above).
-- **No-game predicate**: the plugin shows its connected-idle marker (instead of
-  running the adapter) unless `GameRunning && !GameInMenu && NewData != null`.
-  A paused game still counts as live — it renders as the *Paused* session, not as
-  connected-idle.
+- **Generic (every sim)** — `plugin/core/Adapters/GenericAdapter.cs`:
+  the unified `Flag_*` set to a `SignalState`, including the track-flag
+  priority ladder, the yellow tier heuristic and the session-name
+  vocabulary.
+- **iRacing refiner** — `plugin/core/Adapters/IRacingAdapter.cs`: the raw
+  `SessionFlags` bit values (verified against the shipped SDK, listed as
+  named constants) and every rule that overrides or enriches the generic
+  result.
+- **The chain** — `plugin/core/Adapters/SignalMapping.cs`.
 
-## iRacing adapter mapping (plugin)
+What is left here is the part that is not a restatement of that code: what
+each sim actually exposes, and how it was established. Read the code for
+behaviour; read this for the research behind it.
 
-How the iRacing raw-telemetry refiner (`plugin/core/Adapters/IRacingAdapter.cs`)
-layers over the generic result, emitting the Grammar `SignalState`
-(docs/flag-grammar.md §10). It matches `GameData.GameName == "IRacing"`
-(ordinal case-insensitive; the code that also names the `PluginsData\IRacing`
-settings folder) and only ever *refines* — if the raw SessionFlags mask is
-unavailable for a tick, the generic result stands untouched. Doc and code state
-the same contract — change them together.
+### Incident-limit source (researched, not live-verified)
 
-- **Red** (`0x10`) → `TrackFlag.Red` at Tier 2 (raw-only; the unified layer
-  never carries red).
-- **Caution** (`0x4000 | 0x8000`) → the **SC board** (`Caution.SafetyCar`).
-  iRacing's full-course caution is a deployed pace car and the sim has no VSC,
-  so the SC board is always the right board. The compositor rides it on a
-  yellow field.
-- **Yellow tier refinement**: when the generic flag is yellow,
-  `cautionWaving` → Tier 2, `yellowWaving | caution` → Tier 1, displayed-only
-  → Tier 0 — raw kills the generic "yellow is always Alert" guess. Blue and
-  green firm up to Tier 1 (a blue shown to you and a start/restart both want
-  the attention pulse).
-- **Disqualify** (`0x20000`) → the orthogonal black-family order with
-  `BlackDetail.Disqualified` — never discarded, whatever the track flag; the
-  compositor's demotion rule keeps it visible. `greenHeld` (`0x400`) is
-  deliberately **not** mapped to green: iRacing raises it while the starter
-  still holds the green *furled* (start/restart imminent), so surfacing it as
-  a green flag made the panel jump the start. It folds into the gantry's Set
-  phase instead; the panel goes green only when the `green` bit itself flies.
-- **Penalties**: `repair` (`0x100000`) → the meatball dimension (the unified
-  layer maps the same bit to `Flag_Orange`, which the generic adapter already
-  routes there — the meatball renders as its true form, a black field with
-  the orange disc); `furled` (`0x80000`) → the furled warning frame.
-  **DT-vs-SG stays defaulted** — no iRacing telemetry source exists (see the
-  penalty-telemetry-limits note above), so a bare `black` bit stays a bare
-  black flag.
-- **Start sequence** (`SignalState.StartPhase`): `startGo` (`0x80000000`) →
-  Go, `startSet` (`0x40000000`) or `greenHeld` (`0x400`, furled green in the
-  starter's hand) → Set, `startReady` (`0x20000000`) or rolling-start
-  `oneLapToGreen` (`0x200`) → Ready; else Off (`startHidden` included).
-  Rendered as the five-light gantry board; under the compositor it can ride
-  any field, and at Go the green flag takes the field naturally. iRacing
-  exposes no light counts, so `StartLightsLit` stays 0 (= all five at Set).
-- **Countdown notices**: `tenToGo` (`0x800`) → `CountdownLaps = 10`,
-  `fiveToGo` (`0x1000`) → 5 — the numeric notice boards.
-- **Debris**: `debris` (`0x40`) → `TrackFlag.Debris`, only when no other
-  track flag won (lowest track state; the real signal is the striped surface
-  flag, rendered as a field). The unified layer never surfaces this bit.
-- **Incident warning** (`SignalState.IncidentWarning`): fires when
-  `PlayerCarMyIncidentCount` ≥ session `IncidentLimit − IncidentWarnMargin`
-  (margin 4 ≈ one hard incident). Rendered as the red warning frame
-  (suppressed under takeovers and DQ). Independent of the SessionFlags mask,
-  so a mask-less tick still warns. See the incident-limit note below for the
-  source.
-- **Not touched**: checkered/white/green/black are single bits the unified
-  layer already carries 1:1; blue stands as the unified layer derives it —
-  `blue && !green`, so on a simultaneous blue+green tick the panel shows
-  green. The adapter deliberately does **not** restore blue from raw during
-  that overlap: SimHub suppresses it on purpose (issue
-  [#436](https://github.com/SHWotever/SimHub/issues/436), spurious blues
-  around starts), and green is the flag that matters in that window; session
-  mapping stays generic. `crossed` (halfway) remains unmapped — a future
-  candidate, deliberately not guessed at.
-
-**Incident-limit source (researched, not live-verified).** iRacing's incident
-limit lives in the session-info YAML at
+iRacing's incident limit lives in the session-info YAML at
 `WeekendInfo:WeekendOptions:IncidentLimit`, not in telemetry. Reflection over
 the `iRacingSDK.dll` shipped inside SimHub 9.11.21 shows its **typed**
 `SessionData._WeekendOptions` model maps only a subset of that section
@@ -339,14 +259,6 @@ Every layer is guarded (a wrong nesting/key/type degrades to "no limit", never
 throws); `"unlimited"` and any non-numeric value count as no finite limit. The
 **dictionary** nesting/casing is researched, not confirmed against a live
 session — verify (and tweak if needed) in a running race.
-
-## Property-layer gotchas
-
-- **Bad property paths return null in NCalc**, and null silently breaks
-  string concatenation — the whole formula evaluates to an empty string and the
-  serial line is silently dropped rather than erroring. Wrap risky references in
-  `isnull(x, fallback)`. This applies to any name-based property access (raw-data
-  paths that differ per install are the usual culprits), not just flags.
 
 ## Sources
 

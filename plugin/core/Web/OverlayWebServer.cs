@@ -2,15 +2,19 @@
 //
 // The production web overlay host: a localhost-only TCP
 // listener that serves the LED-dot overlay page (embedded assembly resource,
-// single-sourced from overlay/index.html) on GET / and broadcasts the
-// renderer's raw 3072-byte RGB888 frames on /ws.
+// single-sourced from overlay/index.html) on GET / and streams the
+// renderer's raw 3072-byte RGB888 frames from GET /stream.
 //
-// Raw TcpListener + hand-rolled HTTP/RFC 6455 on purpose: net48's
-// HttpListener rides http.sys, whose URL-ACL rules can demand elevation to
-// register a prefix, and the test suite must pass on an unprivileged CI
-// runner. A plain socket has no such dependency, and binding
-// IPAddress.Loopback makes the security boundary — localhost only, never
-// reachable from the LAN — a single provable line.
+// Raw TcpListener + hand-rolled HTTP on purpose: net48's HttpListener rides
+// http.sys, whose URL-ACL rules can demand elevation to register a prefix,
+// and the test suite must pass on an unprivileged CI runner. A plain socket
+// has no such dependency, and binding IPAddress.Loopback makes the security
+// boundary — localhost only, never reachable from the LAN — a single
+// provable line.
+//
+// The frame transport is a long-lived HTTP response, not a WebSocket: the
+// page only ever receives and the record size is fixed, so RFC 6455's
+// framing, masking and control frames would buy nothing.
 //
 // Lifecycle: Start binds in plugin Init, Stop tears down in End. SimHub
 // rebuilds plugins (End then Init) at every game change, so Stop must close
@@ -25,7 +29,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,11 +37,12 @@ using Uniflag.Rendering;
 namespace Uniflag.Web
 {
     /// <summary>
-    /// Localhost-only HTTP + WebSocket host for the browser/overlay virtual
-    /// panel. Implements <see cref="IFrameSink"/>; the server registers
-    /// itself with the renderer (via <see cref="IFrameSinkHost"/>) while at
-    /// least one WebSocket client is connected — the render thread only runs
-    /// when someone is watching.
+    /// Localhost-only HTTP host for the browser/overlay virtual panel: it
+    /// serves the page at <c>/</c> and streams raw frames from
+    /// <c>/stream</c>. Implements <see cref="IFrameSink"/>; the server
+    /// registers itself with the renderer (via <see cref="IFrameSinkHost"/>)
+    /// while at least one stream client is connected — the render thread
+    /// only runs when someone is watching.
     /// </summary>
     public sealed class OverlayWebServer : IFrameSink
     {
@@ -66,7 +70,6 @@ namespace Uniflag.Web
         // bound would reset on every byte, letting a drip-feed (slowloris)
         // client pin a socket and worker indefinitely. Writes bounded individually.
         private const int HttpIoTimeoutMs = 5000;
-        private const string WebSocketMagic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
         private static readonly Lazy<byte[]> PageBytes =
             new Lazy<byte[]>(LoadPageResource, LazyThreadSafetyMode.ExecutionAndPublication);
@@ -118,7 +121,6 @@ namespace Uniflag.Web
             }
         }
 
-        /// <summary>Connected WebSocket clients (post-upgrade).</summary>
         public int ClientCount => _clientSnapshot.Length;
 
         /// <summary>
@@ -350,24 +352,15 @@ namespace Uniflag.Web
                         .ConfigureAwait(false);
                     return;
                 }
-                if (request.Path == "/ws")
+                if (request.Path == "/stream")
                 {
-                    string key = request.Header("Sec-WebSocket-Key");
-                    if (!request.IsWebSocketUpgrade || key == null)
-                    {
-                        await WriteTextResponseAsync(
-                            stream, "400 Bad Request", "Expected a WebSocket upgrade on /ws.\n", ct)
-                            .ConfigureAwait(false);
-                        return;
-                    }
-                    byte[] response = BuildUpgradeResponse(key);
-                    if (!await WriteBoundedAsync(stream, response, ct).ConfigureAwait(false))
+                    if (!await WriteBoundedAsync(stream, StreamResponseHeader, ct).ConfigureAwait(false))
                     {
                         return;
                     }
                     upgraded = true;
                     _pendingConnections.TryRemove(tcp, out _);
-                    await ServeWebSocketAsync(tcp, stream, ct).ConfigureAwait(false);
+                    await ServeFrameStreamAsync(tcp, stream, ct).ConfigureAwait(false);
                     return;
                 }
                 if (request.Path == "/" || request.Path == "/index.html")
@@ -392,7 +385,7 @@ namespace Uniflag.Web
             }
         }
 
-        private async Task ServeWebSocketAsync(TcpClient tcp, NetworkStream stream, CancellationToken ct)
+        private async Task ServeFrameStreamAsync(TcpClient tcp, NetworkStream stream, CancellationToken ct)
         {
             var client = new OverlayClient(tcp, stream, OnClientGone, ct);
             bool admitted;
@@ -470,25 +463,29 @@ namespace Uniflag.Web
             internal string Path;
             internal Dictionary<string, string> Headers;
 
-            internal string Header(string name)
-            {
-                string value;
-                return Headers.TryGetValue(name, out value) ? value : null;
-            }
-
-            internal bool IsWebSocketUpgrade
-            {
-                get
-                {
-                    string upgrade = Header("Upgrade");
-                    string connection = Header("Connection");
-                    return upgrade != null
-                        && upgrade.IndexOf("websocket", StringComparison.OrdinalIgnoreCase) >= 0
-                        && connection != null
-                        && connection.IndexOf("upgrade", StringComparison.OrdinalIgnoreCase) >= 0;
-                }
-            }
         }
+
+        /// <summary>
+        /// The /stream response head. The body that follows is raw 3072-byte
+        /// frames forever, so there is no Content-Length and the connection
+        /// ends only when one side closes.
+        ///
+        /// <para><c>Access-Control-Allow-Origin</c> is required by
+        /// <c>just overlay-serve</c>, which serves a dev copy of the page
+        /// from a different port: a WebSocket handshake was exempt from
+        /// CORS, a fetch is not. It is a deliberate grant — any page the
+        /// user visits can read this loopback frame stream. That was already
+        /// true of the old WebSocket endpoint (the server never checked
+        /// Origin), so the header makes an existing property explicit rather
+        /// than adding one.</para>
+        /// </summary>
+        private static readonly byte[] StreamResponseHeader = Encoding.ASCII.GetBytes(
+            "HTTP/1.1 200 OK\r\n"
+            + "Content-Type: application/octet-stream\r\n"
+            + "Cache-Control: no-store\r\n"
+            + "Access-Control-Allow-Origin: *\r\n"
+            + "Connection: close\r\n"
+            + "\r\n");
 
         private static async Task<ParsedRequest> ReadRequestAsync(NetworkStream stream, CancellationToken ct)
         {
@@ -571,22 +568,6 @@ namespace Uniflag.Web
                 Path = query < 0 ? target : target.Substring(0, query),
                 Headers = headers,
             };
-        }
-
-        private static byte[] BuildUpgradeResponse(string key)
-        {
-            string accept;
-            using (SHA1 sha1 = SHA1.Create()) // mandated by RFC 6455, not a security use
-            {
-                accept = Convert.ToBase64String(
-                    sha1.ComputeHash(Encoding.ASCII.GetBytes(key + WebSocketMagic)));
-            }
-            return Encoding.ASCII.GetBytes(
-                "HTTP/1.1 101 Switching Protocols\r\n"
-                + "Upgrade: websocket\r\n"
-                + "Connection: Upgrade\r\n"
-                + "Sec-WebSocket-Accept: " + accept + "\r\n"
-                + "\r\n");
         }
 
         private async Task WritePageResponseAsync(NetworkStream stream, CancellationToken ct)

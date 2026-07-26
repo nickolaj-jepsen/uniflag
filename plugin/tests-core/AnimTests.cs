@@ -177,7 +177,7 @@ namespace Uniflag.Tests
 
     public class FloorMathTests
     {
-        // C# '/' and '%' truncate toward zero; these helpers floor instead.
+        // C# '%' truncates toward zero; this helper floors instead.
         [Theory]
         [InlineData(5, 32, 5)]
         [InlineData(0, 32, 0)]
@@ -189,18 +189,6 @@ namespace Uniflag.Tests
         public void FloorModMatchesRemEuclid(int a, int b, int expected)
         {
             Assert.Equal(expected, Anim.FloorMod(a, b));
-        }
-
-        [Theory]
-        [InlineData(7, 4, 1)]
-        [InlineData(4, 4, 1)]
-        [InlineData(0, 4, 0)]
-        [InlineData(-1, 4, -1)] // C# -1 / 4 == 0
-        [InlineData(-4, 4, -1)]
-        [InlineData(-5, 4, -2)]
-        public void FloorDivMatchesDivEuclid(int a, int b, int expected)
-        {
-            Assert.Equal(expected, Anim.FloorDiv(a, b));
         }
     }
 

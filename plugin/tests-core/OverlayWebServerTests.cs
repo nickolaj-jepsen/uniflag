@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
+﻿// SPDX-License-Identifier: GPL-3.0-or-later WITH GPL-3.0-linking-exception
 //
-// Web overlay server tests: frame delivery to a real ClientWebSocket,
+// Web overlay server tests: frame delivery to a real stream client,
 // graceful bind failure, the loopback-only binding, the sink registration
 // refcount (first client registers, last disconnect unregisters), the
 // embedded page's single-source contract, and port rebindability after
@@ -15,7 +15,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,31 +26,6 @@ namespace Uniflag.Tests
 {
     public class OverlayWebServerTests
     {
-        /// <summary>
-        /// Registration-counting stand-in for the renderer: the server only
-        /// ever needs AddSink/RemoveSink, so the tests observe the refcount
-        /// without spinning up a render thread.
-        /// </summary>
-        private sealed class FakeSinkHost : IFrameSinkHost
-        {
-            private int _adds;
-            private int _removes;
-
-            public int Adds => Volatile.Read(ref _adds);
-
-            public int Removes => Volatile.Read(ref _removes);
-
-            public void AddSink(IFrameSink sink)
-            {
-                Interlocked.Increment(ref _adds);
-            }
-
-            public void RemoveSink(IFrameSink sink)
-            {
-                Interlocked.Increment(ref _removes);
-            }
-        }
-
         private static void WaitUntil(Func<bool> condition, string what, int timeoutMs = 10000)
         {
             var sw = Stopwatch.StartNew();
@@ -60,38 +34,6 @@ namespace Uniflag.Tests
                 Assert.True(sw.ElapsedMilliseconds < timeoutMs, $"timed out waiting for {what}");
                 Thread.Sleep(10);
             }
-        }
-
-        private static async Task<ClientWebSocket> ConnectAsync(OverlayWebServer server)
-        {
-            var ws = new ClientWebSocket();
-            using (var cts = new CancellationTokenSource(10000))
-            {
-                await ws.ConnectAsync(
-                    new Uri($"ws://127.0.0.1:{server.LocalEndPoint.Port}/ws"), cts.Token);
-            }
-            return ws;
-        }
-
-        private static async Task<byte[]> ReceiveBinaryMessageAsync(ClientWebSocket ws)
-        {
-            var buffer = new byte[8192];
-            int total = 0;
-            using (var cts = new CancellationTokenSource(10000))
-            {
-                WebSocketReceiveResult result;
-                do
-                {
-                    result = await ws.ReceiveAsync(
-                        new ArraySegment<byte>(buffer, total, buffer.Length - total), cts.Token);
-                    Assert.Equal(WebSocketMessageType.Binary, result.MessageType);
-                    total += result.Count;
-                }
-                while (!result.EndOfMessage);
-            }
-            var message = new byte[total];
-            Buffer.BlockCopy(buffer, 0, message, 0, total);
-            return message;
         }
 
         private static byte[] PatternFrame(int seed)
@@ -105,16 +47,16 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public async Task DeliversFramesToAWebSocketClientWithEvenTickDecimation()
+        public async Task DeliversFramesToAStreamClientWithEvenTickDecimation()
         {
-            var host = new FakeSinkHost();
+            var host = new CountingSinkHost();
             var server = new OverlayWebServer(host);
             try
             {
                 server.Start(0);
                 Assert.True(server.IsListening, server.StatusText);
 
-                using (ClientWebSocket ws = await ConnectAsync(server))
+                using (OverlayStreamClient client = await OverlayStreamClient.ConnectAsync(server))
                 {
                     WaitUntil(() => server.ClientCount == 1, "the client to be admitted");
 
@@ -129,7 +71,7 @@ namespace Uniflag.Tests
                     byte[] dropped = PatternFrame(7);
                     byte[] expected = PatternFrame(0);
                     server.OnFrame(dropped, 1);
-                    Task<byte[]> receive = ReceiveBinaryMessageAsync(ws);
+                    Task<byte[]> receive = client.ReadFrameAsync();
                     Task winner = await Task.WhenAny(receive, Task.Delay(1000));
                     Assert.NotSame(receive, winner); // an odd tick reached the wire
 
@@ -154,7 +96,7 @@ namespace Uniflag.Tests
             // header read must enforce one deadline across the whole request
             // (~5 s). Before that deadline existed, this connection stayed
             // open indefinitely.
-            var server = new OverlayWebServer(new FakeSinkHost());
+            var server = new OverlayWebServer(new CountingSinkHost());
             try
             {
                 server.Start(0);
@@ -205,7 +147,7 @@ namespace Uniflag.Tests
             try
             {
                 int takenPort = ((IPEndPoint)blocker.LocalEndpoint).Port;
-                var server = new OverlayWebServer(new FakeSinkHost());
+                var server = new OverlayWebServer(new CountingSinkHost());
 
                 Exception ex = Record.Exception(() => server.Start(takenPort));
 
@@ -225,7 +167,7 @@ namespace Uniflag.Tests
         [Fact]
         public void BindsLoopbackOnly()
         {
-            var server = new OverlayWebServer(new FakeSinkHost());
+            var server = new OverlayWebServer(new CountingSinkHost());
             try
             {
                 server.Start(0);
@@ -242,35 +184,37 @@ namespace Uniflag.Tests
         [Fact]
         public async Task SinkRegistrationFollowsFirstAndLastClient()
         {
-            var host = new FakeSinkHost();
+            var host = new CountingSinkHost();
             var server = new OverlayWebServer(host);
             try
             {
                 server.Start(0);
                 Assert.Equal(0, host.Adds);
 
-                using (ClientWebSocket first = await ConnectAsync(server))
-                using (ClientWebSocket second = await ConnectAsync(server))
+                OverlayStreamClient first = await OverlayStreamClient.ConnectAsync(server);
+                OverlayStreamClient second = await OverlayStreamClient.ConnectAsync(server);
+                try
                 {
                     WaitUntil(() => server.ClientCount == 2, "both clients to be admitted");
                     Assert.Equal(1, host.Adds); // one sink for N clients
                     Assert.Equal(0, host.Removes);
 
-                    using (var cts = new CancellationTokenSource(10000))
-                    {
-                        await first.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", cts.Token);
-                    }
+                    // Nothing is ever posted in this test: disconnect
+                    // detection must not depend on a frame write failing.
+                    first.Dispose();
                     WaitUntil(() => server.ClientCount == 1, "the first client to be reaped");
                     Assert.Equal(0, host.Removes); // still one watcher
 
-                    using (var cts = new CancellationTokenSource(10000))
-                    {
-                        await second.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", cts.Token);
-                    }
+                    second.Dispose();
                     WaitUntil(
                         () => server.ClientCount == 0 && host.Removes == 1,
                         "the last disconnect to unregister the sink");
                     Assert.Equal(1, host.Adds);
+                }
+                finally
+                {
+                    first.Dispose();
+                    second.Dispose();
                 }
             }
             finally
@@ -286,25 +230,22 @@ namespace Uniflag.Tests
             // thread runs exactly while a web client is watching.
             using (var renderer = new RendererLoop())
             {
-                var server = new OverlayWebServer(new RendererSinkHost(renderer));
+                var server = new OverlayWebServer(renderer);
                 try
                 {
                     server.Start(0);
                     Assert.False(renderer.IsRunning);
 
-                    using (ClientWebSocket ws = await ConnectAsync(server))
+                    using (OverlayStreamClient client = await OverlayStreamClient.ConnectAsync(server))
                     {
                         WaitUntil(() => renderer.IsRunning, "the renderer to start with the first client");
                         // Live frames flow end-to-end: renderer -> sink ->
-                        // decimation -> WS. Content is whatever the blank
+                        // decimation -> stream. Content is whatever the blank
                         // mode paints; the size contract is what matters.
-                        byte[] frame = await ReceiveBinaryMessageAsync(ws);
+                        byte[] frame = await client.ReadFrameAsync();
                         Assert.Equal(FrameBuffer.ByteLength, frame.Length);
 
-                        using (var cts = new CancellationTokenSource(10000))
-                        {
-                            await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", cts.Token);
-                        }
+                        client.Dispose();
                         WaitUntil(() => !renderer.IsRunning, "the renderer to stop with the last client");
                     }
                 }
@@ -318,7 +259,7 @@ namespace Uniflag.Tests
         [Fact]
         public void ServesTheEmbeddedPageWithNoCacheHeaders()
         {
-            var server = new OverlayWebServer(new FakeSinkHost());
+            var server = new OverlayWebServer(new CountingSinkHost());
             try
             {
                 server.Start(0);
@@ -354,10 +295,10 @@ namespace Uniflag.Tests
             // SimHub rebuilds plugins (End then Init) at every game change: a
             // leaked socket would break the very next game switch. A live
             // client at Stop time exercises the forced-teardown path.
-            var server = new OverlayWebServer(new FakeSinkHost());
+            var server = new OverlayWebServer(new CountingSinkHost());
             server.Start(0);
             int port = server.LocalEndPoint.Port;
-            ClientWebSocket ws = await ConnectAsync(server);
+            OverlayStreamClient client = await OverlayStreamClient.ConnectAsync(server);
             try
             {
                 WaitUntil(() => server.ClientCount == 1, "the client to be admitted");
@@ -366,10 +307,10 @@ namespace Uniflag.Tests
             {
                 server.Stop();
             }
-            ws.Dispose();
+            client.Dispose();
             Assert.Equal("Stopped", server.StatusText);
 
-            var reborn = new OverlayWebServer(new FakeSinkHost());
+            var reborn = new OverlayWebServer(new CountingSinkHost());
             try
             {
                 reborn.Start(port);

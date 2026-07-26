@@ -36,8 +36,11 @@ namespace Uniflag.Device
 
         /// <summary>
         /// Whether an enumerated port carries the uniflag USB identity
-        /// (either PID during the transition). Uncorrelated ports (null ids)
-        /// never match.
+        /// (either PID during the transition).
+        ///
+        /// <para>The Windows enumerator already filters on identity, so this
+        /// re-checks a port that matched by construction — deliberate, to keep
+        /// "what counts as the panel" testable off Windows.</para>
         /// </summary>
         public static bool IsUniflagDevice(SerialPortInfo port)
         {

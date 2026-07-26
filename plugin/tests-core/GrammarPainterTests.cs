@@ -10,8 +10,6 @@
 using Uniflag.Rendering;
 using Uniflag.Rendering.Grammar;
 using Xunit;
-using Caution = Uniflag.Rendering.Grammar.Caution;
-using SectorSet = Uniflag.Rendering.SectorSet;
 using Session = Uniflag.Rendering.Session;
 
 namespace Uniflag.Tests
@@ -103,7 +101,7 @@ namespace Uniflag.Tests
         public void DisqualifiedXIsSteadyEvenOffPhase()
         {
             var s = S();
-            s.BlackDetail = BlackDetail.Disqualified;
+            s.Disqualified = true;
             Assert.False(Anim.Strobe60(20, 2));
             var buf = Render(s, FieldEnv(EnvelopePhase.Attention, 100), 20);
             Assert.Equal(new Rgb(200, 200, 200), buf.GetPixel(0, 0));
@@ -164,7 +162,7 @@ namespace Uniflag.Tests
         {
             var s = S();
             s.Flag = TrackFlag.Yellow;
-            s.Caution = Caution.SafetyCar;
+            s.SafetyCar = true;
             var env = new Envelopes
             {
                 Field = new SlotEnvelope { Phase = EnvelopePhase.Ambient, Age = 400 },
@@ -180,11 +178,10 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void GantryShowsLitCountAndSockets()
+        public void GantrySetLightsAllFiveRed()
         {
             var s = S();
             s.StartPhase = StartPhase.Set;
-            s.StartLightsLit = 3;
             var env = new Envelopes
             {
                 Board = new SlotEnvelope { Phase = EnvelopePhase.Ambient, Age = 400 },
@@ -193,7 +190,21 @@ namespace Uniflag.Tests
             // Gantry box 30x12 at x 1..30, y 10..21; lights start at (4, 14).
             Assert.Equal(Palette.Red, buf.GetPixel(4, 14));
             Assert.Equal(Palette.Red, buf.GetPixel(14, 14));
-            Assert.Equal(Palette.GantrySocket, buf.GetPixel(19, 14));
+            Assert.Equal(Palette.Red, buf.GetPixel(19, 14));
+            Assert.Equal(Palette.Red, buf.GetPixel(24, 14));
+        }
+
+        [Fact]
+        public void GantryGoLeavesEverySocketDark()
+        {
+            var s = S();
+            s.StartPhase = StartPhase.Go;
+            var env = new Envelopes
+            {
+                Board = new SlotEnvelope { Phase = EnvelopePhase.Ambient, Age = 400 },
+            };
+            var buf = Render(s, env, 0);
+            Assert.Equal(Palette.GantrySocket, buf.GetPixel(4, 14));
             Assert.Equal(Palette.GantrySocket, buf.GetPixel(24, 14));
         }
 
@@ -226,25 +237,6 @@ namespace Uniflag.Tests
             Assert.Equal(new Rgb(255, 255, 255), buf.GetPixel(0, 0));
             Assert.Equal(new Rgb(255, 255, 255), buf.GetPixel(3, 0));
             Assert.Equal(new Rgb(0, 0, 0), buf.GetPixel(4, 0));
-        }
-
-        [Fact]
-        public void SectorStripOwnsItsRows()
-        {
-            var s = S();
-            s.Flag = TrackFlag.Yellow;
-            s.Sectors = SectorSet.Empty.With(2);
-            var buf = Render(s, FieldEnv(EnvelopePhase.Ambient, 400), 9);
-            // Active segment 2 (x 11..20): steady bright cloth wave once settled.
-            Assert.Equal(
-                Anim.ScaleRgb(Palette.Yellow, Anim.WaveMult(11, 31, 9, 180, 255)),
-                buf.GetPixel(11, 31));
-            // Inactive segment 1: constant dim.
-            Assert.Equal(Palette.SectorDim, buf.GetPixel(0, 31));
-            // Gap column keeps the field.
-            Assert.Equal(
-                Anim.ScaleRgb(Palette.Yellow, Anim.WaveMult(10, 31, 9, 150, 255)),
-                buf.GetPixel(10, 31));
         }
 
         [Fact]

@@ -7,25 +7,26 @@
 <!--
   The uniflag virtual panel (docs/web-overlay.md): a 32x32 LED-dot canvas fed
   raw 3072-byte RGB888 binary frames (row-major, top-left origin, no
-  COBS/CRC) over a WebSocket from the SimHub plugin's overlay server.
+  COBS/CRC) from the SimHub plugin's overlay server. The transport is one
+  long-lived HTTP response whose body is frames back to back forever; the
+  record size is fixed and the server writes each frame whole or drops the
+  connection, so no framing layer is needed - the reader just counts bytes.
 
   This file is the SINGLE SOURCE of the page: the plugin embeds it as an
   assembly resource (LogicalName Uniflag.Web.index.html, see
-  plugin/src/UniflagPlugin.csproj) and serves it at http://127.0.0.1:8972/,
+  plugin/simhub/UniflagPlugin.csproj) and serves it at http://127.0.0.1:8972/,
   and `just overlay-serve` serves the identical file from disk for iteration
-  outside SimHub. Fully self-contained by design: no CDN, no external fonts;
-  works from file:// and http://.
+  outside SimHub. Fully self-contained by design: no CDN, no external fonts.
 
   Query parameters:
     ?v=N        cache-buster only, ignored by the page. The DashStudio Web
                 Page View caches hard across plugin updates; the committed
-                dash carries ?v=1 - bump it with plugin releases.
-    ?ws=URL     override the frame source (default ws://127.0.0.1:8972/ws).
-    ?hud=1      show the fps instrumentation panel (rAF / recv / paint /
-                dropped / gap) used for the M2a measurements and for
-                diagnosing dash fps caps - see docs/web-overlay.md.
-    ?src=dummy  local 30 Hz test-pattern generator instead of the WebSocket,
-                for skin iteration without a running plugin.
+                dash carries ?v=2 - bump it with plugin releases.
+    ?stream=URL override the frame source
+                (default http://127.0.0.1:8972/stream).
+    ?src=dummy  local 30 Hz test-pattern generator instead of the stream, for
+                skin iteration without a running plugin - and the only way to
+                see this page render at all off Windows.
 -->
 <style>
   html, body { margin: 0; height: 100%; }
@@ -59,75 +60,32 @@
     pointer-events: none;
   }
   #status.hidden { display: none; }
-  #hud {
-    position: fixed;
-    top: 8px;
-    left: 8px;
-    margin: 0;
-    padding: 6px 9px;
-    font: 11px/1.5 ui-monospace, Consolas, "Courier New", monospace;
-    color: #9fb0bf;
-    background: rgba(8, 10, 16, 0.78);
-    border: 1px solid #1c2430;
-    border-radius: 4px;
-    white-space: pre;
-    pointer-events: none;
-    display: none;
-  }
 </style>
 </head>
 <body>
 <canvas id="panel" class="stale"></canvas>
 <div id="status">starting...</div>
-<pre id="hud"></pre>
 <script>
 'use strict';
 
 // ------------------------------------------------------------------ constants
 const W = 32, H = 32, PIXELS = W * H;
 const FRAME_BYTES = PIXELS * 3;          // RGB888, row-major, top-left origin
-const DEFAULT_WS = 'ws://127.0.0.1:8972/ws'; // the plugin's fixed port
+const DEFAULT_STREAM = 'http://127.0.0.1:8972/stream'; // the plugin's fixed port
 const GEN_HZ = 30;                       // ?src=dummy generator timeline
 const BACKOFF_MIN_MS = 500, BACKOFF_MAX_MS = 8000;
 const TAU = Math.PI * 2;
 
 const params = new URLSearchParams(location.search);
-const wsUrl = params.get('ws') || DEFAULT_WS;
+const streamUrl = params.get('stream') || DEFAULT_STREAM;
 const useDummy = params.get('src') === 'dummy';
-const showHud = params.get('hud') === '1';
 
 // --------------------------------------------------------------- shared state
 // Latest-frame-wins: one buffer, no queue. Every delivered frame bumps
-// `latestSeq`; the paint loop advances `paintedSeq` to match. The gap between
-// the two (minus the frame about to be painted) is frames that were received
-// but replaced before they ever hit the canvas - the "dropped" counter.
+// `latestSeq`; the paint loop advances `paintedSeq` to match, so a frame that
+// arrives and is replaced before the next rAF is simply never painted.
 const latest = new Uint8Array(FRAME_BYTES);
 let latestSeq = 0, paintedSeq = 0;
-
-const stats = {
-  raf: 0, recv: 0, paint: 0,             // per-window counters, reset each HUD tick
-  recvTotal: 0, paintTotal: 0,
-  dropped: 0, wrongSize: 0,
-  gapWindowMax: 0, gapSessionMax: 0,     // max ms between consecutive deliveries
-  lastRecvAt: 0,
-};
-let wsStateText = useDummy ? 'n/a (dummy source)' : 'connecting';
-
-// Record a delivery event of `count` frames (count > 1 when the generator
-// timeline caught up after a stalled timer - the skipped indices still count
-// as received, they just never existed long enough to paint).
-function noteDelivery(count) {
-  const now = performance.now();
-  if (stats.lastRecvAt > 0) {
-    const gap = now - stats.lastRecvAt;
-    if (gap > stats.gapWindowMax) stats.gapWindowMax = gap;
-    if (gap > stats.gapSessionMax) stats.gapSessionMax = gap;
-  }
-  stats.lastRecvAt = now;
-  stats.recv += count;
-  stats.recvTotal += count;
-  latestSeq += count;
-}
 
 // ------------------------------------------------------------- connection UI
 const statusEl = document.getElementById('status');
@@ -140,7 +98,6 @@ function setConnState(connected, text) {
   statusEl.classList.toggle('hidden', connected);
   canvas.classList.toggle('stale', !connected);
   if (!connected) statusEl.textContent = 'uniflag: ' + text;
-  wsStateText = text;
 }
 
 // ---------------------------------------------------------------- dummy source
@@ -167,48 +124,77 @@ function startDummy() {
   // one-frame-per-rAF, so generator cadence and paint cadence stay
   // independent. The frame index is floor(elapsed / period): if the interval
   // timer fires late (background-tab throttling etc.) the missed indices are
-  // delivered in one burst and show up honestly as received-then-coalesced.
+  // skipped, and the cursor pixel jumps by that many positions - which is
+  // what makes a capture-side fps cap visible to the eye.
   setInterval(() => {
     const target = Math.floor((performance.now() - t0) * GEN_HZ / 1000);
     if (target <= genFrame) return;
-    const n = target - genFrame;
     genFrame = target;
     paintTestPattern(latest, genFrame);  // only the newest frame materialises
-    noteDelivery(n);
+    latestSeq++;
   }, 1000 / GEN_HZ);
 }
 
-// ------------------------------------------------------------------- WS source
-function startWs(url) {
+// --------------------------------------------------------------- HTTP source
+// One long-lived response, frames back to back. The server writes each frame
+// whole or drops the connection, so a byte counter is all the framing needed:
+// every FRAME_BYTES consumed is exactly one frame.
+function startStream(url) {
   let backoff = BACKOFF_MIN_MS;
-  const connect = () => {
+
+  const retry = (why) => {
+    const wait = backoff;
+    setConnState(false, why + ', retry in ' + (wait / 1000).toFixed(1) + 's');
+    backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
+    setTimeout(connect, wait);
+  };
+
+  const connect = async () => {
     setConnState(false, 'connecting');
-    let ws;
+    let reader;
     try {
-      ws = new WebSocket(url);
-    } catch (e) {
-      setConnState(false, 'bad ws url (' + e.name + ')');  // unrecoverable; no retry
-      return;
-    }
-    ws.binaryType = 'arraybuffer';
-    ws.onopen = () => { backoff = BACKOFF_MIN_MS; setConnState(true, 'open'); };
-    ws.onmessage = (ev) => {
-      // Exactly one 3072-byte binary message per frame; anything else
-      // (text pings, truncated frames) is ignored but counted.
-      if (!(ev.data instanceof ArrayBuffer) || ev.data.byteLength !== FRAME_BYTES) {
-        stats.wrongSize++;
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok || !response.body) {
+        retry('http ' + response.status);
         return;
       }
-      latest.set(new Uint8Array(ev.data));
-      noteDelivery(1);
-    };
-    ws.onclose = () => {                 // fires after onerror too
-      const wait = backoff;
-      setConnState(false, 'disconnected, retry in ' + (wait / 1000).toFixed(1) + 's');
-      backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
-      setTimeout(connect, wait);
-    };
+      reader = response.body.getReader();
+    } catch (e) {
+      retry('unreachable');
+      return;
+    }
+    backoff = BACKOFF_MIN_MS;
+    setConnState(true, 'open');
+
+    // Reassemble by byte count into a scratch buffer, landing in `latest`
+    // only once a frame is whole: `await` yields, so a rAF firing mid-chunk
+    // would otherwise paint a torn frame (new top, previous bottom).
+    const partial = new Uint8Array(FRAME_BYTES);
+    let filled = 0;
+    try {
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        const value = chunk.value;
+        let off = 0;
+        while (off < value.length) {
+          const take = Math.min(FRAME_BYTES - filled, value.length - off);
+          partial.set(value.subarray(off, off + take), filled);
+          filled += take;
+          off += take;
+          if (filled === FRAME_BYTES) {
+            filled = 0;
+            latest.set(partial);
+            latestSeq++;
+          }
+        }
+      }
+    } catch (e) {
+      // Socket died mid-stream.
+    }
+    retry('disconnected');
   };
+
   connect();
 }
 
@@ -283,47 +269,13 @@ function paintPanel(buf) {
 // ------------------------------------------------------------------ paint loop
 function onRaf() {
   requestAnimationFrame(onRaf);
-  stats.raf++;
   if (latestSeq === paintedSeq) return;  // nothing new; skip the paint
-  // Everything newer than the last paint, minus the one frame painted now,
-  // was received but never shown.
-  stats.dropped += latestSeq - paintedSeq - 1;
   paintedSeq = latestSeq;
   paintPanel(latest);
-  stats.paint++;
-  stats.paintTotal++;
-}
-
-// ------------------------------------------------------------------------- HUD
-// Off by default; ?hud=1 shows the instrumentation panel
-// (docs/web-overlay.md explains how to read it).
-if (showHud) {
-  const hud = document.getElementById('hud');
-  hud.style.display = 'block';
-  const srcText = useDummy ? 'dummy @ ' + GEN_HZ + ' Hz' : 'ws ' + wsUrl;
-  let lastHud = performance.now();
-  setInterval(() => {
-    const now = performance.now();
-    const dt = now - lastHud;            // real elapsed: rates stay honest even
-    lastHud = now;                       // if this timer itself gets throttled
-    const rate = (n) => (n * 1000 / dt).toFixed(1).padStart(5);
-    hud.textContent =
-      'src      ' + srcText + '\n' +
-      'ws       ' + wsStateText + '\n' +
-      'rAF /s   ' + rate(stats.raf) + '\n' +
-      'recv /s  ' + rate(stats.recv) + '   total ' + stats.recvTotal + '\n' +
-      'paint /s ' + rate(stats.paint) + '   total ' + stats.paintTotal + '\n' +
-      'dropped  ' + stats.dropped + '  (coalesced, latest-frame-wins)\n' +
-      'badsize  ' + stats.wrongSize + '\n' +
-      'gap ms   ' + Math.round(stats.gapWindowMax) + ' (win)  '
-                  + Math.round(stats.gapSessionMax) + ' (max)';
-    stats.raf = stats.recv = stats.paint = 0;
-    stats.gapWindowMax = 0;
-  }, 1000);
 }
 
 // ------------------------------------------------------------------------ boot
-if (useDummy) startDummy(); else startWs(wsUrl);
+if (useDummy) startDummy(); else startStream(streamUrl);
 window.addEventListener('resize', resize);
 resize();
 requestAnimationFrame(onRaf);

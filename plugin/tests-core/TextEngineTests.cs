@@ -14,41 +14,25 @@ namespace Uniflag.Tests
         [Fact]
         public void MeasureRowMatchesTheCautionBoardFormula()
         {
-            // total_w = n*7 + (n-1)*gap (effects.rs:410 / spec §5.9):
-            // VSC = 3 glyphs gap 1 → 23; SC = 2 glyphs gap 4 → 18.
+            // total_w = n*7 + (n-1)*gap (docs/flag-grammar.md §8):
+            // three glyphs gap 1 → 23; two glyphs gap 4 → 18.
             Assert.Equal(23, TextEngine.MeasureRow(3, 1));
             Assert.Equal(18, TextEngine.MeasureRow(2, 4));
-            // Penalty rows: SLOW (4, gap 1) → 31; DT/SG (2, gap 1) → 15;
-            // a single glyph ignores the gap.
+            // SC / DQ (2, gap 1) → 15; a single glyph ignores the gap.
             Assert.Equal(31, TextEngine.MeasureRow(4, 1));
             Assert.Equal(15, TextEngine.MeasureRow(2, 1));
             Assert.Equal(7, TextEngine.MeasureRow(1, 0));
         }
 
         [Fact]
-        public void CenteringMatchesTheBoardPlacement()
-        {
-            // Centring math with the truncating division biasing odd
-            // leftovers one pixel left (three glyphs gap 1 → x 4; two
-            // glyphs gap 4 → x 7; glyph row → y 10).
-            Assert.Equal(4, TextEngine.CenterRowX(3, 1));
-            Assert.Equal(7, TextEngine.CenterRowX(2, 4));
-            Assert.Equal(10, TextEngine.CenterRowY());
-            // Wider and narrower rows: four glyphs gap 1 → x 0, two glyphs
-            // gap 1 → x 8, one bare glyph → x 12.
-            Assert.Equal(0, TextEngine.CenterRowX(4, 1));
-            Assert.Equal(8, TextEngine.CenterRowX(2, 1));
-            Assert.Equal(12, TextEngine.CenterRowX(1, 0));
-        }
-
-        [Fact]
         public void EveryGlyphIsElevenRowsOfSevenColumns()
         {
+            // The whole surviving inventory (docs/flag-grammar.md §8).
             byte[][] glyphs =
             {
-                Font7x11.S, Font7x11.C, Font7x11.V, Font7x11.D, Font7x11.G,
-                Font7x11.L, Font7x11.O, Font7x11.T, Font7x11.W,
-                Font7x11.One, Font7x11.Two, Font7x11.Three,
+                Font7x11.S, Font7x11.C, Font7x11.D, Font7x11.Q, Font7x11.X,
+                Font7x11.Zero, Font7x11.One, Font7x11.Two, Font7x11.Three, Font7x11.Four,
+                Font7x11.Five, Font7x11.Six, Font7x11.Seven, Font7x11.Eight, Font7x11.Nine,
             };
             foreach (byte[] glyph in glyphs)
             {
@@ -90,8 +74,8 @@ namespace Uniflag.Tests
                     s.SetPixel(x, y, backdrop);
                 }
             }
-            TextEngine.DrawGlyph(s, Font7x11.O, 0, 0, new Rgb(255, 255, 255));
-            // O's interior (e.g. centre of row 5) is a hole: backdrop remains.
+            TextEngine.DrawGlyph(s, Font7x11.Zero, 0, 0, new Rgb(255, 255, 255));
+            // 0's interior (e.g. centre of row 5) is a hole: backdrop remains.
             Assert.Equal(backdrop, s.GetPixel(3, 5));
         }
 
@@ -100,9 +84,9 @@ namespace Uniflag.Tests
         {
             var s = new FrameBuffer();
             var white = new Rgb(255, 255, 255);
-            // Two T glyphs, gap 3: second stem starts at x = 0 + 7 + 3.
-            TextEngine.DrawRow(s, new[] { Font7x11.T, Font7x11.T }, 3, 0, 0, white);
-            // T row 0 is a full 7-px bar: x 0..6 and x 10..16 lit, gap dark.
+            // Two 7 glyphs, gap 3: the second starts at x = 0 + 7 + 3.
+            TextEngine.DrawRow(s, new[] { Font7x11.Seven, Font7x11.Seven }, 3, 0, 0, white);
+            // 7's row 0 is a full 7-px bar: x 0..6 and x 10..16 lit, gap dark.
             Assert.Equal(white, s.GetPixel(6, 0));
             Assert.Equal(new Rgb(0, 0, 0), s.GetPixel(8, 0));
             Assert.Equal(white, s.GetPixel(10, 0));
@@ -117,7 +101,7 @@ namespace Uniflag.Tests
             // the visible half.
             var s = new FrameBuffer();
             var white = new Rgb(255, 255, 255);
-            TextEngine.DrawGlyph(s, Font7x11.T, -4, 0, white);
+            TextEngine.DrawGlyph(s, Font7x11.Seven, -4, 0, white);
             Assert.Equal(white, s.GetPixel(0, 0)); // row-0 bar, columns 4..6 visible
             Assert.Equal(white, s.GetPixel(2, 0));
             Assert.Equal(new Rgb(0, 0, 0), s.GetPixel(3, 0));

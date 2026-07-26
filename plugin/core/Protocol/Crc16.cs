@@ -61,16 +61,6 @@ namespace Uniflag.Protocol
             return crc;
         }
 
-        /// <summary>Streaming update over a whole array.</summary>
-        public static ushort Update(ushort crc, byte[] data)
-        {
-            if (data == null)
-            {
-                throw new ArgumentNullException(nameof(data));
-            }
-            return Update(crc, data, 0, data.Length);
-        }
-
         /// <summary>One-shot CRC of <paramref name="count"/> bytes of <paramref name="data"/>.</summary>
         public static ushort Checksum(byte[] data, int offset, int count)
         {
@@ -80,7 +70,11 @@ namespace Uniflag.Protocol
         /// <summary>One-shot CRC of <paramref name="data"/>.</summary>
         public static ushort Checksum(byte[] data)
         {
-            return Update(Init, data);
+            if (data == null)
+            {
+                throw new ArgumentNullException(nameof(data));
+            }
+            return Update(Init, data, 0, data.Length);
         }
     }
 }

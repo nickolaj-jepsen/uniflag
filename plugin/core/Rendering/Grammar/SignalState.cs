@@ -3,8 +3,11 @@
 // Grammar (second-generation signal language) state model —
 // docs/flag-grammar.md §9. Adapters are pure telemetry→state functions; the
 // renderer diffs successive SignalStates to run the envelope (§4), so no
-// age/animation state crosses the adapter boundary. Session and SectorSet
-// come from the parent namespace.
+// age/animation state crosses the adapter boundary. Session comes from the
+// parent namespace.
+//
+// Add a dimension only when a refiner is about to produce it: an unreachable
+// field costs painters, glyphs and tests that no telemetry can exercise.
 
 namespace Uniflag.Rendering.Grammar
 {
@@ -39,24 +42,6 @@ namespace Uniflag.Rendering.Grammar
         Urgent = 2,
     }
 
-    /// <summary>Neutralisation regime.</summary>
-    public enum Caution
-    {
-        None,
-        VirtualSafetyCar,
-        SafetyCar,
-        FullCourseYellow,
-    }
-
-    /// <summary>Black-flag service detail; meaningful only with an active black-family order.</summary>
-    public enum BlackDetail
-    {
-        None,
-        DriveThrough,
-        StopAndGo,
-        Disqualified,
-    }
-
     /// <summary>Start-sequence phase (docs/flag-grammar.md §6.4).</summary>
     public enum StartPhase
     {
@@ -85,23 +70,24 @@ namespace Uniflag.Rendering.Grammar
         /// </summary>
         public bool BlackFlag;
 
-        /// <summary>Service detail / DQ. Non-None implies a black-family order.</summary>
-        public BlackDetail BlackDetail;
+        /// <summary>
+        /// Disqualified. Implies a black-family order; renders the steady X
+        /// field plus the DQ board.
+        /// </summary>
+        public bool Disqualified;
 
         /// <summary>Mechanical/meatball flag active. Orthogonal, like <see cref="BlackFlag"/>.</summary>
         public bool Meatball;
 
         public Session Session;
-        public Caution Caution;
-        public SectorSet Sectors;
+
+        /// <summary>
+        /// Full-course caution: a pace car is out. Rides a yellow field and
+        /// raises the SC board (docs/flag-grammar.md §5).
+        /// </summary>
+        public bool SafetyCar;
 
         public StartPhase StartPhase;
-
-        /// <summary>Gantry lights lit, 0..5; 0 = derive from <see cref="StartPhase"/> (LMU counts).</summary>
-        public byte StartLightsLit;
-
-        /// <summary>Time-penalty notice in seconds; 0 = none.</summary>
-        public byte TimePenaltySeconds;
 
         /// <summary>Laps-remaining countdown notice; 0 = none (iRacing 10/5).</summary>
         public byte CountdownLaps;
@@ -113,7 +99,7 @@ namespace Uniflag.Rendering.Grammar
         public bool IncidentWarning;
 
         /// <summary>Whether any black-family order is active.</summary>
-        public bool BlackActive => BlackFlag || BlackDetail != BlackDetail.None;
+        public bool BlackActive => BlackFlag || Disqualified;
 
         public static SignalState Default => new SignalState
         {

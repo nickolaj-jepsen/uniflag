@@ -32,7 +32,7 @@ namespace Uniflag
         internal RendererLoop Renderer { get; private set; }
 
         /// <summary>
-        /// Serves the LED-dot page and frame WebSocket on
+        /// Serves the LED-dot page and the frame stream on
         /// http://127.0.0.1:8972/. A bind failure becomes a settings-tab
         /// status, never a crash; stopped in End so the port comes back
         /// cleanly (SimHub rebuilds plugins at every game change).
@@ -53,11 +53,9 @@ namespace Uniflag
         /// </summary>
         internal BrightnessPolicy Brightness { get; private set; }
 
-        // One reused snapshot + immutable pipeline — zero avoidable allocation
-        // on the 60 Hz update thread. The iRacing refiner layers after the
-        // generic baseline; it only runs when GameData.GameName is iRacing.
+        // One reused snapshot — zero avoidable allocation on the 60 Hz update
+        // thread. SignalMapping is static and allocation-free per call.
         private readonly TelemetrySnapshot _snapshot = new TelemetrySnapshot();
-        private readonly AdapterPipeline _adapters = new AdapterPipeline(new IRacingAdapter());
 
         public void Init(PluginManager pluginManager)
         {
@@ -65,10 +63,10 @@ namespace Uniflag
             Renderer = new RendererLoop();
             Brightness = new BrightnessPolicy(Settings.Brightness);
             Brightness.Changed += OnBrightnessChanged;
-            WebServer = new OverlayWebServer(new RendererSinkHost(Renderer));
+            WebServer = new OverlayWebServer(Renderer);
             WebServer.Start(OverlayWebServer.DefaultPort);
             Device = new DeviceConnectionManager(
-                new RendererSinkHost(Renderer),
+                Renderer,
                 new WindowsRegistryPortEnumerator(),
                 new SerialPortConnectionFactory(),
                 Brightness,
@@ -90,13 +88,11 @@ namespace Uniflag
             if (!_snapshot.HasLiveSession)
             {
                 // Menus and process-only detection carry no usable flag
-                // state, so show the §7b connected-idle marker. Feeds the
-                // NORMAL channel; the settings-tab cycler's override still
-                // wins if active.
+                // state, so show the §7b connected-idle marker.
                 renderer.SetConnectedIdle();
                 return;
             }
-            renderer.SetState(_adapters.Map(_snapshot), connected: true);
+            renderer.SetState(SignalMapping.Map(_snapshot), connected: true);
         }
 
         public void End(PluginManager pluginManager)

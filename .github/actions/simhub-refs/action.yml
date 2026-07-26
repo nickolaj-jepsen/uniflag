@@ -1,0 +1,76 @@
+name: Stage SimHub reference assemblies
+description: >
+  Make SimHub's proprietary reference DLLs available to a Windows build, by
+  cache hit where possible and otherwise by a headless silent install of the
+  pinned release. Used by both the CI plugin job and the release job — the
+  pinned version and its hash live here so there is one place to bump them.
+
+outputs:
+  refs-dir:
+    description: Directory holding the staged reference DLLs (set UNIFLAG_SIMHUB_DIR to this).
+    value: ${{ steps.paths.outputs.dir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve paths
+      id: paths
+      shell: pwsh
+      run: |
+        # Composite actions cannot read the caller's job-level env:.
+        "dir=$env:RUNNER_TEMP\simhub-refs" >> $env:GITHUB_OUTPUT
+        "SIMHUB_VERSION=9.11.21" >> $env:GITHUB_ENV
+        # SHA-256 of the SimHub.9.11.21.zip GitHub release asset (computed 2026-07-03).
+        "SIMHUB_ZIP_SHA256=4660A46FC741CD108E472AFFCD6E05B294C9D34407FA2A14863BB63461C6FF70" >> $env:GITHUB_ENV
+
+    # Cache only the staged reference assemblies (~10 MB), keyed by the pinned
+    # version: a hit skips both the ~218 MB installer download and the ~2 min
+    # silent install. The proprietary DLLs live only in the ephemeral,
+    # repo-scoped cache — never in the repo or any published artifact.
+    - name: Cache SimHub reference assemblies
+      id: simhub-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.paths.outputs.dir }}
+        key: ${{ runner.os }}-simhub-refs-${{ env.SIMHUB_VERSION }}-v1
+
+    - name: Install SimHub silently and stage reference DLLs
+      if: steps.simhub-cache.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: |
+        # innoextract (newest release 1.9, Inno Setup ceiling 6.0.5) cannot
+        # unpack SimHub's Inno Setup 6.4.3 installer, so the headless silent
+        # install is the primary path, not a fallback.
+        $ErrorActionPreference = 'Stop'
+        $v    = $env:SIMHUB_VERSION
+        $zip  = "$env:RUNNER_TEMP\SimHub.$v.zip"
+        $tmp  = "$env:RUNNER_TEMP\simhub-setup"
+        $app  = "$env:RUNNER_TEMP\simhub-app"
+        $refs = "$env:RUNNER_TEMP\simhub-refs"
+        $log  = "$env:RUNNER_TEMP\simhub-install.log"
+
+        curl.exe -fsSL -o $zip "https://github.com/SHWotever/SimHub/releases/download/$v/SimHub.$v.zip"
+        $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+        if ($hash -ne $env:SIMHUB_ZIP_SHA256) {
+          throw "SimHub.$v.zip SHA-256 mismatch: got $hash, expected $env:SIMHUB_ZIP_SHA256"
+        }
+
+        Expand-Archive $zip -DestinationPath $tmp -Force
+        $setup = Get-ChildItem $tmp -Filter 'SimHubSetup_*.exe' | Select-Object -First 1
+        if (-not $setup) { throw 'SimHubSetup_*.exe not found inside release zip' }
+
+        # The setup exe is a GUI-subsystem app: Start-Process -Wait is required.
+        $p = Start-Process -FilePath $setup.FullName -Wait -PassThru -ArgumentList @(
+          '/VERYSILENT', '/SP-', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS',
+          "/DIR=$app", "/LOG=$log"
+        )
+        if ($p.ExitCode -ne 0) {
+          if (Test-Path $log) { Get-Content $log -Tail 120 }
+          throw "SimHub installer exited with code $($p.ExitCode)"
+        }
+
+        New-Item -ItemType Directory -Force $refs | Out-Null
+        foreach ($dll in 'SimHub.Plugins.dll', 'GameReaderCommon.dll', 'log4net.dll', 'SimHub.Logging.dll') {
+          Copy-Item (Join-Path $app $dll) $refs
+        }
+        Get-ChildItem $refs | Format-Table Name, Length

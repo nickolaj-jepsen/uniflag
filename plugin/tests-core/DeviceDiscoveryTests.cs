@@ -2,9 +2,9 @@
 //
 // Discovery filter tests: the VID/PID nomination logic with injected
 // fake port entries. Both the test PID and the future registered PID must
-// pass during the transition; foreign identities and uncorrelated ports
-// must not; a manual override bypasses the filter entirely (the handshake
-// remains the final confirmation, tested elsewhere).
+// pass during the transition; foreign identities must not; a manual override
+// bypasses the filter entirely (the handshake remains the final
+// confirmation, tested elsewhere).
 
 using Uniflag.Device;
 using Xunit;
@@ -13,7 +13,7 @@ namespace Uniflag.Tests
 {
     public class DeviceDiscoveryTests
     {
-        private static SerialPortInfo Port(string name, ushort? vid, ushort? pid)
+        private static SerialPortInfo Port(string name, ushort vid, ushort pid)
         {
             return new SerialPortInfo(name, vid, pid);
         }
@@ -63,24 +63,12 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void RejectsUncorrelatedPorts()
-        {
-            // Ports the platform enumeration could not tie to a USB identity
-            // never pass the filter (manual override is the escape hatch).
-            var ports = new[] { Port("COM1", null, null) };
-            Assert.Null(DeviceDiscovery.SelectCandidate(ports, null));
-        }
-
-        [Fact]
         public void ManualOverrideBypassesTheFilter()
         {
             // Override wins even when discovery has a legitimate candidate,
-            // and even when the named port carries no uniflag identity.
-            var ports = new[]
-            {
-                Port("COM5", 0x1209, 0x0001),
-                Port("COM9", null, null),
-            };
+            // and names a port discovery never enumerated at all (the escape
+            // hatch for a panel the identity filter cannot see).
+            var ports = new[] { Port("COM5", 0x1209, 0x0001) };
             Assert.Equal("COM9", DeviceDiscovery.SelectCandidate(ports, "COM9"));
             Assert.Equal("COM9", DeviceDiscovery.SelectCandidate(null, " COM9 ")); // trimmed, no scan needed
         }

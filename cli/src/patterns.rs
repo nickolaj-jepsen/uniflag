@@ -2,8 +2,8 @@
 //!
 //! Every pattern maps `(pattern, frame_index)` to exactly one 3072-byte
 //! RGB888 payload with no other inputs (no wall clock, no randomness), so
-//! tests can pin bytes and the loopback mode reproduces the stream mode's
-//! output byte-exactly. The brightness-sweep pattern additionally derives
+//! tests can pin bytes and a given frame index always paints the same
+//! panel. The brightness-sweep pattern additionally derives
 //! a per-frame [`Packet::Brightness`](proto::packet::Packet::Brightness)
 //! value from the same index.
 

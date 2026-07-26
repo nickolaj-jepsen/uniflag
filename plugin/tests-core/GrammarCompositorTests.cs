@@ -6,7 +6,6 @@
 
 using Uniflag.Rendering.Grammar;
 using Xunit;
-using SectorSet = Uniflag.Rendering.SectorSet;
 
 namespace Uniflag.Tests
 {
@@ -24,7 +23,6 @@ namespace Uniflag.Tests
             Assert.Equal(FieldKind.None, c.Field);
             Assert.Equal(BoardKind.None, c.Board);
             Assert.Equal(FrameKind.None, c.Frame);
-            Assert.False(c.SectorStrip);
         }
 
         [Fact]
@@ -32,17 +30,15 @@ namespace Uniflag.Tests
         {
             var s = S();
             s.Flag = TrackFlag.Red;
-            s.Caution = Caution.SafetyCar;
+            s.SafetyCar = true;
             s.Furled = true;
             s.IncidentWarning = true;
-            s.Sectors = SectorSet.Empty.With(1);
             s.StartPhase = StartPhase.Ready;
             var c = Compositor.Select(s, true);
             Assert.Equal(FieldKind.Red, c.Field);
             Assert.Equal(Tier.Urgent, c.FieldTier);
             Assert.Equal(BoardKind.None, c.Board);
             Assert.Equal(FrameKind.None, c.Frame);
-            Assert.False(c.SectorStrip);
         }
 
         [Fact]
@@ -50,25 +46,23 @@ namespace Uniflag.Tests
         {
             var s = S();
             s.Flag = TrackFlag.Checkered;
-            s.TimePenaltySeconds = 5;
+            s.CountdownLaps = 5;
             s.IncidentWarning = true;
-            s.Sectors = SectorSet.Empty.With(3);
             var c = Compositor.Select(s, true);
             Assert.Equal(FieldKind.Checkered, c.Field);
             Assert.Equal(BoardKind.None, c.Board);
             Assert.Equal(FrameKind.None, c.Frame);
-            Assert.False(c.SectorStrip);
         }
 
         [Fact]
-        public void CautionForcesYellowFieldUnderRegimeBoard()
+        public void CautionForcesYellowFieldUnderTheSafetyCarBoard()
         {
             var s = S();
-            s.Caution = Caution.FullCourseYellow;
+            s.SafetyCar = true;
             var c = Compositor.Select(s, true);
             Assert.Equal(FieldKind.Yellow, c.Field);
             Assert.Equal(Tier.Alert, c.FieldTier);
-            Assert.Equal(BoardKind.FullCourseYellow, c.Board);
+            Assert.Equal(BoardKind.SafetyCar, c.Board);
         }
 
         [Fact]
@@ -77,7 +71,7 @@ namespace Uniflag.Tests
             var s = S();
             s.Flag = TrackFlag.Blue;
             s.Tier = Tier.Alert;
-            s.Caution = Caution.SafetyCar;
+            s.SafetyCar = true;
             var c = Compositor.Select(s, true);
             Assert.Equal(FieldKind.Yellow, c.Field);
             Assert.Equal(BoardKind.SafetyCar, c.Board);
@@ -88,7 +82,7 @@ namespace Uniflag.Tests
         {
             var s = S();
             s.BlackFlag = true;
-            s.Caution = Caution.SafetyCar;
+            s.SafetyCar = true;
             var c = Compositor.Select(s, true);
             Assert.Equal(FieldKind.Black, c.Field);
             Assert.Equal(BoardKind.SafetyCar, c.Board);
@@ -107,25 +101,16 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void ServiceDetailBoardShowsOverOwnBlackField()
+        public void DqBoardShowsWhenDemotedToo()
         {
-            var s = S();
-            s.BlackFlag = true;
-            s.BlackDetail = BlackDetail.StopAndGo;
-            var c = Compositor.Select(s, true);
-            Assert.Equal(FieldKind.Black, c.Field);
-            Assert.Equal(BoardKind.StopAndGo, c.Board);
-        }
-
-        [Fact]
-        public void ServiceDetailBoardShowsWhenDemotedToo()
-        {
+            // DQ is orthogonal: a winning yellow field takes the slot, and
+            // the DQ board still says the race is over.
             var s = S();
             s.Flag = TrackFlag.Yellow;
-            s.BlackDetail = BlackDetail.DriveThrough;
+            s.Disqualified = true;
             var c = Compositor.Select(s, true);
             Assert.Equal(FieldKind.Yellow, c.Field);
-            Assert.Equal(BoardKind.DriveThrough, c.Board);
+            Assert.Equal(BoardKind.Disqualified, c.Board);
         }
 
         [Fact]
@@ -143,7 +128,7 @@ namespace Uniflag.Tests
         public void DisqualificationSuppressesFrameAdvisories()
         {
             var s = S();
-            s.BlackDetail = BlackDetail.Disqualified;
+            s.Disqualified = true;
             s.IncidentWarning = true;
             var c = Compositor.Select(s, true);
             Assert.Equal(FieldKind.Black, c.Field);
@@ -163,58 +148,18 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void SectorStripShowsForLocalYellowOnly()
-        {
-            var s = S();
-            s.Flag = TrackFlag.Yellow;
-            s.Sectors = SectorSet.Empty.With(2);
-            Assert.True(Compositor.Select(s, true).SectorStrip);
-
-            s.Caution = Caution.SafetyCar;
-            Assert.False(Compositor.Select(s, true).SectorStrip);
-        }
-
-        [Fact]
-        public void SectorStripSurvivesDriverDirectedFields()
-        {
-            var s = S();
-            s.BlackFlag = true;
-            s.Sectors = SectorSet.Empty.With(1).With(3);
-            var c = Compositor.Select(s, true);
-            Assert.Equal(FieldKind.Black, c.Field);
-            Assert.True(c.SectorStrip);
-        }
-
-        [Fact]
         public void BoardPrecedenceAmongNotices()
         {
             var s = S();
-            s.TimePenaltySeconds = 5;
             s.CountdownLaps = 10;
             s.StartPhase = StartPhase.Ready;
             var c = Compositor.Select(s, true);
-            Assert.Equal(BoardKind.TimePenalty, c.Board);
-            Assert.Equal(5, c.BoardValue);
-
-            s.TimePenaltySeconds = 0;
-            c = Compositor.Select(s, true);
             Assert.Equal(BoardKind.Countdown, c.Board);
             Assert.Equal(10, c.BoardValue);
 
             s.CountdownLaps = 0;
             c = Compositor.Select(s, true);
             Assert.Equal(BoardKind.StartGantry, c.Board);
-        }
-
-        [Fact]
-        public void GantryCarriesTheLitCount()
-        {
-            var s = S();
-            s.StartPhase = StartPhase.Set;
-            s.StartLightsLit = 3;
-            var c = Compositor.Select(s, true);
-            Assert.Equal(BoardKind.StartGantry, c.Board);
-            Assert.Equal(3, c.BoardValue);
         }
 
         [Fact]

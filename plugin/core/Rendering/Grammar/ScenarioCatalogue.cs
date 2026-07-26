@@ -12,9 +12,8 @@
 //
 // Not a fixture — it pins nothing (docs/flag-grammar.md §11). The curation
 // IS the value: these are the states worth looking at. Lives here rather
-// than with the frame viewer because it has three consumers: the viewer
-// (`just frames-sheet`), the GrammarSmokeTests replay, and StateCycler's
-// settings-tab tour.
+// than with the frame viewer because it has two consumers: the viewer
+// (`just frames-sheet`) and the GrammarSmokeTests replay.
 
 using System.Collections.Generic;
 
@@ -112,7 +111,7 @@ namespace Uniflag.Rendering.Grammar
             Sc("black_ambient_breathe_mid", "black flag settled, X breathe mid-level", 360,
                 St(0, (ref SignalState s) => { s.BlackFlag = true; s.Session = Session.Racing; })),
             Sc("dq_steady_x_and_board", "disqualification: steady X + DQ board", 100,
-                St(0, (ref SignalState s) => { s.BlackDetail = BlackDetail.Disqualified; s.Session = Session.Racing; })),
+                St(0, (ref SignalState s) => { s.Disqualified = true; s.Session = Session.Racing; })),
             Sc("meatball_ambient_disc", "meatball settled, disc breathe mid-level", 360,
                 St(0, (ref SignalState s) => { s.Meatball = true; s.Session = Session.Racing; })),
             Sc("checkered_attention_scroll", "checkered attention-speed scroll", 100,
@@ -122,39 +121,23 @@ namespace Uniflag.Rendering.Grammar
             Sc("debris_ambient_stripes", "debris stripe field", 400,
                 St(0, (ref SignalState s) => { s.Flag = TrackFlag.Debris; s.Session = Session.Racing; })),
             Sc("sc_board_over_caution_yellow", "SC board on the caution-forced yellow field", 400,
-                St(0, (ref SignalState s) => { s.Caution = Caution.SafetyCar; s.Session = Session.Racing; })),
-            Sc("vsc_board", "VSC board on the caution-forced yellow field", 400,
-                St(0, (ref SignalState s) => { s.Caution = Caution.VirtualSafetyCar; s.Session = Session.Racing; })),
-            Sc("fcy_board", "FCY board on the caution-forced yellow field", 400,
-                St(0, (ref SignalState s) => { s.Caution = Caution.FullCourseYellow; s.Session = Session.Racing; })),
-            Sc("dt_board_over_black_field", "drive-through board over the black field", 400,
-                St(0, (ref SignalState s) => { s.BlackFlag = true; s.BlackDetail = BlackDetail.DriveThrough; s.Session = Session.Racing; })),
-            Sc("sg_board_over_black_field", "stop-and-go board over the black field", 400,
-                St(0, (ref SignalState s) => { s.BlackFlag = true; s.BlackDetail = BlackDetail.StopAndGo; s.Session = Session.Racing; })),
+                St(0, (ref SignalState s) => { s.SafetyCar = true; s.Session = Session.Racing; })),
             Sc("demoted_x_board_over_yellow", "bare black flag demoted to the X board under yellow", 400,
                 St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.Tier = Tier.Alert; s.BlackFlag = true; s.Session = Session.Racing; })),
             Sc("demoted_disc_board_over_black", "meatball demoted to the disc board under the black field", 400,
                 St(0, (ref SignalState s) => { s.BlackFlag = true; s.Meatball = true; s.Session = Session.Racing; })),
-            Sc("time_penalty_plus5_over_green", "+5 time-penalty board over a green field", 400,
-                St(0, (ref SignalState s) => { s.Flag = TrackFlag.Green; s.TimePenaltySeconds = 5; s.Session = Session.Racing; })),
             Sc("countdown_10_over_white", "10-to-go countdown board over the white field", 400,
                 St(0, (ref SignalState s) => { s.Flag = TrackFlag.White; s.CountdownLaps = 10; s.Session = Session.Racing; })),
             Sc("gantry_ready_breathe_mid", "gantry standby breathe mid-level", 360,
                 St(0, (ref SignalState s) => { s.StartPhase = StartPhase.Ready; })),
-            Sc("gantry_set_3of5", "gantry set phase, 3 of 5 lights", 400,
-                St(0, (ref SignalState s) => { s.StartPhase = StartPhase.Set; s.StartLightsLit = 3; })),
+            Sc("gantry_set_all_red", "gantry set phase, all five lights red", 400,
+                St(0, (ref SignalState s) => { s.StartPhase = StartPhase.Set; })),
             Sc("gantry_go_lights_out", "gantry go phase, lights out", 100,
                 St(0, (ref SignalState s) => { s.StartPhase = StartPhase.Go; })),
             Sc("incident_ring_settled_over_yellow", "incident ring settled dim over yellow", 400,
                 St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.IncidentWarning = true; s.Session = Session.Racing; })),
             Sc("furled_dashes_on_over_race_idle", "furled dash ring blink on-phase over race idle", 40,
                 St(0, (ref SignalState s) => { s.Furled = true; s.Session = Session.Racing; })),
-            Sc("strip_sector2_settled", "sector strip: S2 active settled, others dim", 400,
-                St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.Sectors = SectorSet.Empty.With(2); s.Session = Session.Racing; })),
-            Sc("strip_sector13_urgent_off", "sector strip: S1+S3 active, urgent off-phase", 13,
-                St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.Tier = Tier.Urgent; s.Sectors = SectorSet.Empty.With(1).With(3); s.Session = Session.Racing; })),
-            Sc("strip_all_sectors_settled", "sector strip: all three active — the fully-lit strip", 400,
-                St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.Tier = Tier.Alert; s.Sectors = SectorSet.Empty.With(1).With(2).With(3); s.Session = Session.Racing; })),
             Sc("fade_mid_yellow_clear", "yellow cleared, fade-out mid-way (age 7)", 407,
                 St(0, (ref SignalState s) => { s.Flag = TrackFlag.Yellow; s.Session = Session.Racing; }),
                 St(400, (ref SignalState s) => { s.Session = Session.Racing; })),

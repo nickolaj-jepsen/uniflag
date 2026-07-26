@@ -14,7 +14,6 @@ namespace Uniflag.Rendering.Grammar
         public static readonly Rgb Green = new Rgb(0, 220, 0);
         public static readonly Rgb White = new Rgb(255, 255, 255);
         public static readonly Rgb Orange = new Rgb(255, 90, 0);
-        public static readonly Rgb SectorDim = new Rgb(40, 30, 0);
 
         /// <summary>Idle-family hues — absent from the flag vocabulary by design.</summary>
         public static readonly Rgb Teal = new Rgb(0, 255, 192);

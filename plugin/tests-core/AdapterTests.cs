@@ -2,14 +2,11 @@
 //
 // Adapter-layer tests: the generic unified Flag_* mapping matrix, the
 // track-flag priority order, the orthogonal black/meatball dimensions, the
-// session-name mapping, the no-game predicate, the pipeline's refiner seam,
-// and the SimHub-typed extractor. Everything except GameDataExtractorTests
-// is SimHub-free.
+// session-name mapping, the no-game predicate, and the refiner gate.
 
 using Uniflag.Adapters;
 using Uniflag.Rendering.Grammar;
 using Xunit;
-using SectorSet = Uniflag.Rendering.SectorSet;
 using Session = Uniflag.Rendering.Session;
 
 namespace Uniflag.Tests
@@ -55,7 +52,7 @@ namespace Uniflag.Tests
         private static SignalState Map(TelemetrySnapshot snapshot)
         {
             SignalState state = SignalState.Default;
-            new GenericAdapter().Map(snapshot, ref state);
+            GenericAdapter.Map(snapshot, ref state);
             return state;
         }
 
@@ -75,8 +72,7 @@ namespace Uniflag.Tests
             // only yellow gets the documented Alert-tier heuristic.
             Assert.Equal(wantTier, state.Tier);
             Assert.Equal(Session.Racing, state.Session);
-            Assert.Equal(Caution.None, state.Caution);
-            Assert.True(state.Sectors.IsEmpty);
+            Assert.False(state.SafetyCar);
             Assert.False(state.BlackFlag);
             Assert.False(state.Meatball);
         }
@@ -88,7 +84,7 @@ namespace Uniflag.Tests
             snapshot.FlagBlack = true;
             SignalState state = Map(snapshot);
             Assert.True(state.BlackFlag);
-            Assert.Equal(BlackDetail.None, state.BlackDetail);
+            Assert.False(state.Disqualified);
             Assert.Equal(TrackFlag.None, state.Flag);
         }
 
@@ -165,7 +161,7 @@ namespace Uniflag.Tests
         }
 
         // Session vocabulary, per the mapping documented in
-        // docs/simhub-flag-properties.md ("Generic adapter mapping").
+        // plugin/core/Adapters/GenericAdapter.cs (MapSession).
         [Theory]
         [InlineData("Race", Session.Racing)]
         [InlineData("RACE", Session.Racing)]
@@ -206,30 +202,26 @@ namespace Uniflag.Tests
         public void RefinerOnlyDimensionsAreAlwaysCleared()
         {
             // The generic adapter has no raw-data layers, so it must pin
-            // caution/sectors/notices/advisories to their defaults even when
-            // a refiner-less pipeline reuses a dirty state.
+            // the refiner-only dimensions to their defaults even when a
+            // caller reuses a dirty state.
             TelemetrySnapshot snapshot = Live();
             snapshot.FlagYellow = true;
             var state = new SignalState
             {
                 Flag = TrackFlag.Red,
                 Tier = Tier.Urgent,
-                Session = Session.Replay,
-                Caution = Caution.SafetyCar,
-                Sectors = SectorSet.FromBits(0b111),
-                BlackDetail = BlackDetail.StopAndGo,
+                Session = Session.Unknown,
+                SafetyCar = true,
+                Disqualified = true,
                 StartPhase = StartPhase.Set,
-                TimePenaltySeconds = 5,
                 CountdownLaps = 10,
                 Furled = true,
                 IncidentWarning = true,
             };
-            new GenericAdapter().Map(snapshot, ref state);
-            Assert.Equal(Caution.None, state.Caution);
-            Assert.True(state.Sectors.IsEmpty);
-            Assert.Equal(BlackDetail.None, state.BlackDetail);
+            GenericAdapter.Map(snapshot, ref state);
+            Assert.False(state.SafetyCar);
+            Assert.False(state.Disqualified);
             Assert.Equal(StartPhase.Off, state.StartPhase);
-            Assert.Equal(0, state.TimePenaltySeconds);
             Assert.Equal(0, state.CountdownLaps);
             Assert.False(state.Furled);
             Assert.False(state.IncidentWarning);
@@ -274,19 +266,8 @@ namespace Uniflag.Tests
         }
     }
 
-    public class AdapterPipelineTests
+    public class SignalMappingTests
     {
-        /// <summary>Refiner stand-in: overrides the tier for one game only.</summary>
-        private sealed class UrgentTierRefiner : IGameAdapter
-        {
-            public bool Matches(string gameName) => gameName == "IRacing";
-
-            public void Map(TelemetrySnapshot snapshot, ref SignalState state)
-            {
-                state.Tier = Tier.Urgent;
-            }
-        }
-
         private static TelemetrySnapshot YellowSnapshot(string gameName)
         {
             return new TelemetrySnapshot
@@ -300,32 +281,27 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void DefaultPipelineIsGenericOnly()
+        public void ANonIRacingGameGetsTheGenericMappingOnly()
         {
-            SignalState state = new AdapterPipeline().Map(YellowSnapshot("Ac"));
+            SignalState state = SignalMapping.Map(YellowSnapshot("Ac"));
             Assert.Equal(TrackFlag.Yellow, state.Flag);
             Assert.Equal(Tier.Alert, state.Tier);
             Assert.Equal(Session.Racing, state.Session);
         }
 
         [Fact]
-        public void MatchingRefinerOverridesTheGenericResult()
+        public void TheIRacingRefinerRunsOnlyForIRacing()
         {
-            var pipeline = new AdapterPipeline(new UrgentTierRefiner());
-            SignalState state = pipeline.Map(YellowSnapshot("IRacing"));
-            // The refiner ran after the generic adapter: tier overridden,
-            // everything else kept.
-            Assert.Equal(Tier.Urgent, state.Tier);
-            Assert.Equal(TrackFlag.Yellow, state.Flag);
-            Assert.Equal(Session.Racing, state.Session);
-        }
+            // A displayed-yellow raw mask drops the tier to Ambient if the
+            // refiner runs — so a populated raw field under another game name
+            // must leave the generic Alert guess standing.
+            TelemetrySnapshot snapshot = YellowSnapshot("Ac");
+            snapshot.HasRawSessionFlags = true;
+            snapshot.RawSessionFlags = IRacingAdapter.FlagYellow;
+            Assert.Equal(Tier.Alert, SignalMapping.Map(snapshot).Tier);
 
-        [Fact]
-        public void NonMatchingRefinerLeavesTheGenericResultAlone()
-        {
-            var pipeline = new AdapterPipeline(new UrgentTierRefiner());
-            SignalState state = pipeline.Map(YellowSnapshot("Ac"));
-            Assert.Equal(Tier.Alert, state.Tier);
+            snapshot.GameName = IRacingAdapter.IRacingGameName;
+            Assert.Equal(Tier.Ambient, SignalMapping.Map(snapshot).Tier);
         }
     }
 }

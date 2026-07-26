@@ -13,7 +13,7 @@ namespace Uniflag
     /// <summary>
     /// Settings tab: device status block, brightness slider driving the
     /// shared <see cref="BrightnessPolicy"/>, manual COM-port override, the
-    /// live 32×32 renderer preview with its debug state-cycler, and the web
+    /// live 32×32 renderer preview, and the web
     /// overlay status line. The preview sink and 1 Hz status poll run only
     /// between Loaded and Unloaded, so the renderer loop and timer are idle
     /// while the tab is not visible. All status updates happen on the UI
@@ -28,7 +28,6 @@ namespace Uniflag
         private readonly BrightnessPolicy _brightness;
         private readonly UniflagSettings _settings;
         private readonly WpfPreviewSink _previewSink;
-        private readonly StateCycler _cycler;
         private readonly DispatcherTimer _statusTimer;
         private bool _active;
 
@@ -96,11 +95,6 @@ namespace Uniflag
             {
                 _previewSink = new WpfPreviewSink(Dispatcher);
                 PreviewImage.Source = _previewSink.Bitmap;
-                _cycler = new StateCycler(_renderer);
-            }
-            else
-            {
-                CycleStatesCheckBox.IsEnabled = false;
             }
 
             if (_renderer != null || _statusTimer != null)
@@ -129,10 +123,6 @@ namespace Uniflag
             if (_renderer != null)
             {
                 _renderer.AddSink(_previewSink);
-                if (CycleStatesCheckBox.IsChecked == true)
-                {
-                    _cycler.Start();
-                }
             }
             if (_statusTimer != null)
             {
@@ -156,7 +146,6 @@ namespace Uniflag
             _statusTimer?.Stop();
             if (_renderer != null)
             {
-                _cycler.Stop();
                 _renderer.RemoveSink(_previewSink);
             }
         }
@@ -228,20 +217,5 @@ namespace Uniflag
             _device.ManualPortOverride = trimmed;   // empty = auto-discovery
         }
 
-        private void OnCycleStatesToggled(object sender, RoutedEventArgs e)
-        {
-            if (_cycler == null || !_active)
-            {
-                return; // stub instance, or toggled while the tab is unloaded
-            }
-            if (CycleStatesCheckBox.IsChecked == true)
-            {
-                _cycler.Start();
-            }
-            else
-            {
-                _cycler.Stop();
-            }
-        }
     }
 }

@@ -140,15 +140,6 @@ namespace Uniflag.Rendering.Grammar
             };
         }
 
-        private static byte SectorBits(SectorSet sectors)
-        {
-            int bits = 0;
-            if (sectors.Contains(1)) { bits |= 1; }
-            if (sectors.Contains(2)) { bits |= 2; }
-            if (sectors.Contains(3)) { bits |= 4; }
-            return (byte)bits;
-        }
-
         private void ReconcileField(in SignalState s, uint frame)
         {
             for (int i = 0; i < FieldKinds; i++)
@@ -163,9 +154,8 @@ namespace Uniflag.Rendering.Grammar
             {
                 _want[(int)track] = true;
                 _wantA[(int)track] = track == FieldKind.Red ? (byte)Tier.Urgent : (byte)s.Tier;
-                _wantB[(int)track] = track == FieldKind.Yellow ? SectorBits(s.Sectors) : 0u;
             }
-            if (s.Caution != Caution.None && !_want[(int)FieldKind.Yellow])
+            if (s.SafetyCar && !_want[(int)FieldKind.Yellow])
             {
                 // Caution-forced yellow field (§5) is its own condition entry.
                 _want[(int)FieldKind.Yellow] = true;
@@ -175,7 +165,8 @@ namespace Uniflag.Rendering.Grammar
             {
                 _want[(int)FieldKind.Black] = true;
                 _wantA[(int)FieldKind.Black] = (byte)Tier.Alert;
-                _wantB[(int)FieldKind.Black] = (uint)s.BlackDetail;
+                // Bare black -> DQ is an escalation: the detail gained.
+                _wantB[(int)FieldKind.Black] = s.Disqualified ? 1u : 0u;
             }
             if (s.Meatball)
             {
@@ -195,9 +186,10 @@ namespace Uniflag.Rendering.Grammar
                     _field[i] = new Cond { Active = true, Epoch = frame, DetailA = _wantA[i], DetailB = _wantB[i] };
                     continue;
                 }
+                // Escalation only (§4): the tier rose, or a detail bit was
+                // gained. A detail that recedes rides the running window out.
                 bool escalated = _wantA[i] > _field[i].DetailA
-                    || (i == (int)FieldKind.Yellow && (_wantB[i] & ~_field[i].DetailB) != 0)
-                    || (i == (int)FieldKind.Black && _wantB[i] != _field[i].DetailB);
+                    || (_wantB[i] & ~_field[i].DetailB) != 0;
                 if (escalated)
                 {
                     _field[i].Epoch = frame;
@@ -216,26 +208,17 @@ namespace Uniflag.Rendering.Grammar
                 _wantB[i] = 0;
             }
 
-            if (s.Caution == Caution.SafetyCar) { _want[(int)BoardKind.SafetyCar] = true; }
-            else if (s.Caution == Caution.VirtualSafetyCar) { _want[(int)BoardKind.VirtualSafetyCar] = true; }
-            else if (s.Caution == Caution.FullCourseYellow) { _want[(int)BoardKind.FullCourseYellow] = true; }
+            if (s.SafetyCar) { _want[(int)BoardKind.SafetyCar] = true; }
 
-            if (s.BlackDetail == BlackDetail.Disqualified) { _want[(int)BoardKind.Disqualified] = true; }
-            else if (s.BlackDetail == BlackDetail.StopAndGo) { _want[(int)BoardKind.StopAndGo] = true; }
-            else if (s.BlackDetail == BlackDetail.DriveThrough) { _want[(int)BoardKind.DriveThrough] = true; }
+            if (s.Disqualified) { _want[(int)BoardKind.Disqualified] = true; }
 
-            if (s.BlackActive && field != FieldKind.Black && s.BlackDetail == BlackDetail.None)
+            if (s.BlackActive && field != FieldKind.Black && !s.Disqualified)
             {
                 _want[(int)BoardKind.BlackFlag] = true;
             }
             if (s.Meatball && field != FieldKind.Meatball)
             {
                 _want[(int)BoardKind.MeatballFlag] = true;
-            }
-            if (s.TimePenaltySeconds > 0)
-            {
-                _want[(int)BoardKind.TimePenalty] = true;
-                _wantB[(int)BoardKind.TimePenalty] = s.TimePenaltySeconds;
             }
             if (s.CountdownLaps > 0)
             {
@@ -246,7 +229,6 @@ namespace Uniflag.Rendering.Grammar
             {
                 _want[(int)BoardKind.StartGantry] = true;
                 _wantA[(int)BoardKind.StartGantry] = (byte)s.StartPhase;
-                _wantB[(int)BoardKind.StartGantry] = s.StartLightsLit;
             }
 
             for (int i = 1; i < BoardKinds; i++)
