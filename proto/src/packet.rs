@@ -147,7 +147,7 @@ pub fn encode(
 /// before use (e.g. a Frame payload must be exactly
 /// [`FRAME_PAYLOAD_LEN`]); [`parse_packet`] / [`Packet::from_payload`]
 /// are the typed layer that enforces this.
-pub fn parse_raw(raw: &[u8]) -> Result<(u8, &[u8]), Error> {
+fn parse_raw(raw: &[u8]) -> Result<(u8, &[u8]), Error> {
     if raw.len() < 3 {
         return Err(Error::TooShort);
     }
@@ -164,12 +164,6 @@ pub fn parse_raw(raw: &[u8]) -> Result<(u8, &[u8]), Error> {
 // pin the exact bytes. Multi-byte values are
 // little-endian, though today only the framing-layer CRC is multi-byte.
 
-/// Fixed payload length of [`Packet::Hello`].
-pub const HELLO_PAYLOAD_LEN: usize = 1;
-/// Fixed payload length of [`Packet::Brightness`].
-pub const BRIGHTNESS_PAYLOAD_LEN: usize = 1;
-/// Fixed payload length of [`Packet::ButtonEvent`].
-pub const BUTTON_EVENT_PAYLOAD_LEN: usize = 2;
 /// Minimum payload length of [`Packet::HelloAck`] — the 3-byte header
 /// without the variable firmware-version tail.
 pub const HELLO_ACK_MIN_PAYLOAD_LEN: usize = 3;
@@ -238,8 +232,7 @@ impl PressKind {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Packet<'a> {
     /// Host→device, `0x01`. Opens the handshake on every (re)connect;
-    /// carries the host's [`PROTOCOL_VERSION`]. Exactly
-    /// [`HELLO_PAYLOAD_LEN`] byte.
+    /// carries the host's [`PROTOCOL_VERSION`]. Exactly 1 byte.
     Hello { protocol_version: u8 },
     /// Host→device, `0x02`. One full panel: RGB888, row-major from the
     /// top-left, 3 bytes per pixel (pixel `(x, y)` channel `c` at offset
@@ -248,7 +241,7 @@ pub enum Packet<'a> {
     Frame { pixels: &'a [u8; FRAME_PAYLOAD_LEN] },
     /// Host→device, `0x03`. Display brightness multiplier `0..=255`,
     /// applied by the device pre-gamma to each channel as
-    /// `(c * (value + 1)) >> 8`. Exactly [`BRIGHTNESS_PAYLOAD_LEN`] byte.
+    /// `(c * (value + 1)) >> 8`. Exactly 1 byte.
     Brightness { value: u8 },
     /// Device→host, `0x81`. Handshake reply. At least
     /// [`HELLO_ACK_MIN_PAYLOAD_LEN`] bytes:
@@ -262,7 +255,7 @@ pub enum Packet<'a> {
         /// Firmware version: ASCII, no NUL terminator, may be empty.
         fw_version: &'a [u8],
     },
-    /// Device→host, `0x82`. Exactly [`BUTTON_EVENT_PAYLOAD_LEN`] bytes.
+    /// Device→host, `0x82`. Exactly 2 bytes.
     /// `button` / `kind` stay raw `u8`s so unassigned ids pass through
     /// parsing (forward compat) — interpret via [`Button`] /
     /// [`PressKind`].
@@ -291,7 +284,7 @@ impl<'a> Packet<'a> {
         }
     }
 
-    /// Typed view over the two halves [`parse_raw`] returns (known type +
+    /// Typed view over the two halves `parse_raw` returns (known type +
     /// CRC-validated payload). [`Error::BadLength`] when the payload
     /// doesn't match the declared layout — receivers drop the packet.
     pub fn from_payload(ty: PacketType, payload: &'a [u8]) -> Result<Self, Error> {
@@ -360,7 +353,7 @@ impl<'a> Packet<'a> {
     }
 }
 
-/// Validate a raw packet (via [`parse_raw`]) and type it. Framing
+/// Validate a raw packet (via `parse_raw`) and type it. Framing
 /// problems (short, bad CRC) come back as `Err`; an unassigned type byte
 /// is `Ok(`[`Parsed::Unknown`]`)` — ignore it, never treat it as an
 /// error; a known type with a wrong-length payload is
@@ -388,9 +381,6 @@ mod tests {
         assert_eq!(PacketType::Brightness.to_byte(), 0x03);
         assert_eq!(PacketType::HelloAck.to_byte(), 0x81);
         assert_eq!(PacketType::ButtonEvent.to_byte(), 0x82);
-        assert_eq!(HELLO_PAYLOAD_LEN, 1);
-        assert_eq!(BRIGHTNESS_PAYLOAD_LEN, 1);
-        assert_eq!(BUTTON_EVENT_PAYLOAD_LEN, 2);
         assert_eq!(HELLO_ACK_MIN_PAYLOAD_LEN, 3);
         assert_eq!(PROTOCOL_VERSION, 1);
         assert_eq!(Button::BrightnessUp.to_byte(), 0);

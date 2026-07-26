@@ -35,21 +35,13 @@ check: fmt-check clippy test _check-cs
     @echo ""
     @echo "check: done (any SKIPPED legs above did not run)"
 
-[unix]
+# One cross-platform statement of which C# legs can run here. The probes
+# live in the CLI (`uniflag-cli gate`, cli/src/main.rs) for the same
+# reason doctor does: a recipe that must work on both bash and PowerShell
+# gets written twice, and the two copies drift.
 _check-cs:
-    #!/usr/bin/env bash
-    set -eu
-    if command -v dotnet >/dev/null 2>&1; then
-        just core-test
-    else
-        echo "SKIPPED: core tests (dotnet not on PATH)"
-    fi
-    echo "SKIPPED: plugin tests (needs Windows + a SimHub install)"
-
-[windows]
-_check-cs:
-    @$d = $null; try { $d = Get-Command dotnet -ErrorAction Stop } catch {}; if ($d) { just core-test } else { Write-Host "SKIPPED: core tests (dotnet not on PATH)" }
-    @if (Test-Path '{{simhub_dir}}\SimHub.Plugins.dll') { just plugin-test } else { Write-Host "SKIPPED: plugin tests (no SimHub reference DLLs at {{simhub_dir}}; set UNIFLAG_SIMHUB_DIR)" }
+    cargo run --quiet -p uniflag-cli -- gate dotnet -- just core-test
+    cargo run --quiet -p uniflag-cli -- gate simhub --simhub-dir '{{simhub_dir}}' -- just plugin-test
 
 # What's installed, what isn't, and what to do about it. Run this first
 # when a recipe fails for reasons that look like the environment.

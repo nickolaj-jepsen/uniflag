@@ -11,7 +11,7 @@ use crate::patterns::Pattern;
 
 /// Encode one typed packet to its on-the-wire form (COBS + trailing
 /// `0x00` delimiter).
-pub fn encode_packet(packet: &Packet<'_>) -> Result<Vec<u8>> {
+fn encode_packet(packet: &Packet<'_>) -> Result<Vec<u8>> {
     let mut scratch = vec![0u8; MAX_RAW_LEN];
     let mut wire = vec![0u8; MAX_WIRE_LEN];
     let len = packet
@@ -22,19 +22,19 @@ pub fn encode_packet(packet: &Packet<'_>) -> Result<Vec<u8>> {
 }
 
 /// `Hello` carrying the host's [`PROTOCOL_VERSION`].
-pub fn hello() -> Result<Vec<u8>> {
+pub(crate) fn hello() -> Result<Vec<u8>> {
     encode_packet(&Packet::Hello {
         protocol_version: PROTOCOL_VERSION,
     })
 }
 
 /// `Brightness` set-point.
-pub fn brightness(value: u8) -> Result<Vec<u8>> {
+pub(crate) fn brightness(value: u8) -> Result<Vec<u8>> {
     encode_packet(&Packet::Brightness { value })
 }
 
 /// One `Frame` of `pattern` at `frame_index`.
-pub fn frame(pattern: Pattern, frame_index: u64) -> Result<Vec<u8>> {
+pub(crate) fn frame(pattern: Pattern, frame_index: u64) -> Result<Vec<u8>> {
     let mut pixels = [0u8; FRAME_PAYLOAD_LEN];
     pattern.paint(frame_index, &mut pixels);
     encode_packet(&Packet::Frame { pixels: &pixels })

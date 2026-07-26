@@ -97,7 +97,7 @@ const BLUE: Rgb = (0, 0, 255);
 /// Base hue of the fallback ember (docs/flag-grammar.md §7: amber — a hue
 /// absent from the flag vocabulary). Brightness comes from the per-pixel
 /// multipliers below; the peak channel is 24/255, peripherally silent.
-pub const EMBER_AMBER: Rgb = (255, 120, 8);
+const EMBER_AMBER: Rgb = (255, 120, 8);
 
 /// Frames in one full round trip of the ember (8 s at 60 fps).
 pub const EMBER_PERIOD: u32 = 480;
@@ -171,13 +171,13 @@ pub fn paint_test<C: Canvas>(d: &mut C, fw_version: &str) {
 }
 
 /// Fill the whole panel with one colour.
-pub fn fill<C: Canvas>(d: &mut C, c: Rgb) {
+fn fill<C: Canvas>(d: &mut C, c: Rgb) {
     rect(d, 0, 0, PANEL_WIDTH as i32, PANEL_HEIGHT as i32, c);
 }
 
 /// Axis-aligned filled rectangle. Out-of-range pixels are clipped by
 /// `set_pixel`'s bounds check.
-pub fn rect<C: Canvas>(d: &mut C, x: i32, y: i32, w: i32, h: i32, c: Rgb) {
+fn rect<C: Canvas>(d: &mut C, x: i32, y: i32, w: i32, h: i32, c: Rgb) {
     for yy in y..y + h {
         for xx in x..x + w {
             d.set_pixel(xx, yy, c.0, c.1, c.2);
@@ -186,7 +186,7 @@ pub fn rect<C: Canvas>(d: &mut C, x: i32, y: i32, w: i32, h: i32, c: Rgb) {
 }
 
 /// Single pixel.
-pub fn dot<C: Canvas>(d: &mut C, x: i32, y: i32, c: Rgb) {
+fn dot<C: Canvas>(d: &mut C, x: i32, y: i32, c: Rgb) {
     d.set_pixel(x, y, c.0, c.1, c.2);
 }
 

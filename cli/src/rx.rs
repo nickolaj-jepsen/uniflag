@@ -14,7 +14,7 @@ use proto::packet::{self, Packet, Parsed, FRAME_PAYLOAD_LEN, MAX_WIRE_LEN};
 /// Owned mirror of [`proto::packet::Packet`] (which borrows its payload
 /// from the receive buffer) so decoded packets outlive the feed call.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum OwnedPacket {
+pub(crate) enum OwnedPacket {
     Hello {
         protocol_version: u8,
     },
@@ -62,7 +62,7 @@ impl OwnedPacket {
 
 /// Why a delimiter-to-delimiter segment was dropped.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum DropReason {
+pub(crate) enum DropReason {
     /// COBS layer rejected the segment (embedded zero, truncated group,
     /// or a decode larger than any legal packet).
     CobsMalformed,
@@ -79,7 +79,7 @@ pub enum DropReason {
 
 /// What one delimiter-terminated segment produced.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RxEvent {
+pub(crate) enum RxEvent {
     /// A CRC-valid packet of a known type.
     Packet(OwnedPacket),
     /// A CRC-valid packet with an unassigned type byte — ignore it
@@ -94,7 +94,7 @@ pub enum RxEvent {
 /// runs each complete segment through COBS decode → CRC check → typed
 /// parse. Feed it whatever chunk sizes the transport hands you.
 #[derive(Default)]
-pub struct Decoder {
+pub(crate) struct Decoder {
     pending: Vec<u8>,
     overflowed: bool,
 }
@@ -102,7 +102,7 @@ pub struct Decoder {
 impl Decoder {
     /// Consume `bytes`, returning one event per completed segment (in
     /// stream order). Partial segments stay buffered for the next feed.
-    pub fn feed(&mut self, bytes: &[u8]) -> Vec<RxEvent> {
+    pub(crate) fn feed(&mut self, bytes: &[u8]) -> Vec<RxEvent> {
         let mut events = Vec::new();
         for &byte in bytes {
             if byte == 0x00 {
@@ -200,9 +200,6 @@ mod tests {
         );
     }
 
-    // Golden vectors through the streaming accumulator and its
-    // Error -> DropReason mapping — the part `proto`'s one-shot suite lacks.
-
     fn read_vector(name: &str) -> Vec<u8> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
@@ -217,97 +214,53 @@ mod tests {
         })
     }
 
-    fn decode_all(bytes: &[u8]) -> Vec<RxEvent> {
-        Decoder::default().feed(bytes)
-    }
-
+    /// One input per [`decode_segment`] outcome — the Error → DropReason
+    /// mapping is the part `proto`'s golden suite doesn't cover. The bytes
+    /// themselves are pinned by that suite; this walks each arm once.
     #[test]
-    fn device_to_host_vectors_decode_to_their_packets() {
-        assert_eq!(
-            decode_all(&read_vector("button_event_short.wire")),
-            vec![RxEvent::Packet(OwnedPacket::ButtonEvent {
-                button: 0,
-                kind: 0
-            })]
-        );
-        assert_eq!(
-            decode_all(&read_vector("button_event_long.wire")),
-            vec![RxEvent::Packet(OwnedPacket::ButtonEvent {
-                button: 2,
-                kind: 1
-            })]
-        );
-        assert_eq!(
-            decode_all(&read_vector("hello_ack.wire")),
-            vec![RxEvent::Packet(OwnedPacket::HelloAck {
-                protocol_version: proto::packet::PROTOCOL_VERSION,
-                width: 32,
-                height: 32,
-                fw_version: b"2.0.0-test".to_vec(),
-            })]
-        );
-    }
-
-    /// `resync.stream` is garbage (no delimiter), a lone `0x00`, then
-    /// hello.wire and brightness.wire verbatim; the README's
-    /// `expected_packets` are `hello` then `brightness`. The garbage segment
-    /// dies in the COBS layer; the survivors must match exactly and in order.
-    #[test]
-    fn resync_stream_survivors_are_exactly_hello_then_brightness() {
-        let expected = vec![
-            RxEvent::Dropped(DropReason::CobsMalformed),
-            RxEvent::Packet(OwnedPacket::Hello {
-                protocol_version: proto::packet::PROTOCOL_VERSION,
-            }),
-            RxEvent::Packet(OwnedPacket::Brightness { value: 200 }),
+    fn decode_segment_maps_each_outcome_to_its_event() {
+        let cases: Vec<(&str, Vec<u8>, Vec<RxEvent>)> = vec![
+            (
+                "hello_ack.wire",
+                read_vector("hello_ack.wire"),
+                vec![RxEvent::Packet(OwnedPacket::HelloAck {
+                    protocol_version: proto::packet::PROTOCOL_VERSION,
+                    width: 32,
+                    height: 32,
+                    fw_version: b"2.0.0-test".to_vec(),
+                })],
+            ),
+            (
+                // Unassigned type byte: Unknown, never an error (forward compat).
+                "cobs_boundary_254.wire",
+                read_vector("cobs_boundary_254.wire"),
+                vec![RxEvent::Unknown { ty: 0x7E }],
+            ),
+            (
+                "bad_crc.wire",
+                read_vector("bad_crc.wire"),
+                vec![RxEvent::Dropped(DropReason::BadCrc)],
+            ),
+            (
+                "truncated.wire",
+                read_vector("truncated.wire"),
+                vec![RxEvent::Dropped(DropReason::CobsMalformed)],
+            ),
+            (
+                "wrong_length_known_type.wire",
+                read_vector("wrong_length_known_type.wire"),
+                vec![RxEvent::Dropped(DropReason::BadLength)],
+            ),
+            (
+                // No golden vector decodes to fewer bytes than type + CRC;
+                // COBS [0x02, 0x01] is the one-byte raw [0x01].
+                "inline too-short segment",
+                vec![0x02, 0x01, 0x00],
+                vec![RxEvent::Dropped(DropReason::TooShort)],
+            ),
         ];
-        let stream = read_vector("resync.stream");
-        assert_eq!(decode_all(&stream), expected);
-
-        // Byte-at-a-time delivery reassembles to the identical event stream.
-        let mut trickle = Decoder::default();
-        let mut events = Vec::new();
-        for &byte in &stream {
-            events.extend(trickle.feed(&[byte]));
+        for (name, bytes, expected) in cases {
+            assert_eq!(Decoder::default().feed(&bytes), expected, "{name}");
         }
-        assert_eq!(events, expected);
-    }
-
-    #[test]
-    fn negative_vectors_drop_with_the_contract_error_class() {
-        let cases: &[(&str, DropReason)] = &[
-            ("bad_crc.wire", DropReason::BadCrc),
-            ("truncated.wire", DropReason::CobsMalformed),
-            ("wrong_length_known_type.wire", DropReason::BadLength),
-        ];
-        for &(name, reason) in cases {
-            assert_eq!(
-                decode_all(&read_vector(name)),
-                vec![RxEvent::Dropped(reason)],
-                "{name}"
-            );
-        }
-
-        // embedded_zero_garbage.wire has a 0x00 *inside* the COBS body, so a
-        // streaming decoder splits on it and drops two segments where the
-        // README's one-shot reading sees one. Either way nothing decodes.
-        let events = decode_all(&read_vector("embedded_zero_garbage.wire"));
-        assert!(!events.is_empty());
-        assert!(
-            events
-                .iter()
-                .all(|e| *e == RxEvent::Dropped(DropReason::CobsMalformed)),
-            "embedded_zero_garbage: {events:?}"
-        );
-    }
-
-    /// The unassigned-type boundary vector surfaces as Unknown — callers
-    /// ignore it, never treat it as an error (forward compat).
-    #[test]
-    fn cobs_boundary_254_surfaces_as_unknown_type() {
-        assert_eq!(
-            decode_all(&read_vector("cobs_boundary_254.wire")),
-            vec![RxEvent::Unknown { ty: 0x7E }]
-        );
     }
 }

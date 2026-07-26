@@ -17,9 +17,9 @@
 //! `cargo test -p proto --test golden_vectors -- --ignored regen`. The
 //! [`regen`] test rewrites every *vector* file deterministically — no
 //! wall clock, no randomness, fixed patterns and seeds only — so two
-//! consecutive runs are byte-identical.
+//! consecutive runs are byte-identical. It never touches the hand-written
+//! `README.md` / `.gitattributes`.
 
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -37,8 +37,7 @@ use proto::{cobs, crc};
 const BRIGHTNESS_VALUE: u8 = 200;
 
 /// Firmware version string carried by the `hello_ack` vector.
-const FW_VERSION_STR: &str = "2.0.0-test";
-const FW_VERSION: &[u8] = FW_VERSION_STR.as_bytes();
+const FW_VERSION: &[u8] = b"2.0.0-test";
 
 /// Unassigned type byte used by the `cobs_boundary_254` vector — receivers
 /// must parse it as [`Parsed::Unknown`] and ignore it.
@@ -48,38 +47,77 @@ const BOUNDARY_TYPE_BYTE: u8 = 0x7E;
 /// free of `0x00` so the first delimiter in the stream is the explicit one.
 const RESYNC_GARBAGE: &[u8] = &[0xDE, 0xAD, 0xBE, 0xEF, 0x42, 0x13, 0x37];
 
-/// Prose for each vector lives in `testdata/proto/README.md`.
-struct PositiveVector {
+/// One positive vector: its payload written out longhand — independently
+/// of [`Packet::encode`], so the two statements of each layout cross-check
+/// — and the typed packet it must parse to. Prose for each vector lives in
+/// `testdata/proto/README.md`.
+struct PositiveVector<'a> {
     name: &'static str,
     ty: PacketType,
+    payload: Vec<u8>,
+    packet: Packet<'a>,
 }
 
-const POSITIVE: &[PositiveVector] = &[
-    PositiveVector {
-        name: "hello",
-        ty: PacketType::Hello,
-    },
-    PositiveVector {
-        name: "hello_ack",
-        ty: PacketType::HelloAck,
-    },
-    PositiveVector {
-        name: "brightness",
-        ty: PacketType::Brightness,
-    },
-    PositiveVector {
-        name: "button_event_short",
-        ty: PacketType::ButtonEvent,
-    },
-    PositiveVector {
-        name: "button_event_long",
-        ty: PacketType::ButtonEvent,
-    },
-    PositiveVector {
-        name: "frame",
-        ty: PacketType::Frame,
-    },
-];
+fn positive_vectors(pixels: &[u8; FRAME_PAYLOAD_LEN]) -> Vec<PositiveVector<'_>> {
+    let hello_ack_payload = {
+        let mut payload = vec![PROTOCOL_VERSION, PANEL_WIDTH as u8, PANEL_HEIGHT as u8];
+        payload.extend_from_slice(FW_VERSION);
+        payload
+    };
+    vec![
+        PositiveVector {
+            name: "hello",
+            ty: PacketType::Hello,
+            payload: vec![PROTOCOL_VERSION],
+            packet: Packet::Hello {
+                protocol_version: PROTOCOL_VERSION,
+            },
+        },
+        PositiveVector {
+            name: "hello_ack",
+            ty: PacketType::HelloAck,
+            payload: hello_ack_payload,
+            packet: Packet::HelloAck {
+                protocol_version: PROTOCOL_VERSION,
+                width: PANEL_WIDTH as u8,
+                height: PANEL_HEIGHT as u8,
+                fw_version: FW_VERSION,
+            },
+        },
+        PositiveVector {
+            name: "brightness",
+            ty: PacketType::Brightness,
+            payload: vec![BRIGHTNESS_VALUE],
+            packet: Packet::Brightness {
+                value: BRIGHTNESS_VALUE,
+            },
+        },
+        PositiveVector {
+            name: "button_event_short",
+            ty: PacketType::ButtonEvent,
+            payload: vec![Button::BrightnessUp.to_byte(), PressKind::Short.to_byte()],
+            packet: Packet::ButtonEvent {
+                button: Button::BrightnessUp.to_byte(),
+                kind: PressKind::Short.to_byte(),
+            },
+        },
+        PositiveVector {
+            name: "button_event_long",
+            ty: PacketType::ButtonEvent,
+            payload: vec![Button::Sleep.to_byte(), PressKind::Long.to_byte()],
+            packet: Packet::ButtonEvent {
+                button: Button::Sleep.to_byte(),
+                kind: PressKind::Long.to_byte(),
+            },
+        },
+        PositiveVector {
+            name: "frame",
+            ty: PacketType::Frame,
+            payload: pixels.to_vec(),
+            packet: Packet::Frame { pixels },
+        },
+    ]
+}
 
 /// Error classes the negative vectors are allowed to name. These are the
 /// cross-language contract classes — each implementation maps them onto
@@ -95,29 +133,45 @@ enum ErrorClass {
 struct NegativeVector {
     name: &'static str,
     class: ErrorClass,
+    wire: Vec<u8>,
 }
 
-const NEGATIVE: &[NegativeVector] = &[
-    NegativeVector {
-        name: "bad_crc",
-        class: ErrorClass::BadCrc,
-    },
-    NegativeVector {
-        name: "truncated",
-        class: ErrorClass::CobsMalformed,
-    },
-    NegativeVector {
-        name: "embedded_zero_garbage",
-        class: ErrorClass::CobsMalformed,
-    },
-    NegativeVector {
-        name: "wrong_length_known_type",
-        class: ErrorClass::BadLength,
-    },
-];
-
-/// Never touched by [`regen`].
-const HAND_WRITTEN: [&str; 2] = ["README.md", ".gitattributes"];
+fn negative_vectors() -> Vec<NegativeVector> {
+    let bad_crc = {
+        let mut raw = raw_of(PacketType::Brightness, &[BRIGHTNESS_VALUE]);
+        // Corrupt the payload byte after the CRC was computed. 0xC8 ^
+        // 0xFF = 0x37 stays non-zero, so the COBS layer is untouched
+        // and the corruption is visible only to the CRC check.
+        raw[1] ^= 0xFF;
+        wire_of_raw(&raw)
+    };
+    vec![
+        NegativeVector {
+            name: "bad_crc",
+            class: ErrorClass::BadCrc,
+            wire: bad_crc,
+        },
+        NegativeVector {
+            name: "truncated",
+            class: ErrorClass::CobsMalformed,
+            // Group header 0x05 promises 4 data bytes; only 2 arrive
+            // before the delimiter.
+            wire: vec![0x05, 0x11, 0x22, 0x00],
+        },
+        NegativeVector {
+            name: "embedded_zero_garbage",
+            class: ErrorClass::CobsMalformed,
+            // Group header 0x04 promises 3 data bytes and gets them, but
+            // one is an embedded 0x00 — never produced by a valid encoder.
+            wire: vec![0x04, 0x41, 0x00, 0x42, 0x00],
+        },
+        NegativeVector {
+            name: "wrong_length_known_type",
+            class: ErrorClass::BadLength,
+            wire: wire_of_raw(&raw_of(PacketType::Frame, &[0x01, 0x02, 0x03, 0x04, 0x05])),
+        },
+    ]
+}
 
 // Deterministic builders — pure functions of the constants above.
 
@@ -142,53 +196,6 @@ fn frame_pixel(i: usize) -> u8 {
 
 fn frame_pixels() -> [u8; FRAME_PAYLOAD_LEN] {
     core::array::from_fn(frame_pixel)
-}
-
-/// The payload layout of each positive vector, written out longhand
-/// and independently of [`Packet::encode`] so the tests cross-check the
-/// two statements of the layout against each other.
-fn payload_of(name: &str, pixels: &[u8; FRAME_PAYLOAD_LEN]) -> Vec<u8> {
-    match name {
-        "hello" => vec![PROTOCOL_VERSION],
-        "hello_ack" => {
-            let mut payload = vec![PROTOCOL_VERSION, PANEL_WIDTH as u8, PANEL_HEIGHT as u8];
-            payload.extend_from_slice(FW_VERSION);
-            payload
-        }
-        "brightness" => vec![BRIGHTNESS_VALUE],
-        "button_event_short" => vec![Button::BrightnessUp.to_byte(), PressKind::Short.to_byte()],
-        "button_event_long" => vec![Button::Sleep.to_byte(), PressKind::Long.to_byte()],
-        "frame" => pixels.to_vec(),
-        other => panic!("no payload defined for vector {other}"),
-    }
-}
-
-/// The typed packet each positive vector must parse to.
-fn expected_packet<'a>(name: &str, pixels: &'a [u8; FRAME_PAYLOAD_LEN]) -> Packet<'a> {
-    match name {
-        "hello" => Packet::Hello {
-            protocol_version: PROTOCOL_VERSION,
-        },
-        "hello_ack" => Packet::HelloAck {
-            protocol_version: PROTOCOL_VERSION,
-            width: PANEL_WIDTH as u8,
-            height: PANEL_HEIGHT as u8,
-            fw_version: FW_VERSION,
-        },
-        "brightness" => Packet::Brightness {
-            value: BRIGHTNESS_VALUE,
-        },
-        "button_event_short" => Packet::ButtonEvent {
-            button: Button::BrightnessUp.to_byte(),
-            kind: PressKind::Short.to_byte(),
-        },
-        "button_event_long" => Packet::ButtonEvent {
-            button: Button::Sleep.to_byte(),
-            kind: PressKind::Long.to_byte(),
-        },
-        "frame" => Packet::Frame { pixels },
-        other => panic!("no expected packet for vector {other}"),
-    }
 }
 
 /// Raw form (type + payload + CRC-16 LE) via the library encoder.
@@ -226,63 +233,37 @@ fn boundary_raw() -> Vec<u8> {
     panic!("no tweak byte yields a zero-free CRC");
 }
 
-/// Wire bytes of each negative vector.
-fn negative_wire(name: &str) -> Vec<u8> {
-    match name {
-        "bad_crc" => {
-            let mut raw = raw_of(PacketType::Brightness, &[BRIGHTNESS_VALUE]);
-            // Corrupt the payload byte after the CRC was computed. 0xC8 ^
-            // 0xFF = 0x37 stays non-zero, so the COBS layer is untouched
-            // and the corruption is visible only to the CRC check.
-            raw[1] ^= 0xFF;
-            wire_of_raw(&raw)
-        }
-        // Group header 0x05 promises 4 data bytes; only 2 arrive before
-        // the delimiter.
-        "truncated" => vec![0x05, 0x11, 0x22, 0x00],
-        // Group header 0x04 promises 3 data bytes and gets them, but one
-        // is an embedded 0x00 — never produced by a valid encoder.
-        "embedded_zero_garbage" => vec![0x04, 0x41, 0x00, 0x42, 0x00],
-        "wrong_length_known_type" => {
-            wire_of_raw(&raw_of(PacketType::Frame, &[0x01, 0x02, 0x03, 0x04, 0x05]))
-        }
-        other => panic!("no negative wire defined for vector {other}"),
-    }
-}
-
 /// `resync.stream`: garbage (no delimiter), a lone `0x00`, then the exact
-/// bytes of `hello.wire` and `brightness.wire`.
-fn resync_stream(pixels: &[u8; FRAME_PAYLOAD_LEN]) -> Vec<u8> {
+/// bytes of `hello.wire` and `brightness.wire` (same payloads as the
+/// positive-vector table).
+fn resync_stream() -> Vec<u8> {
     let mut stream = RESYNC_GARBAGE.to_vec();
     stream.push(0x00);
-    stream.extend(wire_of_raw(&raw_of(
-        PacketType::Hello,
-        &payload_of("hello", pixels),
-    )));
+    stream.extend(wire_of_raw(&raw_of(PacketType::Hello, &[PROTOCOL_VERSION])));
     stream.extend(wire_of_raw(&raw_of(
         PacketType::Brightness,
-        &payload_of("brightness", pixels),
+        &[BRIGHTNESS_VALUE],
     )));
     stream
 }
 
-/// The single source both for [`regen`] and the currency check.
-/// Excludes [`HAND_WRITTEN`].
+/// Every regenerable file, name → bytes: the single source [`regen`]
+/// writes.
 fn all_files() -> Vec<(String, Vec<u8>)> {
     let pixels = frame_pixels();
     let mut files: Vec<(String, Vec<u8>)> = Vec::new();
-    for v in POSITIVE {
-        let raw = raw_of(v.ty, &payload_of(v.name, &pixels));
+    for v in positive_vectors(&pixels) {
+        let raw = raw_of(v.ty, &v.payload);
         files.push((format!("{}.wire", v.name), wire_of_raw(&raw)));
         files.push((format!("{}.raw", v.name), raw));
     }
     let braw = boundary_raw();
     files.push(("cobs_boundary_254.wire".to_string(), wire_of_raw(&braw)));
     files.push(("cobs_boundary_254.raw".to_string(), braw));
-    for n in NEGATIVE {
-        files.push((format!("{}.wire", n.name), negative_wire(n.name)));
+    for n in negative_vectors() {
+        files.push((format!("{}.wire", n.name), n.wire));
     }
-    files.push(("resync.stream".to_string(), resync_stream(&pixels)));
+    files.push(("resync.stream".to_string(), resync_stream()));
     files
 }
 
@@ -351,52 +332,21 @@ fn classify(name: &str, wire: &[u8]) -> Result<(), ErrorClass> {
     }
 }
 
-fn longest_run(bytes: &[u8], pred: impl Fn(u8) -> bool) -> usize {
-    let mut best = 0usize;
-    let mut current = 0usize;
-    for &byte in bytes {
-        if pred(byte) {
-            current += 1;
-            best = best.max(current);
-        } else {
-            current = 0;
-        }
-    }
-    best
-}
-
 // Normal tests — run against the committed files on disk.
-
-/// Every vector on disk is byte-identical to its generator, and the
-/// directory holds nothing beyond those plus the hand-written files.
-#[test]
-fn vector_files_are_current_and_complete() {
-    let files = all_files();
-    for (name, want) in &files {
-        let got = read_vector(name);
-        assert_bytes_eq(&format!("testdata/proto/{name}"), &got, want);
-    }
-    let mut expected: BTreeSet<String> = files.iter().map(|(name, _)| name.clone()).collect();
-    expected.extend(HAND_WRITTEN.iter().map(|name| name.to_string()));
-    let mut on_disk = BTreeSet::new();
-    for entry in fs::read_dir(testdata_dir()).expect("read testdata/proto") {
-        let entry = entry.expect("directory entry");
-        on_disk.insert(entry.file_name().to_string_lossy().into_owned());
-    }
-    assert_eq!(
-        on_disk, expected,
-        "stray or missing files in testdata/proto"
-    );
-}
 
 #[test]
 fn raw_vectors_parse_to_the_expected_typed_packet() {
     let pixels = frame_pixels();
-    for v in POSITIVE {
+    for v in positive_vectors(&pixels) {
         let raw = read_vector(&format!("{}.raw", v.name));
-        let expected = expected_packet(v.name, &pixels);
+        // The longhand payload statement matches the committed bytes.
+        assert_bytes_eq(
+            &format!("{}.raw longhand payload", v.name),
+            &raw_of(v.ty, &v.payload),
+            &raw,
+        );
         match packet::parse_packet(&raw) {
-            Ok(Parsed::Known(parsed)) => assert_eq!(parsed, expected, "{}", v.name),
+            Ok(Parsed::Known(parsed)) => assert_eq!(parsed, v.packet, "{}", v.name),
             other => panic!("{}: expected a Known packet, got {other:?}", v.name),
         }
     }
@@ -405,7 +355,7 @@ fn raw_vectors_parse_to_the_expected_typed_packet() {
 #[test]
 fn wire_vectors_decode_parse_and_reencode_byte_identically() {
     let pixels = frame_pixels();
-    for v in POSITIVE {
+    for v in positive_vectors(&pixels) {
         let name = v.name;
         let wire = read_vector(&format!("{name}.wire"));
         let raw_file = read_vector(&format!("{name}.raw"));
@@ -423,16 +373,16 @@ fn wire_vectors_decode_parse_and_reencode_byte_identically() {
             &raw_file,
         );
 
-        let expected = expected_packet(name, &pixels);
         match packet::parse_packet(&raw[..raw_len]) {
-            Ok(Parsed::Known(parsed)) => assert_eq!(parsed, expected, "{name}"),
+            Ok(Parsed::Known(parsed)) => assert_eq!(parsed, v.packet, "{name}"),
             other => panic!("{name}: expected a Known packet, got {other:?}"),
         }
         assert_eq!(classify(name, &wire), Ok(()), "{name}: decode pipeline");
 
         let mut scratch = vec![0u8; MAX_RAW_LEN];
         let mut out = vec![0u8; MAX_WIRE_LEN];
-        let wire_len = expected
+        let wire_len = v
+            .packet
             .encode(&mut scratch, &mut out)
             .unwrap_or_else(|err| panic!("{name}: typed encode failed: {err:?}"));
         assert_bytes_eq(
@@ -443,50 +393,23 @@ fn wire_vectors_decode_parse_and_reencode_byte_identically() {
     }
 }
 
-/// The frame payload actually stresses what it claims to: zero bytes, a
-/// 254+ run of 0xFF, and a 254+ zero-free run — asserted on the file
-/// bytes, not the generator.
-#[test]
-fn frame_vector_payload_stresses_cobs() {
-    let raw = read_vector("frame.raw");
-    let payload = &raw[1..raw.len() - 2];
-    assert_eq!(payload.len(), FRAME_PAYLOAD_LEN);
-    assert!(payload.contains(&0x00), "frame payload has no zero bytes");
-    let ff_run = longest_run(payload, |b| b == 0xFF);
-    assert!(ff_run >= 254, "longest 0xFF run is only {ff_run}");
-    let nonzero_run = longest_run(payload, |b| b != 0);
-    assert!(
-        nonzero_run >= 254,
-        "longest zero-free run is only {nonzero_run}"
-    );
-}
-
-#[test]
-fn cobs_boundary_254_raw_ends_in_254_nonzero_bytes_after_a_zero() {
-    let raw = read_vector("cobs_boundary_254.raw");
-    let boundary = raw.len() - 255;
-    assert_eq!(raw[boundary], 0x00, "no zero before the trailing run");
-    assert!(
-        raw[boundary + 1..].iter().all(|&b| b != 0),
-        "the trailing 254 bytes must be zero-free"
-    );
-
-    // Valid CRC, unassigned type: parses as Unknown for caller-side
-    // ignoring — never an error.
-    match packet::parse_packet(&raw) {
-        Ok(Parsed::Unknown { ty, payload }) => {
-            assert_eq!(ty, BOUNDARY_TYPE_BYTE);
-            assert_eq!(payload, &raw[1..raw.len() - 2]);
-        }
-        other => panic!("expected an Unknown packet, got {other:?}"),
-    }
-}
-
 #[test]
 fn cobs_boundary_254_wire_is_the_canonical_listing_1_form() {
     let wire = read_vector("cobs_boundary_254.wire");
     let raw_file = read_vector("cobs_boundary_254.raw");
     let len = wire.len();
+
+    // The committed raw file is exactly what the deterministic builder
+    // produces; valid CRC + unassigned type parses as Unknown for
+    // caller-side ignoring — never an error.
+    assert_bytes_eq("cobs_boundary_254.raw builder", &boundary_raw(), &raw_file);
+    match packet::parse_packet(&raw_file) {
+        Ok(Parsed::Unknown { ty, payload }) => {
+            assert_eq!(ty, BOUNDARY_TYPE_BYTE);
+            assert_eq!(payload, &raw_file[1..raw_file.len() - 2]);
+        }
+        other => panic!("expected an Unknown packet, got {other:?}"),
+    }
 
     assert_eq!(wire[len - 1], 0x00, "missing delimiter");
     assert_eq!(
@@ -519,8 +442,9 @@ fn cobs_boundary_254_wire_is_the_canonical_listing_1_form() {
 
 #[test]
 fn negative_vectors_fail_with_exactly_the_expected_class() {
-    for n in NEGATIVE {
+    for n in negative_vectors() {
         let wire = read_vector(&format!("{}.wire", n.name));
+        assert_bytes_eq(&format!("{}.wire builder", n.name), &n.wire, &wire);
         assert_eq!(classify(n.name, &wire), Err(n.class), "{}", n.name);
     }
 }

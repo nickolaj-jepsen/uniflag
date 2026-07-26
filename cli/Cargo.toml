@@ -5,10 +5,6 @@ edition.workspace = true
 license.workspace = true
 description = "Binary-protocol test-pattern streamer and diagnostic CLI for the uniflag firmware."
 
-[lib]
-name = "uniflag_cli"
-path = "src/lib.rs"
-
 [[bin]]
 name = "uniflag-cli"
 path = "src/main.rs"

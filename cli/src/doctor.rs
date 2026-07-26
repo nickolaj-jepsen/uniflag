@@ -14,7 +14,12 @@ use proto::packet::{USB_PID, USB_VID};
 /// the transition (docs/protocol.md §Transport).
 const REGISTERED_PID: u16 = 0xF1A6;
 
-const SIMHUB_DLLS: [&str; 3] = ["SimHub.Plugins.dll", "GameReaderCommon.dll", "log4net.dll"];
+const SIMHUB_DLLS: [&str; 4] = [
+    "SimHub.Plugins.dll",
+    "GameReaderCommon.dll",
+    "log4net.dll",
+    "SimHub.Logging.dll",
+];
 
 /// The justfile owns these defaults, so the platform flavouring lives in
 /// exactly one place.
@@ -72,6 +77,20 @@ fn thumbv6m() {
     }
 }
 
+/// `gate dotnet`: whether a dotnet SDK is on PATH.
+pub fn have_dotnet() -> bool {
+    run("dotnet", &["--list-sdks"]).is_some()
+}
+
+/// `gate simhub` / the report: reference DLLs absent from `dir`.
+pub fn missing_simhub_dlls(dir: &str) -> Vec<&'static str> {
+    SIMHUB_DLLS
+        .iter()
+        .copied()
+        .filter(|dll| !Path::new(dir).join(dll).exists())
+        .collect()
+}
+
 fn dotnet() {
     match run("dotnet", &["--list-sdks"]) {
         Some(output) => {
@@ -89,11 +108,7 @@ fn dotnet() {
 }
 
 fn simhub(dir: &str) {
-    let missing: Vec<&str> = SIMHUB_DLLS
-        .iter()
-        .copied()
-        .filter(|dll| !Path::new(dir).join(dll).exists())
-        .collect();
+    let missing = missing_simhub_dlls(dir);
     if missing.is_empty() {
         ok("SimHub", dir);
     } else {
@@ -178,6 +193,11 @@ mod tests {
     #[test]
     fn missing_programs_report_none_rather_than_panicking() {
         assert_eq!(run("uniflag-no-such-program-exists", &["--version"]), None);
+    }
+
+    #[test]
+    fn gate_probe_reports_every_dll_missing_from_a_bad_dir() {
+        assert_eq!(missing_simhub_dlls("/does-not-exist"), SIMHUB_DLLS);
     }
 
     #[test]

@@ -23,14 +23,12 @@
             # Embedded tooling
             elf2uf2-rs
 
-            # Host build deps for serialport-rs
+            # Host build deps for serialport-rs (udev is nixpkgs' alias for
+            # systemd's udev outputs; the shellHook pins its pkgconfig path)
             pkg-config
             udev
-            systemd
 
             # Convenience
-            cargo-binutils
-            picocom
             just
           ];
 

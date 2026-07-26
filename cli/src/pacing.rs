@@ -10,10 +10,10 @@
 //! burst or a shifted epoch would lie about liveness.
 
 /// Nanoseconds per second, as the u128 the arithmetic below runs in.
-pub const NANOS_PER_SEC: u128 = 1_000_000_000;
+const NANOS_PER_SEC: u128 = 1_000_000_000;
 
 /// Absolute deadline of frame `index`, in nanoseconds since the epoch.
-pub fn deadline_nanos(index: u64, fps: u32) -> u128 {
+pub(crate) fn deadline_nanos(index: u64, fps: u32) -> u128 {
     u128::from(index) * NANOS_PER_SEC / u128::from(fps.max(1))
 }
 
@@ -23,7 +23,7 @@ pub fn deadline_nanos(index: u64, fps: u32) -> u128 {
 /// deadline is never in the past (modulo sub-nanosecond rounding), so the
 /// caller either sleeps until it or sends immediately — it never bursts
 /// to catch up.
-pub fn next_frame_index(prev: u64, elapsed_nanos: u128, fps: u32) -> u64 {
+pub(crate) fn next_frame_index(prev: u64, elapsed_nanos: u128, fps: u32) -> u64 {
     // First index whose deadline (index / fps seconds) is >= elapsed.
     let due = (elapsed_nanos * u128::from(fps.max(1))).div_ceil(NANOS_PER_SEC);
     let due = u64::try_from(due).unwrap_or(u64::MAX);

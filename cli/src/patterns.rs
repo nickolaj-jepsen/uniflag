@@ -13,70 +13,36 @@ use proto::packet::{FRAME_PAYLOAD_LEN, PANEL_HEIGHT, PANEL_WIDTH};
 
 /// One RGB888 colour.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Rgb {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
+pub(crate) struct Rgb {
+    pub(crate) r: u8,
+    pub(crate) g: u8,
+    pub(crate) b: u8,
 }
 
 /// Names accepted by `solid:<name>` (hex `solid:RRGGBB` / `solid:#RRGGBB`
-/// works for everything else).
-const NAMED_COLORS: &[(&str, Rgb)] = &[
-    ("black", Rgb { r: 0, g: 0, b: 0 }),
-    (
-        "white",
-        Rgb {
-            r: 255,
-            g: 255,
-            b: 255,
-        },
-    ),
-    ("red", Rgb { r: 255, g: 0, b: 0 }),
-    ("green", Rgb { r: 0, g: 255, b: 0 }),
-    ("blue", Rgb { r: 0, g: 0, b: 255 }),
-    (
-        "yellow",
-        Rgb {
-            r: 255,
-            g: 255,
-            b: 0,
-        },
-    ),
-    (
-        "orange",
-        Rgb {
-            r: 255,
-            g: 128,
-            b: 0,
-        },
-    ),
-    (
-        "cyan",
-        Rgb {
-            r: 0,
-            g: 255,
-            b: 255,
-        },
-    ),
-    (
-        "magenta",
-        Rgb {
-            r: 255,
-            g: 0,
-            b: 255,
-        },
-    ),
+/// works for everything else), as `(name, r, g, b)`.
+#[rustfmt::skip]
+const NAMED_COLORS: &[(&str, u8, u8, u8)] = &[
+    ("black",     0,   0,   0),
+    ("white",   255, 255, 255),
+    ("red",     255,   0,   0),
+    ("green",     0, 255,   0),
+    ("blue",      0,   0, 255),
+    ("yellow",  255, 255,   0),
+    ("orange",  255, 128,   0),
+    ("cyan",      0, 255, 255),
+    ("magenta", 255,   0, 255),
 ];
 
 /// The checkerboard flips polarity every this many frames (1 s at 30 fps).
-pub const CHECKERBOARD_INVERT_PERIOD: u64 = 30;
+const CHECKERBOARD_INVERT_PERIOD: u64 = 30;
 
 /// Frames per full 0..=255 brightness ramp of [`Pattern::BrightnessSweep`].
-pub const BRIGHTNESS_SWEEP_PERIOD: u64 = 256;
+const BRIGHTNESS_SWEEP_PERIOD: u64 = 256;
 
 /// A test pattern selectable via `--pattern`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Pattern {
+pub(crate) enum Pattern {
     /// Every pixel the same colour (`solid:<name>` or `solid:RRGGBB`).
     Solid(Rgb),
     /// Static horizontal red ramp (left → right) plus vertical blue ramp
@@ -98,7 +64,7 @@ impl Pattern {
     /// Paint frame `frame_index` of this pattern into `pixels` (RGB888,
     /// row-major from the top-left). Pure: identical inputs always yield
     /// identical bytes.
-    pub fn paint(&self, frame_index: u64, pixels: &mut [u8; FRAME_PAYLOAD_LEN]) {
+    pub(crate) fn paint(&self, frame_index: u64, pixels: &mut [u8; FRAME_PAYLOAD_LEN]) {
         match *self {
             Pattern::Solid(color) => fill(pixels, color),
             Pattern::Gradient => {
@@ -144,7 +110,7 @@ impl Pattern {
     /// The Brightness packet value to send alongside frame `frame_index`,
     /// if this pattern exercises the brightness path: the sweep ramps
     /// 0..=255 over [`BRIGHTNESS_SWEEP_PERIOD`] frames, then wraps.
-    pub fn brightness_for_frame(&self, frame_index: u64) -> Option<u8> {
+    pub(crate) fn brightness_for_frame(&self, frame_index: u64) -> Option<u8> {
         match self {
             Pattern::BrightnessSweep => Some((frame_index % BRIGHTNESS_SWEEP_PERIOD) as u8),
             _ => None,
@@ -175,11 +141,11 @@ impl FromStr for Pattern {
 }
 
 fn parse_color(s: &str) -> Result<Rgb, String> {
-    if let Some(&(_, rgb)) = NAMED_COLORS
+    if let Some(&(_, r, g, b)) = NAMED_COLORS
         .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(s))
+        .find(|(name, ..)| name.eq_ignore_ascii_case(s))
     {
-        return Ok(rgb);
+        return Ok(Rgb { r, g, b });
     }
     let hex = s.strip_prefix('#').unwrap_or(s);
     if hex.len() == 6 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -190,7 +156,7 @@ fn parse_color(s: &str) -> Result<Rgb, String> {
             b: byte_at(4)?,
         });
     }
-    let names: Vec<&str> = NAMED_COLORS.iter().map(|(name, _)| *name).collect();
+    let names: Vec<&str> = NAMED_COLORS.iter().map(|(name, ..)| *name).collect();
     Err(format!(
         "unknown color '{s}' (expected RRGGBB hex or one of: {})",
         names.join(", ")

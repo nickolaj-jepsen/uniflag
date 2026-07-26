@@ -1,7 +1,7 @@
 //! uniflag-cli — binary-protocol test-pattern streamer and the firmware's
 //! diagnostic instrument.
 //!
-//! Two modes:
+//! Three modes:
 //!
 //! - **stream** (default): `Hello`/`HelloAck` handshake (prints fw
 //!   version, protocol version, and panel size; refuses on a protocol
@@ -10,12 +10,20 @@
 //!   decoded and printed live.
 //! - **doctor**: report the toolchains, SimHub assemblies and devices
 //!   present on this machine (`just doctor` is a thin wrapper).
+//! - **gate**: run a command only if its toolchain requirement is met,
+//!   else print a loud `SKIPPED` line (`just check`'s leg selection).
 //!
-//! Binary output goes to the sink (serial port, or stdout via
-//! `--no-port`); all human status and diagnostics go to stderr, except
-//! the doctor report, which *is* its mode's product and goes to stdout.
+//! Binary output goes to the serial port; all human status and
+//! diagnostics go to stderr, except the doctor report, which *is* its
+//! mode's product and goes to stdout.
 
-use std::io::{self, Read, Write};
+mod doctor;
+mod pacing;
+mod patterns;
+mod rx;
+mod wire;
+
+use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -23,10 +31,9 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
 use proto::packet::{Button, PressKind, PROTOCOL_VERSION};
-use uniflag_cli::doctor::{self, Targets};
-use uniflag_cli::patterns::Pattern;
-use uniflag_cli::rx::{Decoder, OwnedPacket, RxEvent};
-use uniflag_cli::{pacing, wire};
+
+use crate::patterns::Pattern;
+use crate::rx::{Decoder, OwnedPacket, RxEvent};
 
 const DEFAULT_PORT: &str = "/dev/ttyACM0";
 const DEFAULT_BAUD: u32 = 115_200;
@@ -53,10 +60,6 @@ struct Cli {
     #[arg(long, global = true, default_value = DEFAULT_PORT)]
     port: PathBuf,
 
-    /// Don't open the serial device — write wire bytes to stdout instead.
-    #[arg(long, global = true)]
-    no_port: bool,
-
     /// Override baud rate (USB CDC ignores this but some tools care).
     #[arg(long, global = true, default_value_t = DEFAULT_BAUD)]
     baud: u32,
@@ -71,6 +74,11 @@ enum Command {
     Stream(StreamArgs),
     /// Report the toolchains, SimHub assemblies and devices present here.
     Doctor(DoctorArgs),
+    /// Run a command if a requirement is met, else print a loud SKIPPED
+    /// line and exit 0. `just check`'s leg selection lives here for the
+    /// same reason doctor does: a probe written in both bash and
+    /// PowerShell drifts.
+    Gate(GateArgs),
 }
 
 /// The justfile owns these defaults and passes them in.
@@ -90,6 +98,29 @@ struct DoctorArgs {
 }
 
 #[derive(Args, Debug, PartialEq)]
+struct GateArgs {
+    /// What the gated command needs to be able to run.
+    #[arg(value_enum)]
+    requirement: Requirement,
+
+    /// SimHub install providing the plugin's reference DLLs (simhub only).
+    #[arg(long, default_value = "C:\\Program Files (x86)\\SimHub")]
+    simhub_dir: String,
+
+    /// The command to run when the requirement is met (after `--`).
+    #[arg(last = true, required = true)]
+    command: Vec<String>,
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq)]
+enum Requirement {
+    /// A dotnet SDK on PATH (the cross-platform C# leg).
+    Dotnet,
+    /// Windows plus SimHub's reference DLLs (the net48 plugin leg).
+    Simhub,
+}
+
+#[derive(Args, Debug, PartialEq)]
 struct StreamArgs {
     /// Test pattern: solid:<named-or-hex-color>, gradient, moving-pixel,
     /// checkerboard, or brightness-sweep.
@@ -104,8 +135,8 @@ struct StreamArgs {
     #[arg(long)]
     brightness: Option<u8>,
 
-    /// Skip the Hello/HelloAck handshake (required with --no-port, where
-    /// nothing can answer it).
+    /// Skip the Hello/HelloAck handshake, and with it the
+    /// protocol-version check.
     #[arg(long)]
     no_handshake: bool,
 
@@ -132,52 +163,65 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
         Some(Command::Doctor(args)) => {
-            doctor::report(&Targets {
+            doctor::report(&doctor::Targets {
                 serial: &args.serial,
                 mount: &args.mount,
                 simhub_dir: &args.simhub_dir,
             });
             Ok(())
         }
+        Some(Command::Gate(args)) => run_gate(args),
         Some(Command::Stream(args)) => run_stream(&cli, args),
         None => run_stream(&cli, &StreamArgs::default()),
     }
 }
 
-// Sink: writes wire bytes to either a serial port or stdout.
-enum Sink {
-    Serial(Box<dyn serialport::SerialPort>),
-    Stdout(io::Stdout),
-}
-
-impl Sink {
-    fn send(&mut self, bytes: &[u8]) -> Result<()> {
-        match self {
-            Sink::Serial(port) => port.write_all(bytes).context("write serial")?,
-            Sink::Stdout(out) => {
-                out.write_all(bytes).context("write stdout")?;
-                out.flush().ok();
+/// Skips exit 0 with a loud line (a silent omission reads as a pass);
+/// a met requirement makes this transparent to the gated command's
+/// success or failure.
+fn run_gate(args: &GateArgs) -> Result<()> {
+    let unmet: Option<String> = match args.requirement {
+        Requirement::Dotnet => (!doctor::have_dotnet()).then(|| "dotnet not on PATH".to_string()),
+        Requirement::Simhub => {
+            if !cfg!(windows) {
+                Some("the net48 plugin leg is Windows-only".to_string())
+            } else if doctor::missing_simhub_dlls(&args.simhub_dir).is_empty() {
+                None
+            } else {
+                Some(format!(
+                    "no SimHub reference DLLs at {}; set UNIFLAG_SIMHUB_DIR",
+                    args.simhub_dir
+                ))
             }
         }
-        Ok(())
+    };
+    let display = args.command.join(" ");
+    if let Some(reason) = unmet {
+        println!("SKIPPED: {display} ({reason})");
+        return Ok(());
     }
+    let status = std::process::Command::new(&args.command[0])
+        .args(&args.command[1..])
+        .status()
+        .with_context(|| format!("could not run {display}"))?;
+    if !status.success() {
+        bail!("{display} failed");
+    }
+    Ok(())
 }
 
-fn open_sink(cli: &Cli, timeout: Duration) -> Result<Sink> {
-    if cli.no_port {
-        return Ok(Sink::Stdout(io::stdout()));
-    }
+fn open_port(cli: &Cli, timeout: Duration) -> Result<Box<dyn serialport::SerialPort>> {
     let port = serialport::new(cli.port.to_string_lossy(), cli.baud)
         .timeout(timeout)
         .open()
         .with_context(|| format!("opening {}", cli.port.display()))?;
     eprintln!("uniflag-cli → {} @ {} baud", cli.port.display(), cli.baud);
-    Ok(Sink::Serial(port))
+    Ok(port)
 }
 
 /// Block until the serial device is openable again (replug after a yank,
 /// re-enumeration after a watchdog reset).
-fn reopen_serial(cli: &Cli, timeout: Duration) -> Sink {
+fn reopen_port(cli: &Cli, timeout: Duration) -> Box<dyn serialport::SerialPort> {
     loop {
         std::thread::sleep(Duration::from_millis(500));
         match serialport::new(cli.port.to_string_lossy(), cli.baud)
@@ -186,28 +230,10 @@ fn reopen_serial(cli: &Cli, timeout: Duration) -> Sink {
         {
             Ok(port) => {
                 eprintln!("reconnected to {}", cli.port.display());
-                return Sink::Serial(port);
+                return port;
             }
             Err(_) => continue,
         }
-    }
-}
-
-/// How one attempt to send on the sink ended. Serial failures are lost
-/// links (the caller reopens and re-handshakes); stdout failures are
-/// fatal and surface as the outer `Err`.
-enum SendOutcome {
-    Sent,
-    Lost(anyhow::Error),
-}
-
-fn try_send(sink: &mut Sink, bytes: &[u8]) -> Result<SendOutcome> {
-    match sink.send(bytes) {
-        Ok(()) => Ok(SendOutcome::Sent),
-        Err(err) => match sink {
-            Sink::Serial(_) => Ok(SendOutcome::Lost(err)),
-            Sink::Stdout(_) => Err(err),
-        },
     }
 }
 
@@ -220,12 +246,6 @@ enum SessionOutcome {
 }
 
 fn run_stream(cli: &Cli, args: &StreamArgs) -> Result<()> {
-    if cli.no_port && !args.no_handshake {
-        bail!(
-            "--no-port writes to stdout, which cannot answer the handshake; \
-             pass --no-handshake to stream without one"
-        );
-    }
     let fps = args.fps.max(1);
     eprintln!(
         "streaming {:?} at {fps} fps (Ctrl-C to stop){}",
@@ -236,16 +256,16 @@ fn run_stream(cli: &Cli, args: &StreamArgs) -> Result<()> {
     );
 
     let run_started = Instant::now();
-    let mut sink = open_sink(cli, STREAM_TIMEOUT)?;
+    let mut port = open_port(cli, STREAM_TIMEOUT)?;
     loop {
         // Handshake refusals (protocol mismatch, no HelloAck) propagate as
         // errors — deliberate stops, not link flaps, so never retried.
-        start_session(&mut sink, args)?;
-        match stream_frames(&mut sink, args, fps, run_started)? {
+        start_session(port.as_mut(), args)?;
+        match stream_frames(port.as_mut(), args, fps, run_started)? {
             SessionOutcome::Finished => return Ok(()),
             SessionOutcome::LinkLost(err) => {
                 eprintln!("link lost ({err:#}); waiting for {}", cli.port.display());
-                sink = reopen_serial(cli, STREAM_TIMEOUT);
+                port = reopen_port(cli, STREAM_TIMEOUT);
             }
         }
     }
@@ -254,16 +274,14 @@ fn run_stream(cli: &Cli, args: &StreamArgs) -> Result<()> {
 /// Per-(re)connect setup: the Hello/HelloAck handshake, then the optional
 /// Brightness re-send (the device never assumes a value survives a
 /// reconnect).
-fn start_session(sink: &mut Sink, args: &StreamArgs) -> Result<()> {
+fn start_session(port: &mut dyn serialport::SerialPort, args: &StreamArgs) -> Result<()> {
     if !args.no_handshake {
-        let Sink::Serial(port) = sink else {
-            bail!("handshake requires a serial port"); // unreachable: guarded in run_stream
-        };
-        handshake(port.as_mut())?;
+        handshake(port)?;
         port.set_timeout(STREAM_TIMEOUT).ok();
     }
     if let Some(value) = args.brightness {
-        sink.send(&wire::brightness(value)?)?;
+        port.write_all(&wire::brightness(value)?)
+            .context("send Brightness")?;
         eprintln!("sent Brightness {{ value: {value} }}");
     }
     Ok(())
@@ -317,9 +335,10 @@ fn handshake(port: &mut dyn serialport::SerialPort) -> Result<()> {
 /// The paced frame loop for one session. Frame `n`'s deadline is
 /// `epoch + n/fps` on a monotonic clock; when the loop falls behind it
 /// skips missed deadlines (see [`pacing`]) so the cadence stays honest
-/// for the device's stream-as-heartbeat timeout.
+/// for the device's stream-as-heartbeat timeout. A failed serial write is
+/// a lost link: the session ends and the caller reopens the port.
 fn stream_frames(
-    sink: &mut Sink,
+    port: &mut dyn serialport::SerialPort,
     args: &StreamArgs,
     fps: u32,
     run_started: Instant,
@@ -344,16 +363,16 @@ fn stream_frames(
 
         // The sweep's Brightness rides just ahead of its frame.
         if let Some(value) = args.pattern.brightness_for_frame(index) {
-            if let SendOutcome::Lost(err) = try_send(sink, &wire::brightness(value)?)? {
-                return Ok(SessionOutcome::LinkLost(err));
+            if let Err(err) = port.write_all(&wire::brightness(value)?) {
+                return Ok(SessionOutcome::LinkLost(err.into()));
             }
         }
-        if let SendOutcome::Lost(err) = try_send(sink, &wire::frame(args.pattern, index)?)? {
-            return Ok(SessionOutcome::LinkLost(err));
+        if let Err(err) = port.write_all(&wire::frame(args.pattern, index)?) {
+            return Ok(SessionOutcome::LinkLost(err.into()));
         }
         sent += 1;
 
-        if let Err(err) = poll_inbound(sink, &mut decoder) {
+        if let Err(err) = poll_inbound(port, &mut decoder) {
             return Ok(SessionOutcome::LinkLost(err));
         }
 
@@ -379,10 +398,7 @@ fn stream_frames(
 
 /// Drain and report whatever inbound bytes are waiting, without ever
 /// blocking the pacing loop.
-fn poll_inbound(sink: &mut Sink, decoder: &mut Decoder) -> Result<()> {
-    let Sink::Serial(port) = sink else {
-        return Ok(());
-    };
+fn poll_inbound(port: &mut dyn serialport::SerialPort, decoder: &mut Decoder) -> Result<()> {
     loop {
         let available = port.bytes_to_read().context("bytes_to_read")?;
         if available == 0 {
