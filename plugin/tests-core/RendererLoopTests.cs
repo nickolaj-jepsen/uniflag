@@ -268,7 +268,7 @@ namespace Uniflag.Tests
             SignalState state = SignalState.Default;
             state.Flag = TrackFlag.Blue;
             state.Session = Session.Racing;
-            loop.SetState(state, connected: true);
+            loop.SetState(state);
 
             WaitForFrame(
                 sink,

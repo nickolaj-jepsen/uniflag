@@ -19,8 +19,7 @@ namespace Uniflag.Adapters
     {
         public static SignalState Map(TelemetrySnapshot snapshot)
         {
-            SignalState state = SignalState.Default;
-            GenericAdapter.Map(snapshot, ref state);
+            SignalState state = GenericAdapter.Map(snapshot);
             if (IRacingAdapter.Matches(snapshot.GameName))
             {
                 IRacingAdapter.Map(snapshot, ref state);

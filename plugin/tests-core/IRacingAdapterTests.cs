@@ -117,7 +117,7 @@ namespace Uniflag.Tests
             SignalState state = MapThroughPipeline(IRacingSnapshot(bits));
             Assert.True(state.SafetyCar);
 
-            Composition comp = Compositor.Select(state, connected: true);
+            Composition comp = Compositor.Select(state);
             Assert.Equal(FieldKind.Yellow, comp.Field);
             Assert.Equal(BoardKind.SafetyCar, comp.Board);
         }
@@ -131,7 +131,7 @@ namespace Uniflag.Tests
             // adapter routes to the same orthogonal Meatball dimension — the
             // track flag stays None and the meatball takes the field.
             Assert.Equal(TrackFlag.None, state.Flag);
-            Assert.Equal(FieldKind.Meatball, Compositor.Select(state, connected: true).Field);
+            Assert.Equal(FieldKind.Meatball, Compositor.Select(state).Field);
         }
 
         [Fact]
@@ -140,7 +140,7 @@ namespace Uniflag.Tests
             SignalState state = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagFurled));
             Assert.True(state.Furled);
             Assert.Equal(TrackFlag.None, state.Flag);
-            Assert.Equal(FrameKind.Furled, Compositor.Select(state, connected: true).Frame);
+            Assert.Equal(FrameKind.Furled, Compositor.Select(state).Frame);
         }
 
         [Fact]
@@ -151,7 +151,7 @@ namespace Uniflag.Tests
             // No DT/SG distinction exists in iRacing telemetry — the detail
             // must stay None (never guess a service type).
             Assert.False(state.Disqualified);
-            Assert.Equal(FieldKind.Black, Compositor.Select(state, connected: true).Field);
+            Assert.Equal(FieldKind.Black, Compositor.Select(state).Field);
         }
 
         [Fact]
@@ -168,7 +168,7 @@ namespace Uniflag.Tests
                 IRacingSnapshot(IRacingAdapter.FlagDisqualify | IRacingAdapter.FlagBlue));
             Assert.Equal(TrackFlag.Blue, withBlue.Flag);
             Assert.True(withBlue.BlackFlag);
-            Composition comp = Compositor.Select(withBlue, connected: true);
+            Composition comp = Compositor.Select(withBlue);
             Assert.Equal(FieldKind.Black, comp.Field);
             Assert.Equal(BoardKind.Disqualified, comp.Board);
         }
@@ -204,13 +204,13 @@ namespace Uniflag.Tests
             SignalState held = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagGreenHeld));
             Assert.Equal(TrackFlag.None, held.Flag);
             Assert.Equal(StartPhase.Set, held.StartPhase);
-            Assert.Equal(BoardKind.StartGantry, Compositor.Select(held, connected: true).Board);
+            Assert.Equal(BoardKind.StartGantry, Compositor.Select(held).Board);
 
             // The moment the green bit flies, the flag claims the field.
             SignalState green = MapThroughPipeline(IRacingSnapshot(
                 IRacingAdapter.FlagGreenHeld | IRacingAdapter.FlagGreen | IRacingAdapter.FlagStartGo));
             Assert.Equal(TrackFlag.Green, green.Flag);
-            Assert.Equal(FieldKind.Green, Compositor.Select(green, connected: true).Field);
+            Assert.Equal(FieldKind.Green, Compositor.Select(green).Field);
         }
 
         [Fact]
@@ -256,13 +256,13 @@ namespace Uniflag.Tests
         public void GantryBoardRidesAnyFieldUnderTheCompositor()
         {
             SignalState ready = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagStartReady));
-            Assert.Equal(BoardKind.StartGantry, Compositor.Select(ready, connected: true).Board);
+            Assert.Equal(BoardKind.StartGantry, Compositor.Select(ready).Board);
 
             // A flag on the same tick takes the field; the gantry keeps the
             // board slot — the compositor stacks them instead of choosing.
             SignalState withYellow = MapThroughPipeline(
                 IRacingSnapshot(IRacingAdapter.FlagStartReady | IRacingAdapter.FlagYellow));
-            Composition comp = Compositor.Select(withYellow, connected: true);
+            Composition comp = Compositor.Select(withYellow);
             Assert.Equal(FieldKind.Yellow, comp.Field);
             Assert.Equal(BoardKind.StartGantry, comp.Board);
         }
@@ -272,7 +272,7 @@ namespace Uniflag.Tests
         {
             SignalState alone = MapThroughPipeline(IRacingSnapshot(IRacingAdapter.FlagDebris));
             Assert.Equal(TrackFlag.Debris, alone.Flag);
-            Assert.Equal(FieldKind.Debris, Compositor.Select(alone, connected: true).Field);
+            Assert.Equal(FieldKind.Debris, Compositor.Select(alone).Field);
 
             // A unified flag (which already conveys caution) supersedes it.
             SignalState withYellow = MapThroughPipeline(
@@ -445,7 +445,7 @@ namespace Uniflag.Tests
             Assert.Equal(TrackFlag.Red, state.Flag);
             Assert.True(state.SafetyCar);
 
-            Composition comp = Compositor.Select(state, connected: true);
+            Composition comp = Compositor.Select(state);
             Assert.Equal(FieldKind.Red, comp.Field);
             Assert.Equal(BoardKind.None, comp.Board);
             Assert.Equal(FrameKind.None, comp.Frame);
@@ -463,7 +463,7 @@ namespace Uniflag.Tests
             Assert.True(state.Meatball);
             Assert.True(state.Furled);
 
-            Composition comp = Compositor.Select(state, connected: true);
+            Composition comp = Compositor.Select(state);
             Assert.Equal(FieldKind.Yellow, comp.Field);
             Assert.Equal(BoardKind.SafetyCar, comp.Board);
             Assert.Equal(FrameKind.Furled, comp.Frame);

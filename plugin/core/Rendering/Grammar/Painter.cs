@@ -10,12 +10,6 @@ namespace Uniflag.Rendering.Grammar
     {
         public static void Paint(FrameBuffer s, in Composition comp, in Envelopes env, in SignalState state, uint frame)
         {
-            if (!comp.Connected)
-            {
-                Fill(s, Palette.Black);
-                return;
-            }
-
             PaintFieldSlot(s, comp, env.Field, state, frame);
             Boards.Paint(s, comp, env.Board, state, frame);
             Frames.Paint(s, comp, env.Frame, frame);
@@ -55,7 +49,7 @@ namespace Uniflag.Rendering.Grammar
                     return;
 
                 case EnvelopePhase.FadeOut:
-                    Fields.Paint(s, (FieldKind)env.PriorKind, env.PriorTier, state, frame, env.Age, attention: false);
+                    Fields.Paint(s, (FieldKind)env.PriorKind, Tier.Ambient, state, frame, env.Age, attention: false);
                     ScaleAll(s, FadeScale(env.Age));
                     return;
             }

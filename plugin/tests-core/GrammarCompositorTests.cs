@@ -14,18 +14,6 @@ namespace Uniflag.Tests
         private static SignalState S() => SignalState.Default;
 
         [Fact]
-        public void DisconnectedIsBlank()
-        {
-            var s = S();
-            s.Flag = TrackFlag.Yellow;
-            var c = Compositor.Select(s, connected: false);
-            Assert.False(c.Connected);
-            Assert.Equal(FieldKind.None, c.Field);
-            Assert.Equal(BoardKind.None, c.Board);
-            Assert.Equal(FrameKind.None, c.Frame);
-        }
-
-        [Fact]
         public void RedIsATotalTakeover()
         {
             var s = S();
@@ -34,7 +22,7 @@ namespace Uniflag.Tests
             s.Furled = true;
             s.IncidentWarning = true;
             s.StartPhase = StartPhase.Ready;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Red, c.Field);
             Assert.Equal(Tier.Urgent, c.FieldTier);
             Assert.Equal(BoardKind.None, c.Board);
@@ -48,7 +36,7 @@ namespace Uniflag.Tests
             s.Flag = TrackFlag.Checkered;
             s.CountdownLaps = 5;
             s.IncidentWarning = true;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Checkered, c.Field);
             Assert.Equal(BoardKind.None, c.Board);
             Assert.Equal(FrameKind.None, c.Frame);
@@ -59,7 +47,7 @@ namespace Uniflag.Tests
         {
             var s = S();
             s.SafetyCar = true;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Yellow, c.Field);
             Assert.Equal(Tier.Alert, c.FieldTier);
             Assert.Equal(BoardKind.SafetyCar, c.Board);
@@ -72,7 +60,7 @@ namespace Uniflag.Tests
             s.Flag = TrackFlag.Blue;
             s.Tier = Tier.Alert;
             s.SafetyCar = true;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Yellow, c.Field);
             Assert.Equal(BoardKind.SafetyCar, c.Board);
         }
@@ -83,7 +71,7 @@ namespace Uniflag.Tests
             var s = S();
             s.BlackFlag = true;
             s.SafetyCar = true;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Black, c.Field);
             Assert.Equal(BoardKind.SafetyCar, c.Board);
         }
@@ -95,7 +83,7 @@ namespace Uniflag.Tests
             s.Flag = TrackFlag.Yellow;
             s.Tier = Tier.Alert;
             s.BlackFlag = true;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Yellow, c.Field);
             Assert.Equal(BoardKind.BlackFlag, c.Board);
         }
@@ -108,7 +96,7 @@ namespace Uniflag.Tests
             var s = S();
             s.Flag = TrackFlag.Yellow;
             s.Disqualified = true;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Yellow, c.Field);
             Assert.Equal(BoardKind.Disqualified, c.Board);
         }
@@ -119,7 +107,7 @@ namespace Uniflag.Tests
             var s = S();
             s.BlackFlag = true;
             s.Meatball = true;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Black, c.Field);
             Assert.Equal(BoardKind.MeatballFlag, c.Board);
         }
@@ -130,7 +118,7 @@ namespace Uniflag.Tests
             var s = S();
             s.Disqualified = true;
             s.IncidentWarning = true;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Black, c.Field);
             Assert.Equal(BoardKind.Disqualified, c.Board);
             Assert.Equal(FrameKind.None, c.Frame);
@@ -142,9 +130,9 @@ namespace Uniflag.Tests
             var s = S();
             s.Furled = true;
             s.IncidentWarning = true;
-            Assert.Equal(FrameKind.Furled, Compositor.Select(s, true).Frame);
+            Assert.Equal(FrameKind.Furled, Compositor.Select(s).Frame);
             s.Furled = false;
-            Assert.Equal(FrameKind.Incident, Compositor.Select(s, true).Frame);
+            Assert.Equal(FrameKind.Incident, Compositor.Select(s).Frame);
         }
 
         [Fact]
@@ -153,12 +141,12 @@ namespace Uniflag.Tests
             var s = S();
             s.CountdownLaps = 10;
             s.StartPhase = StartPhase.Ready;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(BoardKind.Countdown, c.Board);
             Assert.Equal(10, c.BoardValue);
 
             s.CountdownLaps = 0;
-            c = Compositor.Select(s, true);
+            c = Compositor.Select(s);
             Assert.Equal(BoardKind.StartGantry, c.Board);
         }
 
@@ -167,7 +155,7 @@ namespace Uniflag.Tests
         {
             var s = S();
             s.Meatball = true;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Meatball, c.Field);
             Assert.Equal(Tier.Alert, c.FieldTier);
             Assert.Equal(BoardKind.None, c.Board);
@@ -178,7 +166,7 @@ namespace Uniflag.Tests
         {
             var s = S();
             s.Flag = TrackFlag.Debris;
-            var c = Compositor.Select(s, true);
+            var c = Compositor.Select(s);
             Assert.Equal(FieldKind.Debris, c.Field);
             Assert.Equal(Tier.Ambient, c.FieldTier);
         }

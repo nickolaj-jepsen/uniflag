@@ -51,9 +51,7 @@ namespace Uniflag.Tests
 
         private static SignalState Map(TelemetrySnapshot snapshot)
         {
-            SignalState state = SignalState.Default;
-            GenericAdapter.Map(snapshot, ref state);
-            return state;
+            return GenericAdapter.Map(snapshot);
         }
 
         [Theory]
@@ -137,7 +135,7 @@ namespace Uniflag.Tests
             Assert.True(state.BlackFlag);
             Assert.True(state.Meatball);
 
-            Composition comp = Compositor.Select(state, connected: true);
+            Composition comp = Compositor.Select(state);
             Assert.Equal(FieldKind.Yellow, comp.Field);
             Assert.Equal(BoardKind.BlackFlag, comp.Board);
         }
@@ -199,26 +197,14 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void RefinerOnlyDimensionsAreAlwaysCleared()
+        public void RefinerOnlyDimensionsStayAtTheirDefaults()
         {
-            // The generic adapter has no raw-data layers, so it must pin
-            // the refiner-only dimensions to their defaults even when a
-            // caller reuses a dirty state.
+            // The generic adapter has no raw-data layers; producing from
+            // SignalState.Default is what keeps the refiner-only dimensions
+            // clear (safety car, DQ, start sequence, notices, advisories).
             TelemetrySnapshot snapshot = Live();
             snapshot.FlagYellow = true;
-            var state = new SignalState
-            {
-                Flag = TrackFlag.Red,
-                Tier = Tier.Urgent,
-                Session = Session.Unknown,
-                SafetyCar = true,
-                Disqualified = true,
-                StartPhase = StartPhase.Set,
-                CountdownLaps = 10,
-                Furled = true,
-                IncidentWarning = true,
-            };
-            GenericAdapter.Map(snapshot, ref state);
+            SignalState state = GenericAdapter.Map(snapshot);
             Assert.False(state.SafetyCar);
             Assert.False(state.Disqualified);
             Assert.Equal(StartPhase.Off, state.StartPhase);

@@ -20,7 +20,7 @@ namespace Uniflag.Tests
             Envelopes env = default;
             for (uint i = 0; i < frames; i++)
             {
-                env = t.Update(Compositor.Select(s, true), s, frame);
+                env = t.Update(Compositor.Select(s), s, frame);
                 frame++;
             }
             return env;
@@ -122,7 +122,6 @@ namespace Uniflag.Tests
             Assert.Equal(EnvelopePhase.FadeOut, env.Field.Phase);
             Assert.Equal(0u, env.Field.Age);
             Assert.Equal((byte)FieldKind.Yellow, env.Field.PriorKind);
-            Assert.Equal(Tier.Alert, env.Field.PriorTier);
 
             env = Run(t, s, ref frame, 14);
             Assert.Equal(EnvelopePhase.FadeOut, env.Field.Phase);
@@ -216,19 +215,19 @@ namespace Uniflag.Tests
         }
 
         [Fact]
-        public void DisconnectResetsAllEnvelopeState()
+        public void ResetDropsAllEnvelopeState()
         {
+            // RendererLoop calls Reset when the input leaves Live mode; a
+            // signal still present afterwards must replay its onset.
             var t = new EnvelopeTracker();
             uint frame = 0;
             var s = S();
             s.Flag = TrackFlag.Yellow;
             Assert.Equal(EnvelopePhase.Ambient, Run(t, s, ref frame, 400).Field.Phase);
 
-            var env = t.Update(Compositor.Select(s, false), s, frame);
-            frame++;
-            Assert.Equal(EnvelopePhase.Hidden, env.Field.Phase);
+            t.Reset();
 
-            env = Run(t, s, ref frame, 1);
+            var env = Run(t, s, ref frame, 1);
             Assert.Equal(EnvelopePhase.Flash, env.Field.Phase);
         }
     }

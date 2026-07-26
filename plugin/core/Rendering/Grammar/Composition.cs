@@ -51,9 +51,6 @@ namespace Uniflag.Rendering.Grammar
     /// <summary>The three slots (plus strip visibility) selected for one tick.</summary>
     public struct Composition
     {
-        /// <summary>False = host silent: the panel is blank (firmware fallback owns it).</summary>
-        public bool Connected;
-
         public FieldKind Field;
 
         /// <summary>Urgency the field renders at (adapter tier, takeover- and caution-adjusted).</summary>
@@ -65,18 +62,19 @@ namespace Uniflag.Rendering.Grammar
         public byte BoardValue;
 
         public FrameKind Frame;
+
+        /// <summary>
+        /// The field is a red/checkered takeover (§5): board and frame slots
+        /// are suppressed, and their fade-outs are skipped by the painters.
+        /// </summary>
+        public bool Takeover;
     }
 
     /// <summary>Pure slot selection. No animation state — that lives in <see cref="EnvelopeTracker"/>.</summary>
     public static class Compositor
     {
-        public static Composition Select(in SignalState s, bool connected)
+        public static Composition Select(in SignalState s)
         {
-            if (!connected)
-            {
-                return default;
-            }
-
             bool blackActive = s.BlackActive;
 
             // Field slot: Red > Yellow > Black > Meatball > (other track flag).
@@ -167,12 +165,12 @@ namespace Uniflag.Rendering.Grammar
 
             return new Composition
             {
-                Connected = true,
                 Field = field,
                 FieldTier = tier,
                 Board = board,
                 BoardValue = boardValue,
                 Frame = frame,
+                Takeover = takeover,
             };
         }
 

@@ -15,8 +15,7 @@ namespace Uniflag.Rendering.Grammar
             {
                 return;
             }
-            bool takeover = comp.Field == FieldKind.Red || comp.Field == FieldKind.Checkered;
-            if (env.Phase == EnvelopePhase.FadeOut && takeover)
+            if (env.Phase == EnvelopePhase.FadeOut && comp.Takeover)
             {
                 return;
             }

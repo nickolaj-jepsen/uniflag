@@ -117,11 +117,11 @@ namespace Uniflag.Rendering
         /// Thread-safe. The envelope tracker diffs successive latched
         /// states, so docs/flag-grammar.md §4 transients follow automatically.
         /// </summary>
-        public void SetState(SignalState state, bool connected)
+        public void SetState(SignalState state)
         {
             lock (_inputGate)
             {
-                _mode = connected ? RenderInputMode.Live : RenderInputMode.Blank;
+                _mode = RenderInputMode.Live;
                 _state = state;
             }
         }
@@ -313,7 +313,13 @@ namespace Uniflag.Rendering
             }
 
             uint frame = unchecked((uint)frameIndex);
-            if (mode == RenderInputMode.ConnectedIdle)
+            if (mode == RenderInputMode.Live)
+            {
+                Composition comp = Compositor.Select(state);
+                Envelopes env = _envelope.Update(comp, state, frame);
+                Painter.Paint(_back, comp, env, state, frame);
+            }
+            else if (mode == RenderInputMode.ConnectedIdle)
             {
                 // No game: signals cannot be active. Reset the envelope so a
                 // session opening straight into a flag replays its onset.
@@ -322,11 +328,10 @@ namespace Uniflag.Rendering
             }
             else
             {
-                // Blank mode maps to connected: false — the compositor
-                // renders the boot-dark panel and the envelope resets.
-                Composition comp = Compositor.Select(state, mode == RenderInputMode.Live);
-                Envelopes env = _envelope.Update(comp, state, frame);
-                Painter.Paint(_back, comp, env, state, frame);
+                // Blank: the boot-dark posture, only ever seen before the
+                // first SetState/SetConnectedIdle call.
+                _envelope.Reset();
+                Painter.Fill(_back, Palette.Black);
             }
 
             byte[] pixels = _back.Pixels;

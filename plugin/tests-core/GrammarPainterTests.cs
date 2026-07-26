@@ -21,7 +21,7 @@ namespace Uniflag.Tests
         private static FrameBuffer Render(in SignalState state, in Envelopes env, uint frame)
         {
             var s = new FrameBuffer();
-            var comp = Compositor.Select(state, true);
+            var comp = Compositor.Select(state);
             Painter.Paint(s, comp, env, state, frame);
             return s;
         }
@@ -250,7 +250,6 @@ namespace Uniflag.Tests
                     Phase = EnvelopePhase.FadeOut,
                     Age = 14,
                     PriorKind = (byte)FieldKind.Yellow,
-                    PriorTier = Tier.Ambient,
                 },
             };
             var buf = Render(s, env, 50);
@@ -295,20 +294,5 @@ namespace Uniflag.Tests
             Assert.Equal(new Rgb(0, 0, 0), buf.GetPixel(0, 0));
         }
 
-        [Fact]
-        public void DisconnectedPaintsBlank()
-        {
-            var s = S();
-            s.Flag = TrackFlag.Yellow;
-            var buf = new FrameBuffer();
-            Painter.Paint(buf, Compositor.Select(s, false), default, s, 0);
-            for (int y = 0; y < 32; y++)
-            {
-                for (int x = 0; x < 32; x++)
-                {
-                    Assert.Equal(new Rgb(0, 0, 0), buf.GetPixel(x, y));
-                }
-            }
-        }
     }
 }

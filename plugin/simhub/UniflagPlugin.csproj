@@ -63,6 +63,11 @@
       <HintPath>$(SimHubDir)\log4net.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- SimHub.Logging.Current is the plugin-facing log (sink faults land there). -->
+    <Reference Include="SimHub.Logging">
+      <HintPath>$(SimHubDir)\SimHub.Logging.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

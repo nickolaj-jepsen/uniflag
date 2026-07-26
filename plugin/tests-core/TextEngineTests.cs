@@ -31,8 +31,7 @@ namespace Uniflag.Tests
             byte[][] glyphs =
             {
                 Font7x11.S, Font7x11.C, Font7x11.D, Font7x11.Q, Font7x11.X,
-                Font7x11.Zero, Font7x11.One, Font7x11.Two, Font7x11.Three, Font7x11.Four,
-                Font7x11.Five, Font7x11.Six, Font7x11.Seven, Font7x11.Eight, Font7x11.Nine,
+                Font7x11.Zero, Font7x11.One, Font7x11.Five,
             };
             foreach (byte[] glyph in glyphs)
             {
@@ -84,9 +83,9 @@ namespace Uniflag.Tests
         {
             var s = new FrameBuffer();
             var white = new Rgb(255, 255, 255);
-            // Two 7 glyphs, gap 3: the second starts at x = 0 + 7 + 3.
-            TextEngine.DrawRow(s, new[] { Font7x11.Seven, Font7x11.Seven }, 3, 0, 0, white);
-            // 7's row 0 is a full 7-px bar: x 0..6 and x 10..16 lit, gap dark.
+            // Two 5 glyphs, gap 3: the second starts at x = 0 + 7 + 3.
+            TextEngine.DrawRow(s, new[] { Font7x11.Five, Font7x11.Five }, 3, 0, 0, white);
+            // 5's row 0 is a full 7-px bar: x 0..6 and x 10..16 lit, gap dark.
             Assert.Equal(white, s.GetPixel(6, 0));
             Assert.Equal(new Rgb(0, 0, 0), s.GetPixel(8, 0));
             Assert.Equal(white, s.GetPixel(10, 0));
@@ -101,7 +100,7 @@ namespace Uniflag.Tests
             // the visible half.
             var s = new FrameBuffer();
             var white = new Rgb(255, 255, 255);
-            TextEngine.DrawGlyph(s, Font7x11.Seven, -4, 0, white);
+            TextEngine.DrawGlyph(s, Font7x11.Five, -4, 0, white);
             Assert.Equal(white, s.GetPixel(0, 0)); // row-0 bar, columns 4..6 visible
             Assert.Equal(white, s.GetPixel(2, 0));
             Assert.Equal(new Rgb(0, 0, 0), s.GetPixel(3, 0));

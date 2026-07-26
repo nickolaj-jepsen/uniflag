@@ -61,6 +61,7 @@ namespace Uniflag
         {
             Settings = this.ReadCommonSettings("GeneralSettings", () => new UniflagSettings());
             Renderer = new RendererLoop();
+            Renderer.SinkFaulted += OnSinkFaulted;
             Brightness = new BrightnessPolicy(Settings.Brightness);
             Brightness.Changed += OnBrightnessChanged;
             WebServer = new OverlayWebServer(Renderer);
@@ -92,7 +93,7 @@ namespace Uniflag
                 renderer.SetConnectedIdle();
                 return;
             }
-            renderer.SetState(SignalMapping.Map(_snapshot), connected: true);
+            renderer.SetState(SignalMapping.Map(_snapshot));
         }
 
         public void End(PluginManager pluginManager)
@@ -103,8 +104,12 @@ namespace Uniflag
             Device = null;
             WebServer?.Stop();
             WebServer = null;
-            Renderer?.Dispose();
-            Renderer = null;
+            if (Renderer != null)
+            {
+                Renderer.SinkFaulted -= OnSinkFaulted;
+                Renderer.Dispose();
+                Renderer = null;
+            }
             if (Brightness != null)
             {
                 Brightness.Changed -= OnBrightnessChanged;
@@ -130,6 +135,15 @@ namespace Uniflag
             {
                 settings.Brightness = value;
             }
+        }
+
+        /// <summary>
+        /// Fires on the render thread when a sink's OnFrame throws; the loop
+        /// keeps running, so surface the fault in SimHub's log.
+        /// </summary>
+        private static void OnSinkFaulted(IFrameSink sink, System.Exception ex)
+        {
+            SimHub.Logging.Current.Warn($"Uniflag: frame sink {sink.GetType().Name} threw", ex);
         }
     }
 }

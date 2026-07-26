@@ -46,9 +46,6 @@ namespace Uniflag.Rendering.Grammar
         /// <summary>FadeOut only: the departed kind, as the slot's enum value.</summary>
         public byte PriorKind;
 
-        /// <summary>FadeOut only (field slot): the tier the departed field ran at.</summary>
-        public Tier PriorTier;
-
         /// <summary>FadeOut only (board slot): the departed board's value payload.</summary>
         public byte PriorValue;
     }
@@ -73,8 +70,12 @@ namespace Uniflag.Rendering.Grammar
         public const uint FadeFrames = 15;
 
         private const int FieldKinds = 10;
-        private const int BoardKinds = 12;
+        private const int BoardKinds = 7;
         private const int FrameKinds = 3;
+
+        // The _want* scratch arrays are shared by the field and board
+        // reconcilers, so they must span the larger of the two kind-spaces.
+        private const int ScratchKinds = FieldKinds;
 
         private struct Cond
         {
@@ -87,12 +88,10 @@ namespace Uniflag.Rendering.Grammar
         private struct FadeState
         {
             public byte LastKind;
-            public Tier LastTier;
             public byte LastValue;
             public bool Fading;
             public uint FadeStart;
             public byte FadeKind;
-            public Tier FadeTier;
             public byte FadeValue;
         }
 
@@ -100,9 +99,9 @@ namespace Uniflag.Rendering.Grammar
         private readonly Cond[] _board = new Cond[BoardKinds];
         private readonly Cond[] _frame = new Cond[FrameKinds];
 
-        private readonly bool[] _want = new bool[BoardKinds];
-        private readonly byte[] _wantA = new byte[BoardKinds];
-        private readonly uint[] _wantB = new uint[BoardKinds];
+        private readonly bool[] _want = new bool[ScratchKinds];
+        private readonly byte[] _wantA = new byte[ScratchKinds];
+        private readonly uint[] _wantB = new uint[ScratchKinds];
 
         private FadeState _fieldFade;
         private FadeState _boardFade;
@@ -120,23 +119,15 @@ namespace Uniflag.Rendering.Grammar
 
         public Envelopes Update(in Composition comp, in SignalState s, uint frame)
         {
-            if (!comp.Connected)
-            {
-                // Stream dead: the firmware fallback owns the panel. Drop all
-                // envelope state so reconnection starts signals fresh.
-                Reset();
-                return default;
-            }
-
             ReconcileField(s, frame);
             ReconcileBoard(s, comp.Field, frame);
             ReconcileFrame(s, frame);
 
             return new Envelopes
             {
-                Field = ComputeSlot(_field, (byte)comp.Field, comp.FieldTier, 0, ref _fieldFade, frame),
-                Board = ComputeSlot(_board, (byte)comp.Board, Tier.Ambient, comp.BoardValue, ref _boardFade, frame),
-                Frame = ComputeSlot(_frame, (byte)comp.Frame, Tier.Ambient, 0, ref _frameFade, frame),
+                Field = ComputeSlot(_field, (byte)comp.Field, 0, ref _fieldFade, frame),
+                Board = ComputeSlot(_board, (byte)comp.Board, comp.BoardValue, ref _boardFade, frame),
+                Frame = ComputeSlot(_frame, (byte)comp.Frame, 0, ref _frameFade, frame),
             };
         }
 
@@ -271,13 +262,12 @@ namespace Uniflag.Rendering.Grammar
             }
         }
 
-        private static SlotEnvelope ComputeSlot(Cond[] conds, byte visibleKind, Tier visibleTier, byte visibleValue, ref FadeState fade, uint frame)
+        private static SlotEnvelope ComputeSlot(Cond[] conds, byte visibleKind, byte visibleValue, ref FadeState fade, uint frame)
         {
             if (visibleKind != 0)
             {
                 fade.Fading = false;
                 fade.LastKind = visibleKind;
-                fade.LastTier = visibleTier;
                 fade.LastValue = visibleValue;
                 uint age = unchecked(frame - conds[visibleKind].Epoch);
                 EnvelopePhase phase = age < FlashFrames ? EnvelopePhase.Flash
@@ -299,7 +289,6 @@ namespace Uniflag.Rendering.Grammar
                 fade.Fading = true;
                 fade.FadeStart = frame;
                 fade.FadeKind = fade.LastKind;
-                fade.FadeTier = fade.LastTier;
                 fade.FadeValue = fade.LastValue;
                 fade.LastKind = 0;
             }
@@ -314,7 +303,6 @@ namespace Uniflag.Rendering.Grammar
                         Phase = EnvelopePhase.FadeOut,
                         Age = fadeAge,
                         PriorKind = fade.FadeKind,
-                        PriorTier = fade.FadeTier,
                         PriorValue = fade.FadeValue,
                     };
                 }

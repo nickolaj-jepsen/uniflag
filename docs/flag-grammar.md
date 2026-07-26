@@ -233,7 +233,7 @@ appear with a 2-frame white-box onset (§4) and then sit. The gantry is the
 the one board with animated content (§3). Boards carry no coloured
 border of their own — the field behind them carries the mood.
 
-Glyph inventory (7×11 grid): `S C D Q`, digits `0–9`, the X glyph, and the
+Glyph inventory (7×11 grid): `S C D Q`, digits `0 1 5`, the X glyph, and the
 9×9 disc icon — exactly what the shipped boards spell (`SC`, `DQ`, `10`/`5`,
 the demoted X, the demoted disc). Draw new glyphs when a refiner needs a new
 word.

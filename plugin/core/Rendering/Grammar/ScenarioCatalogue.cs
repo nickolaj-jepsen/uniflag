@@ -175,7 +175,7 @@ namespace Uniflag.Rendering.Grammar
             for (uint f = 0; f <= frame; f++)
             {
                 SignalState state = sc.StateAt(f);
-                var comp = Compositor.Select(state, true);
+                var comp = Compositor.Select(state);
                 var env = tracker.Update(comp, state, f);
                 if (f == frame)
                 {

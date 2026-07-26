@@ -10,11 +10,11 @@ namespace Uniflag.Rendering.Grammar
 {
     public static class Boards
     {
-        private static readonly byte[][] Digits =
-        {
-            Font7x11.Zero, Font7x11.One, Font7x11.Two, Font7x11.Three, Font7x11.Four,
-            Font7x11.Five, Font7x11.Six, Font7x11.Seven, Font7x11.Eight, Font7x11.Nine,
-        };
+        private static readonly byte[][] ScRow = { Font7x11.S, Font7x11.C };
+        private static readonly byte[][] DqRow = { Font7x11.D, Font7x11.Q };
+        private static readonly byte[][] XRow = { Font7x11.X };
+        private static readonly byte[][] TenRow = { Font7x11.One, Font7x11.Zero };
+        private static readonly byte[][] FiveRow = { Font7x11.Five };
 
         private const int GantryContentWidth = 24;
         private const int GantryContentHeight = 4;
@@ -25,8 +25,7 @@ namespace Uniflag.Rendering.Grammar
             {
                 return;
             }
-            bool takeover = comp.Field == FieldKind.Red || comp.Field == FieldKind.Checkered;
-            if (env.Phase == EnvelopePhase.FadeOut && takeover)
+            if (env.Phase == EnvelopePhase.FadeOut && comp.Takeover)
             {
                 // The takeover's own onset covers the departing board.
                 return;
@@ -84,26 +83,18 @@ namespace Uniflag.Rendering.Grammar
             switch (kind)
             {
                 case BoardKind.SafetyCar:
-                    return new[] { Font7x11.S, Font7x11.C };
+                    return ScRow;
                 case BoardKind.Disqualified:
-                    return new[] { Font7x11.D, Font7x11.Q };
+                    return DqRow;
                 case BoardKind.BlackFlag:
-                    return new[] { Font7x11.X };
+                    return XRow;
                 case BoardKind.Countdown:
-                    return DigitRow(value);
+                    // The adapter vocabulary is exactly 10 and 5 (§6.2); an
+                    // impossible value paints the bare chrome, never a lie.
+                    return value == 10 ? TenRow : value == 5 ? FiveRow : null;
                 default:
                     return null;
             }
-        }
-
-        private static byte[][] DigitRow(byte value)
-        {
-            if (value < 10)
-            {
-                return new[] { Digits[value] };
-            }
-            byte tens = (byte)(value / 10 % 10);
-            return new[] { Digits[tens], Digits[value % 10] };
         }
 
         private static void PaintGantryLights(FrameBuffer s, int x, int y, StartPhase phase, uint frame)

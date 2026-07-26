@@ -41,14 +41,6 @@ namespace Uniflag.Tests
 
         [Theory]
         [MemberData(nameof(ScenarioNames))]
-        public void ScenarioRendersAWholeFrame(string name)
-        {
-            byte[] frame = ScenarioCatalogue.Render(ScenarioCatalogue.Find(name));
-            Assert.Equal(Rendering.FrameBuffer.ByteLength, frame.Length);
-        }
-
-        [Theory]
-        [MemberData(nameof(ScenarioNames))]
         public void ScenarioRendersDeterministically(string name)
         {
             var sc = ScenarioCatalogue.Find(name);

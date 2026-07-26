@@ -26,29 +26,30 @@ namespace Uniflag.Adapters
     /// <see cref="Tier.Ambient"/>.</item>
     /// <item><b>Session</b>: see <see cref="MapSession"/>.</item>
     /// <item><b>Everything else</b> (safety car, DQ, start sequence,
-    /// notices, advisories) is pinned to its default — those signals only
-    /// exist in per-sim raw data and belong to the refiners.</item>
+    /// notices, advisories) stays at its <see cref="SignalState.Default"/>
+    /// value — those signals only exist in per-sim raw data and belong to
+    /// the refiners.</item>
     /// </list>
     /// The unified layer never surfaces a red flag, so this adapter never
     /// emits <see cref="TrackFlag.Red"/> either.
     /// </summary>
     public static class GenericAdapter
     {
-        /// <summary>Runs for every game; there is no match gate.</summary>
-        public static void Map(TelemetrySnapshot snapshot, ref SignalState state)
+        /// <summary>
+        /// Runs for every game; there is no match gate. Produces a fresh
+        /// state from <see cref="SignalState.Default"/> — refiners then
+        /// mutate the fields they know better.
+        /// </summary>
+        public static SignalState Map(TelemetrySnapshot snapshot)
         {
+            SignalState state = SignalState.Default;
             TrackFlag flag = MapFlag(snapshot);
             state.Flag = flag;
             state.Tier = flag == TrackFlag.Yellow ? Tier.Alert : Tier.Ambient;
             state.BlackFlag = snapshot.FlagBlack;
-            state.Disqualified = false;
             state.Meatball = snapshot.FlagOrange;
             state.Session = MapSession(snapshot.SessionTypeName, snapshot.GamePaused);
-            state.SafetyCar = false;
-            state.StartPhase = StartPhase.Off;
-            state.CountdownLaps = 0;
-            state.Furled = false;
-            state.IncidentWarning = false;
+            return state;
         }
 
         /// <summary>
@@ -57,7 +58,7 @@ namespace Uniflag.Adapters
         /// informational flags. Black/orange are handled as orthogonal
         /// dimensions in <see cref="Map"/>, not here.
         /// </summary>
-        public static TrackFlag MapFlag(TelemetrySnapshot snapshot)
+        private static TrackFlag MapFlag(TelemetrySnapshot snapshot)
         {
             if (snapshot.FlagYellow)
             {
